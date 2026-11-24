@@ -589,3 +589,124 @@ export const inventoryApi = {
   lookupByBarcode: (barcode: string) => apiRequest<InventoryLookup>(`/inventory/lookup/barcode/${encodeURIComponent(barcode)}`),
   lookupByTag: (tagNumber: string) => apiRequest<InventoryLookup>(`/inventory/lookup/tag/${encodeURIComponent(tagNumber)}`),
 };
+
+export interface CompositionMember {
+  id: string;
+  inventoryItemId: string;
+  itemName: string;
+  itemCode: string;
+  tagNumber: string;
+  barcode: string;
+  categoryId: string;
+  categoryName: string;
+  categoryCode: string;
+  materialName: string;
+  purityKarat: number;
+  grossWeight: number;
+  stoneWeight: number;
+  netWeight: number;
+  pieceCount: number;
+  status: number;
+  statusName: string;
+  sortOrder: number;
+  isActive: boolean;
+  addedAt: string;
+  removedAt?: string | null;
+}
+
+export interface InventoryComposition {
+  id: string;
+  branchId: string;
+  branchName: string;
+  branchCode: string;
+  stockLocationId: string;
+  stockLocationName: string;
+  stockLocationCode: string;
+  name: string;
+  type: number; // 1 = Assembly, 2 = Group
+  typeName: string;
+  tagNumber: string;
+  barcode: string;
+  status: number; // 1 = Active, 2 = Dissolved
+  statusName: string;
+  description: string;
+  isActive: boolean;
+  totalGrossWeight: number;
+  totalStoneWeight: number;
+  totalNetWeight: number;
+  totalPieceCount: number;
+  activeMemberCount: number;
+  totalMemberCount: number;
+  members: CompositionMember[];
+  version: number;
+  createdAt: string;
+  createdBy?: string;
+  updatedAt?: string;
+}
+
+export interface EligibleChildItem {
+  id: string;
+  tagNumber: string;
+  barcode: string;
+  itemCode: string;
+  name: string;
+  categoryId: string;
+  categoryName: string;
+  categoryCode: string;
+  materialName: string;
+  purityKarat: number;
+  grossWeight: number;
+  stoneWeight: number;
+  netWeight: number;
+  pieceCount: number;
+}
+
+export const compositionApi = {
+  getCompositions: (params?: {
+    branchId?: string;
+    stockLocationId?: string;
+    type?: number;
+    status?: number;
+    searchTerm?: string;
+    page?: number;
+    pageSize?: number;
+  }) => {
+    const q = new URLSearchParams();
+    if (params?.branchId) q.append('branchId', params.branchId);
+    if (params?.stockLocationId) q.append('stockLocationId', params.stockLocationId);
+    if (params?.type) q.append('type', String(params.type));
+    if (params?.status) q.append('status', String(params.status));
+    if (params?.searchTerm) q.append('searchTerm', params.searchTerm);
+    if (params?.page) q.append('page', String(params.page));
+    if (params?.pageSize) q.append('pageSize', String(params.pageSize));
+    const qs = q.toString();
+    return apiRequest<PagedResult<InventoryComposition>>(`/compositions${qs ? `?${qs}` : ''}`);
+  },
+  getCompositionById: (id: string) => apiRequest<InventoryComposition>(`/compositions/${id}`),
+  lookupByTag: (tagNumber: string) => apiRequest<InventoryComposition>(`/compositions/lookup/tag/${encodeURIComponent(tagNumber)}`),
+  lookupByBarcode: (barcode: string) => apiRequest<InventoryComposition>(`/compositions/lookup/barcode/${encodeURIComponent(barcode)}`),
+  getEligibleChildren: (params: { branchId: string; stockLocationId: string; categoryId?: string; searchTerm?: string }) => {
+    const q = new URLSearchParams();
+    q.append('branchId', params.branchId);
+    q.append('stockLocationId', params.stockLocationId);
+    if (params.categoryId) q.append('categoryId', params.categoryId);
+    if (params.searchTerm) q.append('searchTerm', params.searchTerm);
+    return apiRequest<EligibleChildItem[]>(`/compositions/eligible-children?${q.toString()}`);
+  },
+  createComposition: (data: {
+    branchId: string;
+    stockLocationId: string;
+    name: string;
+    type: number;
+    description?: string;
+    tagNumber?: string;
+    barcode?: string;
+    childItemIds: string[];
+  }) => apiRequest<InventoryComposition>('/compositions', { method: 'POST', body: JSON.stringify(data) }),
+  addMember: (id: string, data: { inventoryItemId: string; sortOrder?: number }) =>
+    apiRequest<InventoryComposition>(`/compositions/${id}/members`, { method: 'POST', body: JSON.stringify(data) }),
+  removeMember: (id: string, inventoryItemId: string) =>
+    apiRequest<InventoryComposition>(`/compositions/${id}/members/${inventoryItemId}`, { method: 'DELETE' }),
+  dissolveComposition: (id: string) =>
+    apiRequest<InventoryComposition>(`/compositions/${id}/dissolve`, { method: 'POST' }),
+};

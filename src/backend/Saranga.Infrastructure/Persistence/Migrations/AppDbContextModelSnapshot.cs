@@ -258,6 +258,149 @@ namespace Saranga.Infrastructure.Persistence.Migrations
                     b.ToTable("IdempotencyRecords", (string)null);
                 });
 
+            modelBuilder.Entity("Saranga.Domain.Entities.InventoryComposition", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Barcode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<Guid>("BranchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<int>("Status")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1);
+
+                    b.Property<Guid>("StockLocationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("TagNumber")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<int>("Type")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Barcode")
+                        .IsUnique();
+
+                    b.HasIndex("StockLocationId");
+
+                    b.HasIndex("TagNumber")
+                        .IsUnique();
+
+                    b.HasIndex("BranchId", "Status");
+
+                    b.HasIndex("BranchId", "StockLocationId");
+
+                    b.ToTable("InventoryCompositions", (string)null);
+                });
+
+            modelBuilder.Entity("Saranga.Domain.Entities.InventoryCompositionMember", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("AddedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("AddedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CompositionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("InventoryItemId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTimeOffset?>("RemovedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("RemovedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("SortOrder")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("InventoryItemId")
+                        .IsUnique()
+                        .HasFilter("\"IsActive\" = true");
+
+                    b.HasIndex("CompositionId", "IsActive");
+
+                    b.ToTable("InventoryCompositionMembers", (string)null);
+                });
+
             modelBuilder.Entity("Saranga.Domain.Entities.InventoryItem", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1042,6 +1185,44 @@ namespace Saranga.Infrastructure.Persistence.Migrations
                     b.ToTable("UserRoles", (string)null);
                 });
 
+            modelBuilder.Entity("Saranga.Domain.Entities.InventoryComposition", b =>
+                {
+                    b.HasOne("Saranga.Domain.Entities.Branch", "Branch")
+                        .WithMany()
+                        .HasForeignKey("BranchId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Saranga.Domain.Entities.StockLocation", "StockLocation")
+                        .WithMany()
+                        .HasForeignKey("StockLocationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Branch");
+
+                    b.Navigation("StockLocation");
+                });
+
+            modelBuilder.Entity("Saranga.Domain.Entities.InventoryCompositionMember", b =>
+                {
+                    b.HasOne("Saranga.Domain.Entities.InventoryComposition", "Composition")
+                        .WithMany("Members")
+                        .HasForeignKey("CompositionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Saranga.Domain.Entities.InventoryItem", "InventoryItem")
+                        .WithMany()
+                        .HasForeignKey("InventoryItemId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Composition");
+
+                    b.Navigation("InventoryItem");
+                });
+
             modelBuilder.Entity("Saranga.Domain.Entities.InventoryItem", b =>
                 {
                     b.HasOne("Saranga.Domain.Entities.Branch", "Branch")
@@ -1229,6 +1410,11 @@ namespace Saranga.Infrastructure.Persistence.Migrations
                     b.Navigation("StockLocations");
 
                     b.Navigation("UserBranches");
+                });
+
+            modelBuilder.Entity("Saranga.Domain.Entities.InventoryComposition", b =>
+                {
+                    b.Navigation("Members");
                 });
 
             modelBuilder.Entity("Saranga.Domain.Entities.InventoryItem", b =>

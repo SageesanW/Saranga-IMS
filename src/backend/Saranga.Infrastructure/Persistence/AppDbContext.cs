@@ -55,6 +55,10 @@ public class AppDbContext : DbContext, IAppDbContext
     // Module 5 Hardening: Idempotency
     public DbSet<IdempotencyRecord> IdempotencyRecords => Set<IdempotencyRecord>();
 
+    // Module 6: Assembly & Group Compositions
+    public DbSet<InventoryComposition> InventoryCompositions => Set<InventoryComposition>();
+    public DbSet<InventoryCompositionMember> InventoryCompositionMembers => Set<InventoryCompositionMember>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -422,6 +426,65 @@ public class AppDbContext : DbContext, IAppDbContext
             entity.Property(i => i.Endpoint).HasMaxLength(150).IsRequired();
             entity.Property(i => i.RequestHash).HasMaxLength(64).IsRequired();
             entity.Property(i => i.ResponseBody).IsRequired();
+        });
+
+        // Module 6: InventoryComposition Configuration
+        modelBuilder.Entity<InventoryComposition>(entity =>
+        {
+            entity.ToTable("InventoryCompositions");
+            entity.HasKey(c => c.Id);
+
+            entity.HasIndex(c => c.TagNumber).IsUnique();
+            entity.HasIndex(c => c.Barcode).IsUnique();
+            entity.HasIndex(c => new { c.BranchId, c.Status });
+            entity.HasIndex(c => new { c.BranchId, c.StockLocationId });
+
+            entity.Property(c => c.Version).IsRowVersion();
+
+            entity.Property(c => c.Name).HasMaxLength(200).IsRequired();
+            entity.Property(c => c.TagNumber).HasMaxLength(50).IsRequired();
+            entity.Property(c => c.Barcode).HasMaxLength(50).IsRequired();
+            entity.Property(c => c.Description).HasMaxLength(1000);
+            entity.Property(c => c.Type).HasConversion<int>().IsRequired();
+            entity.Property(c => c.Status).HasConversion<int>().HasDefaultValue(CompositionStatus.Active).IsRequired();
+            entity.Property(c => c.IsActive).HasDefaultValue(true);
+
+            entity.HasOne(c => c.Branch)
+                  .WithMany()
+                  .HasForeignKey(c => c.BranchId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(c => c.StockLocation)
+                  .WithMany()
+                  .HasForeignKey(c => c.StockLocationId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasMany(c => c.Members)
+                  .WithOne(m => m.Composition)
+                  .HasForeignKey(m => m.CompositionId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // Module 6: InventoryCompositionMember Configuration
+        modelBuilder.Entity<InventoryCompositionMember>(entity =>
+        {
+            entity.ToTable("InventoryCompositionMembers");
+            entity.HasKey(m => m.Id);
+
+            entity.HasIndex(m => new { m.CompositionId, m.IsActive });
+
+            // CRITICAL HARDENING: Database-enforced One Child -> Maximum One Active Composition rule
+            entity.HasIndex(m => m.InventoryItemId)
+                  .IsUnique()
+                  .HasFilter(@"""IsActive"" = true");
+
+            entity.Property(m => m.IsActive).HasDefaultValue(true);
+            entity.Property(m => m.SortOrder).HasDefaultValue(0);
+
+            entity.HasOne(m => m.InventoryItem)
+                  .WithMany()
+                  .HasForeignKey(m => m.InventoryItemId)
+                  .OnDelete(DeleteBehavior.Restrict);
         });
     }
 

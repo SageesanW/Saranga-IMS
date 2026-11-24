@@ -44,6 +44,9 @@ public static class Permissions
     public const string InventoryCountManage = "INVENTORY_COUNT_MANAGE";
     public const string InventoryVarianceResolve = "INVENTORY_VARIANCE_RESOLVE";
     public const string InventoryTransfer = "INVENTORY_TRANSFER";
+    public const string InventoryCompositionCreate = "INVENTORY_COMPOSITION_CREATE";
+    public const string InventoryCompositionEdit = "INVENTORY_COMPOSITION_EDIT";
+    public const string InventoryCompositionDissolve = "INVENTORY_COMPOSITION_DISSOLVE";
 
     // Module: Rates & VAT
     public const string RateView = "RATE_VIEW";
@@ -119,6 +122,9 @@ public static class Permissions
         new(InventoryCountManage, "Initiate and manage inventory stock counts", "Inventory"),
         new(InventoryVarianceResolve, "Resolve stock count variances", "Inventory"),
         new(InventoryTransfer, "Transfer inventory between branches", "Inventory"),
+        new(InventoryCompositionCreate, "Create assembly and group compositions", "Inventory"),
+        new(InventoryCompositionEdit, "Add or remove members from assembly and group compositions", "Inventory"),
+        new(InventoryCompositionDissolve, "Dissolve assembly and group compositions", "Inventory"),
 
         // Rates & VAT
         new(RateView, "View gold/silver daily rates and historical board", "Rates & VAT"),

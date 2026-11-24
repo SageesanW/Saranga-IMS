@@ -36,5 +36,9 @@ public interface IAppDbContext
     // Module 5 Hardening: Idempotency
     DbSet<IdempotencyRecord> IdempotencyRecords { get; }
 
+    // Module 6: Assembly & Group Compositions
+    DbSet<InventoryComposition> InventoryCompositions { get; }
+    DbSet<InventoryCompositionMember> InventoryCompositionMembers { get; }
+
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }
