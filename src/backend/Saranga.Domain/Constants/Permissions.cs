@@ -53,6 +53,10 @@ public static class Permissions
     public const string RateView = "RATE_VIEW";
     public const string RateManage = "RATE_MANAGE";
     public const string VatConfig = "VAT_CONFIG";
+    public const string RatesView = RateView;
+    public const string RatesManage = RateManage;
+    public const string VatView = VatConfig;
+    public const string VatManage = VatConfig;
 
     // Module: Customers
     public const string CustomerView = "CUSTOMER_VIEW";

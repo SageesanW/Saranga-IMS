@@ -47,10 +47,11 @@ export default function AppLayout({ children }: AppLayoutProps) {
     { name: 'Attributes Master', href: '/attributes', icon: '💎' },
     { name: 'Inventory & Barcode', href: '/inventory', icon: '📦' },
     { name: 'Inventory Count', href: '/inventory/count', icon: '📋' },
+    { name: 'Metal Rates', href: '/rates', icon: '🪙' },
+    { name: 'VAT Configuration', href: '/vat', icon: '🏷️' },
   ];
 
   const upcomingModules = [
-    { name: 'Gold Rates & VAT', icon: '🪙' },
     { name: 'Customers', icon: '👤' },
     { name: 'POS & Billing', icon: '🧾' },
     { name: 'Shift & Cash Ledger', icon: '💵' },

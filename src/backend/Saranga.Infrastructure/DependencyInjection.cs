@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Saranga.Application.Common.Interfaces;
 using Saranga.Application.Services;
 using Saranga.Infrastructure.Authorization;
+using Saranga.Infrastructure.External;
 using Saranga.Infrastructure.Persistence;
 using Saranga.Infrastructure.Services;
 
@@ -48,6 +49,12 @@ public static class DependencyInjection
         services.AddScoped<ICompositionService, CompositionService>();
         services.AddScoped<IBulkImportService, BulkImportService>();
         services.AddScoped<IInventoryCountService, InventoryCountService>();
+
+        // Module 9: Rates, VAT & Reference Pricing
+        services.AddHttpClient<IMetalRateProvider, GoldApiRateProvider>();
+        services.AddScoped<IMetalRateService, MetalRateService>();
+        services.AddScoped<IVatConfigurationService, VatConfigurationService>();
+        services.AddScoped<IReferencePricingService, ReferencePricingService>();
 
         // Authorization Handler & Policy Provider
         services.AddSingleton<IAuthorizationPolicyProvider, PermissionPolicyProvider>();

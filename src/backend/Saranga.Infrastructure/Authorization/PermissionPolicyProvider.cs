@@ -32,6 +32,17 @@ public class PermissionPolicyProvider : IAuthorizationPolicyProvider
             return Task.FromResult<AuthorizationPolicy?>(policy);
         }
 
+        // Also dynamically resolve direct permission names
+        if (Domain.Constants.Permissions.All.Any(p => p.Name.Equals(policyName, StringComparison.OrdinalIgnoreCase)))
+        {
+            var policy = new AuthorizationPolicyBuilder()
+                .RequireAuthenticatedUser()
+                .AddRequirements(new PermissionRequirement(new[] { policyName }))
+                .Build();
+
+            return Task.FromResult<AuthorizationPolicy?>(policy);
+        }
+
         return _fallbackPolicyProvider.GetPolicyAsync(policyName);
     }
 }

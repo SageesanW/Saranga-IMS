@@ -1030,3 +1030,163 @@ export const inventoryCountApi = {
       body: JSON.stringify({ reason }),
     }),
 };
+
+// ==========================================
+// Module 9: Rates, VAT & Reference Pricing
+// ==========================================
+
+export interface MetalRate {
+  id: string;
+  branchId: string;
+  branchCode: string;
+  branchName: string;
+  materialId: string;
+  materialCode: string;
+  materialName: string;
+  purityId: string;
+  purityCode: string;
+  purityName: string;
+  purityKarat: number;
+  purityPercentage: number;
+  currencyCode: string;
+  ratePerGram: number;
+  source: string; // MANUAL, EXTERNAL_API, ADMIN_OVERRIDE
+  externalReferenceRate?: number;
+  effectiveFrom: string;
+  effectiveTo?: string;
+  isActive: boolean;
+  isOverride: boolean;
+  overrideReason?: string;
+  createdAt: string;
+  createdBy?: string;
+  createdByName?: string;
+}
+
+export interface ExternalRateProviderStatus {
+  providerName: string;
+  isAvailable: boolean;
+  lastSuccessfulRefreshAt?: string;
+  lastAttemptAt?: string;
+  lastErrorMessage?: string;
+  totalActiveRatesManaged: number;
+}
+
+export interface VatConfiguration {
+  id: string;
+  branchId: string;
+  branchCode: string;
+  branchName: string;
+  name: string;
+  isEnabled: boolean;
+  ratePercentage: number;
+  effectiveFrom: string;
+  effectiveTo?: string;
+  calculationMode: string;
+  isActive: boolean;
+  createdAt: string;
+  createdBy?: string;
+  createdByName?: string;
+  updatedAt?: string;
+  updatedBy?: string;
+  updatedByName?: string;
+}
+
+export interface ReferencePriceBreakdown {
+  branchId: string;
+  branchCode: string;
+  currencyCode: string;
+  materialId: string;
+  materialName: string;
+  purityId: string;
+  purityName: string;
+  purityKarat: number;
+  ratePerGramUsed: number;
+  rateSource: string;
+  isRateOverridden: boolean;
+  rateOverrideReason?: string;
+  netWeight: number;
+  referenceMaterialValue: number;
+  makingChargeMethod: number;
+  makingChargeMethodName: string;
+  makingChargeValue: number;
+  pieceCount: number;
+  makingChargeAmount: number;
+  subtotalBeforeTax: number;
+  vatEnabled: boolean;
+  vatRatePercentage: number;
+  vatAmount: number;
+  referenceTotal: number;
+  calculatedAt: string;
+}
+
+export const metalRateApi = {
+  getActiveRates: (branchId?: string, currencyCode?: string) => {
+    const params = new URLSearchParams();
+    if (branchId) params.append('branchId', branchId);
+    if (currencyCode) params.append('currencyCode', currencyCode);
+    const qs = params.toString() ? `?${params.toString()}` : '';
+    return apiRequest<MetalRate[]>(`/metal-rates${qs}`);
+  },
+  getActiveRate: (branchId: string, materialId: string, purityId: string, currencyCode?: string) => {
+    const params = new URLSearchParams({ branchId, materialId, purityId });
+    if (currencyCode) params.append('currencyCode', currencyCode);
+    return apiRequest<MetalRate>(`/metal-rates/active?${params.toString()}`);
+  },
+  getRateHistory: (params: { branchId?: string; materialId?: string; purityId?: string; currencyCode?: string; page?: number; pageSize?: number }) => {
+    const p = new URLSearchParams();
+    if (params.branchId) p.append('branchId', params.branchId);
+    if (params.materialId) p.append('materialId', params.materialId);
+    if (params.purityId) p.append('purityId', params.purityId);
+    if (params.currencyCode) p.append('currencyCode', params.currencyCode);
+    if (params.page) p.append('page', params.page.toString());
+    if (params.pageSize) p.append('pageSize', params.pageSize.toString());
+    return apiRequest<PagedResult<MetalRate>>(`/metal-rates/history?${p.toString()}`);
+  },
+  createManualRate: (data: { branchId: string; materialId: string; purityId: string; ratePerGram: number; currencyCode?: string; effectiveFrom?: string; notes?: string }) =>
+    apiRequest<MetalRate>('/metal-rates/manual', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  adminOverrideRate: (data: { branchId: string; materialId: string; purityId: string; overrideRatePerGram: number; overrideReason: string; currencyCode?: string }) =>
+    apiRequest<MetalRate>('/metal-rates/override', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  refreshExternalRates: (data: { branchId?: string; currencyCode?: string }) =>
+    apiRequest<MetalRate[]>('/metal-rates/refresh-external', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  getProviderStatus: () =>
+    apiRequest<ExternalRateProviderStatus>('/metal-rates/provider-status'),
+};
+
+export const vatConfigurationApi = {
+  getActiveConfiguration: (branchId: string) =>
+    apiRequest<VatConfiguration>(`/vat-configurations?branchId=${encodeURIComponent(branchId)}`),
+  getVatHistory: (params: { branchId?: string; page?: number; pageSize?: number }) => {
+    const p = new URLSearchParams();
+    if (params.branchId) p.append('branchId', params.branchId);
+    if (params.page) p.append('page', params.page.toString());
+    if (params.pageSize) p.append('pageSize', params.pageSize.toString());
+    return apiRequest<PagedResult<VatConfiguration>>(`/vat-configurations/history?${p.toString()}`);
+  },
+  createOrUpdateConfiguration: (data: { branchId: string; name: string; isEnabled: boolean; ratePercentage: number; effectiveFrom?: string; calculationMode?: string }) =>
+    apiRequest<VatConfiguration>('/vat-configurations', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  toggleVatStatus: (data: { branchId: string; isEnabled: boolean; reason?: string }) =>
+    apiRequest<VatConfiguration>('/vat-configurations/toggle', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+};
+
+export const pricingApi = {
+  calculateReferencePrice: (data: { branchId: string; materialId: string; purityId: string; netWeight: number; pieceCount: number; makingChargeMethod: number; makingChargeValue: number; currencyCode?: string }) =>
+    apiRequest<ReferencePriceBreakdown>('/pricing/calculate-reference', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+};

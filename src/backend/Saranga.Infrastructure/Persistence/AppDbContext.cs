@@ -67,6 +67,10 @@ public class AppDbContext : DbContext, IAppDbContext
     public DbSet<InventoryCountLine> InventoryCountLines => Set<InventoryCountLine>();
     public DbSet<InventoryCountUnexpectedItem> InventoryCountUnexpectedItems => Set<InventoryCountUnexpectedItem>();
 
+    // Module 9: Gold Rate Management & VAT Configuration
+    public DbSet<MetalRate> MetalRates => Set<MetalRate>();
+    public DbSet<VatConfiguration> VatConfigurations => Set<VatConfiguration>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -659,6 +663,78 @@ public class AppDbContext : DbContext, IAppDbContext
             entity.HasOne(u => u.CurrentSystemStockLocation)
                   .WithMany()
                   .HasForeignKey(u => u.CurrentSystemStockLocationId)
+                  .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // Module 9: MetalRate Configuration
+        modelBuilder.Entity<MetalRate>(entity =>
+        {
+            entity.ToTable("MetalRates");
+            entity.HasKey(r => r.Id);
+
+            entity.Property(r => r.CurrencyCode).HasMaxLength(10).IsRequired();
+            entity.Property(r => r.RatePerGram).HasColumnType("numeric(18,4)").IsRequired();
+            entity.Property(r => r.Source).HasMaxLength(50).IsRequired();
+            entity.Property(r => r.ExternalReferenceRate).HasColumnType("numeric(18,4)");
+            entity.Property(r => r.OverrideReason).HasMaxLength(500);
+
+            entity.HasIndex(r => new { r.BranchId, r.MaterialId, r.PurityId, r.CurrencyCode })
+                  .HasFilter("\"IsActive\" = true")
+                  .IsUnique();
+
+            entity.HasIndex(r => r.EffectiveFrom);
+            entity.HasIndex(r => r.CreatedAt);
+
+            entity.HasOne(r => r.Branch)
+                  .WithMany()
+                  .HasForeignKey(r => r.BranchId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(r => r.Material)
+                  .WithMany()
+                  .HasForeignKey(r => r.MaterialId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(r => r.Purity)
+                  .WithMany()
+                  .HasForeignKey(r => r.PurityId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(r => r.Creator)
+                  .WithMany()
+                  .HasForeignKey(r => r.CreatedBy)
+                  .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // Module 9: VatConfiguration Configuration
+        modelBuilder.Entity<VatConfiguration>(entity =>
+        {
+            entity.ToTable("VatConfigurations");
+            entity.HasKey(v => v.Id);
+
+            entity.Property(v => v.Name).HasMaxLength(100).IsRequired();
+            entity.Property(v => v.RatePercentage).HasColumnType("numeric(5,2)").IsRequired();
+            entity.Property(v => v.CalculationMode).HasMaxLength(50).IsRequired();
+
+            entity.HasIndex(v => v.BranchId)
+                  .HasFilter("\"IsActive\" = true")
+                  .IsUnique();
+
+            entity.HasIndex(v => v.EffectiveFrom);
+
+            entity.HasOne(v => v.Branch)
+                  .WithMany()
+                  .HasForeignKey(v => v.BranchId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(v => v.Creator)
+                  .WithMany()
+                  .HasForeignKey(v => v.CreatedBy)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(v => v.Updater)
+                  .WithMany()
+                  .HasForeignKey(v => v.UpdatedBy)
                   .OnDelete(DeleteBehavior.Restrict);
         });
     }

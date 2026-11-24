@@ -48,5 +48,9 @@ public interface IAppDbContext
     DbSet<InventoryCountLine> InventoryCountLines { get; }
     DbSet<InventoryCountUnexpectedItem> InventoryCountUnexpectedItems { get; }
 
+    // Module 9: Gold Rate Management & VAT Configuration
+    DbSet<MetalRate> MetalRates { get; }
+    DbSet<VatConfiguration> VatConfigurations { get; }
+
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

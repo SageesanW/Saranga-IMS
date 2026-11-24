@@ -1141,6 +1141,78 @@ namespace Saranga.Infrastructure.Persistence.Migrations
                     b.ToTable("Materials", (string)null);
                 });
 
+            modelBuilder.Entity("Saranga.Domain.Entities.MetalRate", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("BranchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CurrencyCode")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<DateTimeOffset>("EffectiveFrom")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset?>("EffectiveTo")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal?>("ExternalReferenceRate")
+                        .HasColumnType("numeric(18,4)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsOverride")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid>("MaterialId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("OverrideReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<Guid>("PurityId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("RatePerGram")
+                        .HasColumnType("numeric(18,4)");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedAt");
+
+                    b.HasIndex("CreatedBy");
+
+                    b.HasIndex("EffectiveFrom");
+
+                    b.HasIndex("MaterialId");
+
+                    b.HasIndex("PurityId");
+
+                    b.HasIndex("BranchId", "MaterialId", "PurityId", "CurrencyCode")
+                        .IsUnique()
+                        .HasFilter("\"IsActive\" = true");
+
+                    b.ToTable("MetalRates", (string)null);
+                });
+
             modelBuilder.Entity("Saranga.Domain.Entities.Permission", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1634,6 +1706,67 @@ namespace Saranga.Infrastructure.Persistence.Migrations
                     b.ToTable("UserRoles", (string)null);
                 });
 
+            modelBuilder.Entity("Saranga.Domain.Entities.VatConfiguration", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("BranchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CalculationMode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("EffectiveFrom")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset?>("EffectiveTo")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsEnabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<decimal>("RatePercentage")
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BranchId")
+                        .IsUnique()
+                        .HasFilter("\"IsActive\" = true");
+
+                    b.HasIndex("CreatedBy");
+
+                    b.HasIndex("EffectiveFrom");
+
+                    b.HasIndex("UpdatedBy");
+
+                    b.ToTable("VatConfigurations", (string)null);
+                });
+
             modelBuilder.Entity("Saranga.Domain.Entities.InventoryComposition", b =>
                 {
                     b.HasOne("Saranga.Domain.Entities.Branch", "Branch")
@@ -1860,6 +1993,40 @@ namespace Saranga.Infrastructure.Persistence.Migrations
                     b.Navigation("SpecificationOption");
                 });
 
+            modelBuilder.Entity("Saranga.Domain.Entities.MetalRate", b =>
+                {
+                    b.HasOne("Saranga.Domain.Entities.Branch", "Branch")
+                        .WithMany()
+                        .HasForeignKey("BranchId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Saranga.Domain.Entities.User", "Creator")
+                        .WithMany()
+                        .HasForeignKey("CreatedBy")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Saranga.Domain.Entities.Material", "Material")
+                        .WithMany()
+                        .HasForeignKey("MaterialId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Saranga.Domain.Entities.Purity", "Purity")
+                        .WithMany()
+                        .HasForeignKey("PurityId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Branch");
+
+                    b.Navigation("Creator");
+
+                    b.Navigation("Material");
+
+                    b.Navigation("Purity");
+                });
+
             modelBuilder.Entity("Saranga.Domain.Entities.RefreshToken", b =>
                 {
                     b.HasOne("Saranga.Domain.Entities.User", "User")
@@ -1958,6 +2125,31 @@ namespace Saranga.Infrastructure.Persistence.Migrations
                     b.Navigation("Role");
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("Saranga.Domain.Entities.VatConfiguration", b =>
+                {
+                    b.HasOne("Saranga.Domain.Entities.Branch", "Branch")
+                        .WithMany()
+                        .HasForeignKey("BranchId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Saranga.Domain.Entities.User", "Creator")
+                        .WithMany()
+                        .HasForeignKey("CreatedBy")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Saranga.Domain.Entities.User", "Updater")
+                        .WithMany()
+                        .HasForeignKey("UpdatedBy")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Branch");
+
+                    b.Navigation("Creator");
+
+                    b.Navigation("Updater");
                 });
 
             modelBuilder.Entity("Saranga.Domain.Entities.Branch", b =>
