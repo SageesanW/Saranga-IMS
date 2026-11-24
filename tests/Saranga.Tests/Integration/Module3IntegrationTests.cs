@@ -42,8 +42,11 @@ public class Module3IntegrationTests : IClassFixture<WebApplicationFactory<Progr
         using var scope = _factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-        // Clean up test attributes and test branches
+        // Clean up test inventory, attributes and test branches
         await db.Database.ExecuteSqlRawAsync(@"
+            DELETE FROM ""InventoryItemSpecifications"" WHERE ""InventoryItemId"" IN (SELECT ""Id"" FROM ""InventoryItems"" WHERE ""ItemCode"" LIKE 'TEST_%' OR ""TagNumber"" LIKE 'TEST_%');
+            DELETE FROM ""InventoryItemMedia"" WHERE ""InventoryItemId"" IN (SELECT ""Id"" FROM ""InventoryItems"" WHERE ""ItemCode"" LIKE 'TEST_%' OR ""TagNumber"" LIKE 'TEST_%');
+            DELETE FROM ""InventoryItems"" WHERE ""ItemCode"" LIKE 'TEST_%' OR ""TagNumber"" LIKE 'TEST_%' OR ""Name"" LIKE 'Test %';
             DELETE FROM ""StockLocations"" WHERE ""Code"" LIKE 'TEST_%';
             DELETE FROM ""SpecificationOptions"" WHERE ""Code"" LIKE 'TEST_%';
             DELETE FROM ""Specifications"" WHERE ""Code"" LIKE 'TEST_%';

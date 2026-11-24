@@ -45,10 +45,10 @@ export default function AppLayout({ children }: AppLayoutProps) {
     { name: 'Users', href: '/users', icon: '👥' },
     { name: 'Roles & Permissions', href: '/roles', icon: '🛡️' },
     { name: 'Attributes Master', href: '/attributes', icon: '💎' },
+    { name: 'Inventory & Barcode', href: '/inventory', icon: '📦' },
   ];
 
   const upcomingModules = [
-    { name: 'Inventory & Barcode', icon: '📦' },
     { name: 'Gold Rates & VAT', icon: '🪙' },
     { name: 'Customers', icon: '👤' },
     { name: 'POS & Billing', icon: '🧾' },

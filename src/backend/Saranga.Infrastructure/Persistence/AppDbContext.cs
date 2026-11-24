@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Saranga.Application.Common.Interfaces;
 using Saranga.Domain.Common;
 using Saranga.Domain.Entities;
+using Saranga.Domain.Enums;
 
 namespace Saranga.Infrastructure.Persistence;
 
@@ -45,6 +46,11 @@ public class AppDbContext : DbContext, IAppDbContext
     public DbSet<Specification> Specifications => Set<Specification>();
     public DbSet<SpecificationOption> SpecificationOptions => Set<SpecificationOption>();
     public DbSet<StockLocation> StockLocations => Set<StockLocation>();
+
+    // Module 4: Inventory Core
+    public DbSet<InventoryItem> InventoryItems => Set<InventoryItem>();
+    public DbSet<InventoryItemSpecification> InventoryItemSpecifications => Set<InventoryItemSpecification>();
+    public DbSet<InventoryItemMedia> InventoryItemMedia => Set<InventoryItemMedia>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -291,6 +297,113 @@ public class AppDbContext : DbContext, IAppDbContext
                   .WithMany(b => b.StockLocations)
                   .HasForeignKey(l => l.BranchId)
                   .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // Module 4: Inventory Tag Sequence (Collision-safe atomic counter)
+        modelBuilder.HasSequence<long>("InventoryTagSequence").StartsAt(100001).IncrementsBy(1);
+
+        // Module 4: InventoryItem Configuration
+        modelBuilder.Entity<InventoryItem>(entity =>
+        {
+            entity.ToTable("InventoryItems");
+            entity.HasKey(i => i.Id);
+
+            // Indexes
+            entity.HasIndex(i => i.TagNumber).IsUnique();
+            entity.HasIndex(i => i.Barcode).IsUnique();
+            entity.HasIndex(i => new { i.BranchId, i.Status });
+            entity.HasIndex(i => new { i.BranchId, i.StockLocationId });
+            entity.HasIndex(i => new { i.CategoryId, i.MaterialId, i.PurityId });
+
+            // Optimistic concurrency token (prevents concurrent double-sale in POS)
+            entity.Property(i => i.Version).IsRowVersion();
+
+            entity.Property(i => i.Name).HasMaxLength(200).IsRequired();
+            entity.Property(i => i.ItemCode).HasMaxLength(50).IsRequired();
+            entity.Property(i => i.TagNumber).HasMaxLength(50).IsRequired();
+            entity.Property(i => i.Barcode).HasMaxLength(50).IsRequired();
+
+            entity.Property(i => i.GrossWeight).HasPrecision(18, 4).IsRequired();
+            entity.Property(i => i.StoneWeight).HasPrecision(18, 4).IsRequired();
+            entity.Property(i => i.NetWeight).HasPrecision(18, 4).IsRequired();
+
+            entity.Property(i => i.PieceCount).HasDefaultValue(1).IsRequired();
+            entity.Property(i => i.MakingChargeMethod).HasConversion<int>().IsRequired();
+            entity.Property(i => i.MakingChargeValue).HasPrecision(18, 2).HasDefaultValue(0.00m).IsRequired();
+            entity.Property(i => i.Status).HasConversion<int>().HasDefaultValue(InventoryStatus.Available).IsRequired();
+            entity.Property(i => i.Description).HasMaxLength(1000);
+            entity.Property(i => i.IsActive).HasDefaultValue(true);
+
+            // Foreign Keys with Restrict to protect historical integrity
+            entity.HasOne(i => i.Branch)
+                  .WithMany()
+                  .HasForeignKey(i => i.BranchId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(i => i.StockLocation)
+                  .WithMany()
+                  .HasForeignKey(i => i.StockLocationId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(i => i.Material)
+                  .WithMany()
+                  .HasForeignKey(i => i.MaterialId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(i => i.Category)
+                  .WithMany()
+                  .HasForeignKey(i => i.CategoryId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(i => i.Purity)
+                  .WithMany()
+                  .HasForeignKey(i => i.PurityId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasMany(i => i.Specifications)
+                  .WithOne(s => s.InventoryItem)
+                  .HasForeignKey(s => s.InventoryItemId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasMany(i => i.Media)
+                  .WithOne(m => m.InventoryItem)
+                  .HasForeignKey(m => m.InventoryItemId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // Module 4: InventoryItemSpecification Configuration
+        modelBuilder.Entity<InventoryItemSpecification>(entity =>
+        {
+            entity.ToTable("InventoryItemSpecifications");
+            entity.HasKey(s => s.Id);
+            entity.HasIndex(s => new { s.InventoryItemId, s.SpecificationId }).IsUnique();
+
+            entity.Property(s => s.CustomValue).HasMaxLength(250);
+
+            entity.HasOne(s => s.Specification)
+                  .WithMany()
+                  .HasForeignKey(s => s.SpecificationId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(s => s.SpecificationOption)
+                  .WithMany()
+                  .HasForeignKey(s => s.SpecificationOptionId)
+                  .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // Module 4: InventoryItemMedia Configuration
+        modelBuilder.Entity<InventoryItemMedia>(entity =>
+        {
+            entity.ToTable("InventoryItemMedia");
+            entity.HasKey(m => m.Id);
+            entity.HasIndex(m => new { m.InventoryItemId, m.SortOrder });
+
+            entity.Property(m => m.FileName).HasMaxLength(255).IsRequired();
+            entity.Property(m => m.StoragePath).HasMaxLength(500).IsRequired();
+            entity.Property(m => m.ContentType).HasMaxLength(100).IsRequired();
+            entity.Property(m => m.MediaType).HasConversion<int>().IsRequired();
+            entity.Property(m => m.IsPrimary).HasDefaultValue(false);
+            entity.Property(m => m.SortOrder).HasDefaultValue(0);
         });
     }
 

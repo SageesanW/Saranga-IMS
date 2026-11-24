@@ -23,5 +23,10 @@ public interface IAppDbContext
     DbSet<SpecificationOption> SpecificationOptions { get; }
     DbSet<StockLocation> StockLocations { get; }
 
+    // Module 4: Inventory Core
+    DbSet<InventoryItem> InventoryItems { get; }
+    DbSet<InventoryItemSpecification> InventoryItemSpecifications { get; }
+    DbSet<InventoryItemMedia> InventoryItemMedia { get; }
+
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

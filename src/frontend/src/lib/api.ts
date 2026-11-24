@@ -384,3 +384,164 @@ export const stockLocationApi = {
 export const makingChargeMethodApi = {
   getMakingChargeMethods: () => apiRequest<MakingChargeMethod[]>('/making-charge-methods'),
 };
+
+// Module 4: Inventory Core Types
+export interface InventoryItemSpecification {
+  id: string;
+  specificationId: string;
+  specificationCode: string;
+  specificationName: string;
+  specificationOptionId?: string | null;
+  optionCode?: string | null;
+  optionValue?: string | null;
+  customValue?: string | null;
+}
+
+export interface InventoryItemMedia {
+  id: string;
+  fileName: string;
+  storagePath: string;
+  contentType: string;
+  fileSize: number;
+  mediaType: number;
+  mediaTypeName: string;
+  sortOrder: number;
+  isPrimary: boolean;
+  uploadedAt: string;
+}
+
+export interface InventoryItem {
+  id: string;
+  branchId: string;
+  branchCode: string;
+  branchName: string;
+  stockLocationId: string;
+  locationCode: string;
+  locationName: string;
+  locationType: string;
+  name: string;
+  itemCode: string;
+  tagNumber: string;
+  barcode: string;
+  materialId: string;
+  materialCode: string;
+  materialName: string;
+  categoryId: string;
+  categoryCode: string;
+  categoryName: string;
+  purityId: string;
+  purityCode: string;
+  purityName: string;
+  karatValue: number;
+  purityPercentage: number;
+  grossWeight: number;
+  stoneWeight: number;
+  netWeight: number;
+  pieceCount: number;
+  makingChargeMethod: number;
+  makingChargeMethodName: string;
+  makingChargeValue: number;
+  status: number;
+  statusName: string;
+  description: string;
+  isActive: boolean;
+  specifications: InventoryItemSpecification[];
+  media: InventoryItemMedia[];
+  createdAt: string;
+  updatedAt?: string | null;
+}
+
+export interface InventoryLookup {
+  id: string;
+  branchId: string;
+  branchCode: string;
+  branchName: string;
+  stockLocationId: string;
+  locationCode: string;
+  locationName: string;
+  tagNumber: string;
+  barcode: string;
+  name: string;
+  materialName: string;
+  categoryName: string;
+  karatValue: number;
+  grossWeight: number;
+  stoneWeight: number;
+  netWeight: number;
+  pieceCount: number;
+  status: number;
+  statusName: string;
+  makingChargeMethod: number;
+  makingChargeValue: number;
+}
+
+export interface InventoryQueryParams {
+  search?: string;
+  branchId?: string;
+  stockLocationId?: string;
+  materialId?: string;
+  categoryId?: string;
+  purityId?: string;
+  status?: number;
+  isActive?: boolean;
+  page?: number;
+  pageSize?: number;
+}
+
+// Module 4 API Helpers
+export const inventoryApi = {
+  getInventory: (params?: InventoryQueryParams) => {
+    const q = new URLSearchParams();
+    if (params?.search) q.append('search', params.search);
+    if (params?.branchId) q.append('branchId', params.branchId);
+    if (params?.stockLocationId) q.append('stockLocationId', params.stockLocationId);
+    if (params?.materialId) q.append('materialId', params.materialId);
+    if (params?.categoryId) q.append('categoryId', params.categoryId);
+    if (params?.purityId) q.append('purityId', params.purityId);
+    if (params?.status !== undefined) q.append('status', String(params.status));
+    if (params?.isActive !== undefined) q.append('isActive', String(params.isActive));
+    if (params?.page) q.append('page', String(params.page));
+    if (params?.pageSize) q.append('pageSize', String(params.pageSize));
+    const qs = q.toString();
+    return apiRequest<PagedResult<InventoryItem>>(`/inventory${qs ? `?${qs}` : ''}`);
+  },
+  getInventoryItemById: (id: string) => apiRequest<InventoryItem>(`/inventory/${id}`),
+  createInventoryItem: (data: {
+    branchId: string;
+    stockLocationId: string;
+    name: string;
+    itemCode?: string;
+    tagNumber?: string;
+    barcode?: string;
+    materialId: string;
+    categoryId: string;
+    purityId: string;
+    grossWeight: number;
+    stoneWeight: number;
+    pieceCount?: number;
+    makingChargeMethod?: number;
+    makingChargeValue?: number;
+    description?: string;
+    isActive?: boolean;
+    specifications?: { specificationId: string; specificationOptionId?: string | null; customValue?: string | null }[];
+  }) => apiRequest<InventoryItem>('/inventory', { method: 'POST', body: JSON.stringify(data) }),
+  updateInventoryItem: (id: string, data: {
+    stockLocationId: string;
+    name: string;
+    itemCode?: string;
+    materialId: string;
+    categoryId: string;
+    purityId: string;
+    grossWeight: number;
+    stoneWeight: number;
+    pieceCount: number;
+    makingChargeMethod: number;
+    makingChargeValue: number;
+    description?: string;
+    isActive: boolean;
+    specifications?: { specificationId: string; specificationOptionId?: string | null; customValue?: string | null }[];
+  }) => apiRequest<InventoryItem>(`/inventory/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  toggleStatus: (id: string) => apiRequest<InventoryItem>(`/inventory/${id}/status`, { method: 'PATCH' }),
+  lookupByBarcode: (barcode: string) => apiRequest<InventoryLookup>(`/inventory/lookup/barcode/${encodeURIComponent(barcode)}`),
+  lookupByTag: (tagNumber: string) => apiRequest<InventoryLookup>(`/inventory/lookup/tag/${encodeURIComponent(tagNumber)}`),
+};
