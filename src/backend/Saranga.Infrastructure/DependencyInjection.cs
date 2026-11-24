@@ -47,6 +47,7 @@ public static class DependencyInjection
         services.AddScoped<IInventoryService, InventoryService>();
         services.AddScoped<ICompositionService, CompositionService>();
         services.AddScoped<IBulkImportService, BulkImportService>();
+        services.AddScoped<IInventoryCountService, InventoryCountService>();
 
         // Authorization Handler & Policy Provider
         services.AddSingleton<IAuthorizationPolicyProvider, PermissionPolicyProvider>();

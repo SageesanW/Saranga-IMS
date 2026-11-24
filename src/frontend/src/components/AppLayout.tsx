@@ -46,6 +46,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
     { name: 'Roles & Permissions', href: '/roles', icon: '🛡️' },
     { name: 'Attributes Master', href: '/attributes', icon: '💎' },
     { name: 'Inventory & Barcode', href: '/inventory', icon: '📦' },
+    { name: 'Inventory Count', href: '/inventory/count', icon: '📋' },
   ];
 
   const upcomingModules = [

@@ -41,7 +41,8 @@ public static class Permissions
     public const string InventoryStatusOverride = "INVENTORY_STATUS_OVERRIDE";
     public const string InventoryDelete = "INVENTORY_DELETE";
     public const string InventoryBulkImport = "INVENTORY_BULK_IMPORT";
-    public const string InventoryCountManage = "INVENTORY_COUNT_MANAGE";
+    public const string InventoryCount = "INVENTORY_COUNT";
+    public const string InventoryCountManage = InventoryCount;
     public const string InventoryVarianceResolve = "INVENTORY_VARIANCE_RESOLVE";
     public const string InventoryTransfer = "INVENTORY_TRANSFER";
     public const string InventoryCompositionCreate = "INVENTORY_COMPOSITION_CREATE";

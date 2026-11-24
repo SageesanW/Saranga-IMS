@@ -62,6 +62,11 @@ public class AppDbContext : DbContext, IAppDbContext
     // Module 7: Excel / CSV Bulk Inventory Import
     public DbSet<InventoryImportBatch> InventoryImportBatches => Set<InventoryImportBatch>();
 
+    // Module 8: Inventory Count & Physical Stock Verification
+    public DbSet<InventoryCount> InventoryCounts => Set<InventoryCount>();
+    public DbSet<InventoryCountLine> InventoryCountLines => Set<InventoryCountLine>();
+    public DbSet<InventoryCountUnexpectedItem> InventoryCountUnexpectedItems => Set<InventoryCountUnexpectedItem>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -512,6 +517,148 @@ public class AppDbContext : DbContext, IAppDbContext
             entity.HasOne(b => b.Branch)
                   .WithMany()
                   .HasForeignKey(b => b.BranchId)
+                  .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // Module 8: InventoryCount Configuration
+        modelBuilder.Entity<InventoryCount>(entity =>
+        {
+            entity.ToTable("InventoryCounts");
+            entity.HasKey(c => c.Id);
+
+            // Filtered partial unique index: Exactly ONE active count per BranchId + StockLocationId (Status 1=InProgress, 2=RequiresReview)
+            entity.HasIndex(c => new { c.BranchId, c.StockLocationId })
+                  .HasFilter("\"Status\" IN (1, 2)")
+                  .IsUnique();
+
+            entity.HasIndex(c => c.Status);
+            entity.HasIndex(c => c.StartedAt);
+
+            entity.Property(c => c.Status).HasConversion<int>().IsRequired();
+            entity.Property(c => c.Notes).HasMaxLength(1000);
+            entity.Property(c => c.CancellationReason).HasMaxLength(500);
+
+            // PostgreSQL MVCC row-versioning for optimistic concurrency
+            entity.Property(c => c.Version).IsRowVersion();
+
+            entity.HasOne(c => c.Branch)
+                  .WithMany()
+                  .HasForeignKey(c => c.BranchId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(c => c.StockLocation)
+                  .WithMany()
+                  .HasForeignKey(c => c.StockLocationId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasMany(c => c.Lines)
+                  .WithOne(l => l.InventoryCount)
+                  .HasForeignKey(l => l.InventoryCountId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasMany(c => c.UnexpectedItems)
+                  .WithOne(u => u.InventoryCount)
+                  .HasForeignKey(u => u.InventoryCountId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // Module 8: InventoryCountLine Configuration
+        modelBuilder.Entity<InventoryCountLine>(entity =>
+        {
+            entity.ToTable("InventoryCountLines");
+            entity.HasKey(l => l.Id);
+
+            // Unique index: An item cannot appear multiple times in the same count's baseline
+            entity.HasIndex(l => new { l.InventoryCountId, l.InventoryItemId })
+                  .IsUnique();
+
+            entity.HasIndex(l => new { l.InventoryCountId, l.IsCounted });
+            entity.HasIndex(l => new { l.InventoryCountId, l.TagNumberSnapshot });
+            entity.HasIndex(l => new { l.InventoryCountId, l.BarcodeSnapshot });
+
+            entity.Property(l => l.TagNumberSnapshot).HasMaxLength(50).IsRequired();
+            entity.Property(l => l.BarcodeSnapshot).HasMaxLength(100).IsRequired();
+            entity.Property(l => l.ItemNameSnapshot).HasMaxLength(200).IsRequired();
+            entity.Property(l => l.MaterialNameSnapshot).HasMaxLength(100).IsRequired();
+            entity.Property(l => l.CategoryNameSnapshot).HasMaxLength(100).IsRequired();
+            entity.Property(l => l.PurityNameSnapshot).HasMaxLength(100).IsRequired();
+            entity.Property(l => l.ExpectedStatusSnapshot).HasMaxLength(50).IsRequired();
+
+            entity.Property(l => l.GrossWeightSnapshot).HasColumnType("numeric(18,4)").IsRequired();
+            entity.Property(l => l.StoneWeightSnapshot).HasColumnType("numeric(18,4)").IsRequired();
+            entity.Property(l => l.NetWeightSnapshot).HasColumnType("numeric(18,4)").IsRequired();
+            entity.Property(l => l.PieceCountSnapshot).IsRequired();
+
+            entity.Property(l => l.Result).HasConversion<int>().IsRequired();
+            entity.Property(l => l.ResolutionStatus).HasConversion<int>().IsRequired();
+            entity.Property(l => l.ResolutionReasonCode).HasMaxLength(50);
+            entity.Property(l => l.ResolutionNotes).HasMaxLength(1000);
+
+            entity.HasOne(l => l.InventoryItem)
+                  .WithMany()
+                  .HasForeignKey(l => l.InventoryItemId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(l => l.ExpectedBranch)
+                  .WithMany()
+                  .HasForeignKey(l => l.ExpectedBranchId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(l => l.ExpectedStockLocation)
+                  .WithMany()
+                  .HasForeignKey(l => l.ExpectedStockLocationId)
+                  .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // Module 8: InventoryCountUnexpectedItem Configuration
+        modelBuilder.Entity<InventoryCountUnexpectedItem>(entity =>
+        {
+            entity.ToTable("InventoryCountUnexpectedItems");
+            entity.HasKey(u => u.Id);
+
+            // Unique index: An item cannot be recorded multiple times as unexpected in the same count
+            entity.HasIndex(u => new { u.InventoryCountId, u.InventoryItemId })
+                  .IsUnique();
+
+            entity.HasIndex(u => new { u.InventoryCountId, u.TagNumberSnapshot });
+            entity.HasIndex(u => new { u.InventoryCountId, u.BarcodeSnapshot });
+
+            entity.Property(u => u.TagNumberSnapshot).HasMaxLength(50).IsRequired();
+            entity.Property(u => u.BarcodeSnapshot).HasMaxLength(100).IsRequired();
+            entity.Property(u => u.ItemNameSnapshot).HasMaxLength(200).IsRequired();
+            entity.Property(u => u.MaterialNameSnapshot).HasMaxLength(100).IsRequired();
+            entity.Property(u => u.CategoryNameSnapshot).HasMaxLength(100).IsRequired();
+            entity.Property(u => u.PurityNameSnapshot).HasMaxLength(100).IsRequired();
+            entity.Property(u => u.CurrentSystemLocationNameSnapshot).HasMaxLength(100).IsRequired();
+            entity.Property(u => u.CurrentSystemStatusSnapshot).HasMaxLength(50).IsRequired();
+
+            entity.Property(u => u.GrossWeightSnapshot).HasColumnType("numeric(18,4)").IsRequired();
+            entity.Property(u => u.StoneWeightSnapshot).HasColumnType("numeric(18,4)").IsRequired();
+            entity.Property(u => u.NetWeightSnapshot).HasColumnType("numeric(18,4)").IsRequired();
+            entity.Property(u => u.PieceCountSnapshot).IsRequired();
+
+            entity.Property(u => u.ResolutionStatus).HasConversion<int>().IsRequired();
+            entity.Property(u => u.ResolutionReasonCode).HasMaxLength(50);
+            entity.Property(u => u.ResolutionNotes).HasMaxLength(1000);
+
+            entity.HasOne(u => u.InventoryItem)
+                  .WithMany()
+                  .HasForeignKey(u => u.InventoryItemId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(u => u.ObservedBranch)
+                  .WithMany()
+                  .HasForeignKey(u => u.ObservedBranchId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(u => u.ObservedStockLocation)
+                  .WithMany()
+                  .HasForeignKey(u => u.ObservedStockLocationId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(u => u.CurrentSystemStockLocation)
+                  .WithMany()
+                  .HasForeignKey(u => u.CurrentSystemStockLocationId)
                   .OnDelete(DeleteBehavior.Restrict);
         });
     }

@@ -401,6 +401,376 @@ namespace Saranga.Infrastructure.Persistence.Migrations
                     b.ToTable("InventoryCompositionMembers", (string)null);
                 });
 
+            modelBuilder.Entity("Saranga.Domain.Entities.InventoryCount", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("BranchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CancellationReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTimeOffset?>("CancelledAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CancelledBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CompletedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("CountedExpectedItemCount")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("ExpectedItemCount")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("MatchedCount")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("MissingCount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<DateTimeOffset?>("ReconciledAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ReconciledBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("StartedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("StartedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("StockLocationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("UnexpectedCount")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("StartedAt");
+
+                    b.HasIndex("Status");
+
+                    b.HasIndex("StockLocationId");
+
+                    b.HasIndex("BranchId", "StockLocationId")
+                        .IsUnique()
+                        .HasFilter("\"Status\" IN (1, 2)");
+
+                    b.ToTable("InventoryCounts", (string)null);
+                });
+
+            modelBuilder.Entity("Saranga.Domain.Entities.InventoryCountLine", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("BarcodeSnapshot")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("CategoryNameSnapshot")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTimeOffset?>("CountedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CountedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ExpectedBranchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ExpectedStatusSnapshot")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<Guid>("ExpectedStockLocationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("GrossWeightSnapshot")
+                        .HasColumnType("numeric(18,4)");
+
+                    b.Property<Guid>("InventoryCountId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("InventoryItemId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsCounted")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsExpected")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("ItemNameSnapshot")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("MaterialNameSnapshot")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<decimal>("NetWeightSnapshot")
+                        .HasColumnType("numeric(18,4)");
+
+                    b.Property<int>("PieceCountSnapshot")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("PurityNameSnapshot")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("ResolutionNotes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("ResolutionReasonCode")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<int>("ResolutionStatus")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset?>("ResolvedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ResolvedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Result")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("StoneWeightSnapshot")
+                        .HasColumnType("numeric(18,4)");
+
+                    b.Property<string>("TagNumberSnapshot")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ExpectedBranchId");
+
+                    b.HasIndex("ExpectedStockLocationId");
+
+                    b.HasIndex("InventoryItemId");
+
+                    b.HasIndex("InventoryCountId", "BarcodeSnapshot");
+
+                    b.HasIndex("InventoryCountId", "InventoryItemId")
+                        .IsUnique();
+
+                    b.HasIndex("InventoryCountId", "IsCounted");
+
+                    b.HasIndex("InventoryCountId", "TagNumberSnapshot");
+
+                    b.ToTable("InventoryCountLines", (string)null);
+                });
+
+            modelBuilder.Entity("Saranga.Domain.Entities.InventoryCountUnexpectedItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("BarcodeSnapshot")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("CategoryNameSnapshot")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CurrentSystemLocationNameSnapshot")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("CurrentSystemStatusSnapshot")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<Guid>("CurrentSystemStockLocationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("GrossWeightSnapshot")
+                        .HasColumnType("numeric(18,4)");
+
+                    b.Property<Guid>("InventoryCountId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("InventoryItemId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("ItemNameSnapshot")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("MaterialNameSnapshot")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<decimal>("NetWeightSnapshot")
+                        .HasColumnType("numeric(18,4)");
+
+                    b.Property<Guid>("ObservedBranchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ObservedStockLocationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("PieceCountSnapshot")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("PurityNameSnapshot")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("ResolutionNotes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("ResolutionReasonCode")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<int>("ResolutionStatus")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset?>("ResolvedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ResolvedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("ScannedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("ScannedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("StoneWeightSnapshot")
+                        .HasColumnType("numeric(18,4)");
+
+                    b.Property<string>("TagNumberSnapshot")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CurrentSystemStockLocationId");
+
+                    b.HasIndex("InventoryItemId");
+
+                    b.HasIndex("ObservedBranchId");
+
+                    b.HasIndex("ObservedStockLocationId");
+
+                    b.HasIndex("InventoryCountId", "BarcodeSnapshot");
+
+                    b.HasIndex("InventoryCountId", "InventoryItemId")
+                        .IsUnique();
+
+                    b.HasIndex("InventoryCountId", "TagNumberSnapshot");
+
+                    b.ToTable("InventoryCountUnexpectedItems", (string)null);
+                });
+
             modelBuilder.Entity("Saranga.Domain.Entities.InventoryImportBatch", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1302,6 +1672,103 @@ namespace Saranga.Infrastructure.Persistence.Migrations
                     b.Navigation("InventoryItem");
                 });
 
+            modelBuilder.Entity("Saranga.Domain.Entities.InventoryCount", b =>
+                {
+                    b.HasOne("Saranga.Domain.Entities.Branch", "Branch")
+                        .WithMany()
+                        .HasForeignKey("BranchId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Saranga.Domain.Entities.StockLocation", "StockLocation")
+                        .WithMany()
+                        .HasForeignKey("StockLocationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Branch");
+
+                    b.Navigation("StockLocation");
+                });
+
+            modelBuilder.Entity("Saranga.Domain.Entities.InventoryCountLine", b =>
+                {
+                    b.HasOne("Saranga.Domain.Entities.Branch", "ExpectedBranch")
+                        .WithMany()
+                        .HasForeignKey("ExpectedBranchId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Saranga.Domain.Entities.StockLocation", "ExpectedStockLocation")
+                        .WithMany()
+                        .HasForeignKey("ExpectedStockLocationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Saranga.Domain.Entities.InventoryCount", "InventoryCount")
+                        .WithMany("Lines")
+                        .HasForeignKey("InventoryCountId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Saranga.Domain.Entities.InventoryItem", "InventoryItem")
+                        .WithMany()
+                        .HasForeignKey("InventoryItemId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("ExpectedBranch");
+
+                    b.Navigation("ExpectedStockLocation");
+
+                    b.Navigation("InventoryCount");
+
+                    b.Navigation("InventoryItem");
+                });
+
+            modelBuilder.Entity("Saranga.Domain.Entities.InventoryCountUnexpectedItem", b =>
+                {
+                    b.HasOne("Saranga.Domain.Entities.StockLocation", "CurrentSystemStockLocation")
+                        .WithMany()
+                        .HasForeignKey("CurrentSystemStockLocationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Saranga.Domain.Entities.InventoryCount", "InventoryCount")
+                        .WithMany("UnexpectedItems")
+                        .HasForeignKey("InventoryCountId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Saranga.Domain.Entities.InventoryItem", "InventoryItem")
+                        .WithMany()
+                        .HasForeignKey("InventoryItemId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Saranga.Domain.Entities.Branch", "ObservedBranch")
+                        .WithMany()
+                        .HasForeignKey("ObservedBranchId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Saranga.Domain.Entities.StockLocation", "ObservedStockLocation")
+                        .WithMany()
+                        .HasForeignKey("ObservedStockLocationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("CurrentSystemStockLocation");
+
+                    b.Navigation("InventoryCount");
+
+                    b.Navigation("InventoryItem");
+
+                    b.Navigation("ObservedBranch");
+
+                    b.Navigation("ObservedStockLocation");
+                });
+
             modelBuilder.Entity("Saranga.Domain.Entities.InventoryImportBatch", b =>
                 {
                     b.HasOne("Saranga.Domain.Entities.Branch", "Branch")
@@ -1505,6 +1972,13 @@ namespace Saranga.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("Saranga.Domain.Entities.InventoryComposition", b =>
                 {
                     b.Navigation("Members");
+                });
+
+            modelBuilder.Entity("Saranga.Domain.Entities.InventoryCount", b =>
+                {
+                    b.Navigation("Lines");
+
+                    b.Navigation("UnexpectedItems");
                 });
 
             modelBuilder.Entity("Saranga.Domain.Entities.InventoryItem", b =>

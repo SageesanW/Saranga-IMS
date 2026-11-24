@@ -816,3 +816,217 @@ export const bulkImportApi = {
     return apiRequest<InventoryImportBatch[]>(`/inventory/import/batches${q}`);
   },
 };
+
+// ==========================================
+// Module 8: Inventory Count & Physical Stock Verification
+// ==========================================
+
+export interface InventoryCount {
+  id: string;
+  branchId: string;
+  branchCode: string;
+  branchName: string;
+  stockLocationId: string;
+  stockLocationCode: string;
+  stockLocationName: string;
+  status: number; // 1 = InProgress, 2 = RequiresReview, 3 = Completed, 4 = Cancelled
+  statusName: string;
+  startedAt: string;
+  startedBy: string;
+  startedByName?: string;
+  reconciledAt?: string;
+  reconciledBy?: string;
+  reconciledByName?: string;
+  completedAt?: string;
+  completedBy?: string;
+  completedByName?: string;
+  cancelledAt?: string;
+  cancelledBy?: string;
+  cancellationReason?: string;
+  expectedItemCount: number;
+  countedExpectedItemCount: number;
+  matchedCount: number;
+  missingCount: number;
+  unexpectedCount: number;
+  progressPercentage: number;
+  notes?: string;
+  version: number;
+}
+
+export interface InventoryCountLine {
+  id: string;
+  inventoryCountId: string;
+  inventoryItemId: string;
+  expectedBranchId: string;
+  expectedStockLocationId: string;
+  tagNumberSnapshot: string;
+  barcodeSnapshot: string;
+  itemNameSnapshot: string;
+  materialNameSnapshot: string;
+  categoryNameSnapshot: string;
+  purityNameSnapshot: string;
+  grossWeightSnapshot: number;
+  stoneWeightSnapshot: number;
+  netWeightSnapshot: number;
+  pieceCountSnapshot: number;
+  expectedStatusSnapshot: string;
+  isExpected: boolean;
+  isCounted: boolean;
+  countedAt?: string;
+  countedBy?: string;
+  result: number;
+  resultName: string;
+  resolutionStatus: number;
+  resolutionStatusName: string;
+  resolutionReasonCode?: string;
+  resolutionNotes?: string;
+  resolvedAt?: string;
+  resolvedBy?: string;
+}
+
+export interface InventoryCountUnexpectedItem {
+  id: string;
+  inventoryCountId: string;
+  inventoryItemId: string;
+  observedBranchId: string;
+  observedStockLocationId: string;
+  currentSystemStockLocationId: string;
+  currentSystemLocationNameSnapshot: string;
+  tagNumberSnapshot: string;
+  barcodeSnapshot: string;
+  itemNameSnapshot: string;
+  materialNameSnapshot: string;
+  categoryNameSnapshot: string;
+  purityNameSnapshot: string;
+  grossWeightSnapshot: number;
+  stoneWeightSnapshot: number;
+  netWeightSnapshot: number;
+  pieceCountSnapshot: number;
+  currentSystemStatusSnapshot: string;
+  scannedAt: string;
+  scannedBy: string;
+  resolutionStatus: number;
+  resolutionStatusName: string;
+  resolutionReasonCode?: string;
+  resolutionNotes?: string;
+  resolvedAt?: string;
+  resolvedBy?: string;
+}
+
+export interface ScanResult {
+  scanOutcome: 'MATCHED' | 'UNEXPECTED' | 'ALREADY_COUNTED' | 'COMPOSITION_PARENT' | 'CROSS_BRANCH' | 'NOT_FOUND';
+  message: string;
+  expectedLine?: InventoryCountLine | null;
+  unexpectedItem?: InventoryCountUnexpectedItem | null;
+  compositionPreview?: CompositionScanPreview | null;
+  countSummary: InventoryCount;
+}
+
+export interface CompositionMemberScanPreview {
+  inventoryItemId: string;
+  tagNumber: string;
+  barcode: string;
+  itemName: string;
+  categoryName: string;
+  purityKarat: number;
+  grossWeight: number;
+  isAlreadyCounted: boolean;
+  isExpectedInBaseline: boolean;
+}
+
+export interface CompositionScanPreview {
+  compositionId: string;
+  name: string;
+  tagNumber: string;
+  barcode: string;
+  type: string;
+  members: CompositionMemberScanPreview[];
+}
+
+export interface ConfirmCompositionScanResult {
+  newlyCountedCount: number;
+  alreadyCountedCount: number;
+  unexpectedCount: number;
+  message: string;
+  countSummary: InventoryCount;
+}
+
+export interface CountVariances {
+  countId: string;
+  missingCount: number;
+  unexpectedCount: number;
+  missingItems: InventoryCountLine[];
+  unexpectedItems: InventoryCountUnexpectedItem[];
+}
+
+export interface ActiveCountCheck {
+  hasActiveCount: boolean;
+  activeCountId?: string | null;
+  status?: number | null;
+  statusName?: string | null;
+  startedAt?: string | null;
+}
+
+export const inventoryCountApi = {
+  getCounts: (params?: { branchId?: string; stockLocationId?: string; status?: number; page?: number; pageSize?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.branchId) q.append('branchId', params.branchId);
+    if (params?.stockLocationId) q.append('stockLocationId', params.stockLocationId);
+    if (params?.status) q.append('status', params.status.toString());
+    if (params?.page) q.append('page', params.page.toString());
+    if (params?.pageSize) q.append('pageSize', params.pageSize.toString());
+    const qs = q.toString() ? `?${q.toString()}` : '';
+    return apiRequest<PagedResult<InventoryCount>>(`/inventory-counts${qs}`);
+  },
+  getCountById: (id: string) =>
+    apiRequest<InventoryCount>(`/inventory-counts/${id}`),
+  getCountLines: (id: string, params?: { isCounted?: boolean; result?: number; page?: number; pageSize?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.isCounted !== undefined) q.append('isCounted', params.isCounted.toString());
+    if (params?.result !== undefined) q.append('result', params.result.toString());
+    if (params?.page) q.append('page', params.page.toString());
+    if (params?.pageSize) q.append('pageSize', params.pageSize.toString());
+    const qs = q.toString() ? `?${q.toString()}` : '';
+    return apiRequest<PagedResult<InventoryCountLine>>(`/inventory-counts/${id}/lines${qs}`);
+  },
+  getUnexpectedItems: (id: string) =>
+    apiRequest<InventoryCountUnexpectedItem[]>(`/inventory-counts/${id}/unexpected`),
+  getVariances: (id: string) =>
+    apiRequest<CountVariances>(`/inventory-counts/${id}/variances`),
+  checkActive: (branchId: string, stockLocationId: string) =>
+    apiRequest<ActiveCountCheck>(`/inventory-counts/check-active?branchId=${encodeURIComponent(branchId)}&stockLocationId=${encodeURIComponent(stockLocationId)}`),
+  startCount: (data: { branchId: string; stockLocationId: string; notes?: string }) =>
+    apiRequest<InventoryCount>('/inventory-counts', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  scanItem: (id: string, identifier: string) =>
+    apiRequest<ScanResult>(`/inventory-counts/${id}/scan`, {
+      method: 'POST',
+      body: JSON.stringify({ identifier }),
+    }),
+  confirmCompositionScan: (id: string, compositionId: string, selectedInventoryItemIds: string[]) =>
+    apiRequest<ConfirmCompositionScanResult>(`/inventory-counts/${id}/scan-composition`, {
+      method: 'POST',
+      body: JSON.stringify({ compositionId, selectedInventoryItemIds }),
+    }),
+  finishCount: (id: string) =>
+    apiRequest<InventoryCount>(`/inventory-counts/${id}/finish`, {
+      method: 'POST',
+    }),
+  resolveVariance: (id: string, data: { varianceType: string; varianceId: string; reasonCode: string; notes?: string }) =>
+    apiRequest<InventoryCount>(`/inventory-counts/${id}/variances/resolve`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  completeCount: (id: string, notes?: string) =>
+    apiRequest<InventoryCount>(`/inventory-counts/${id}/complete`, {
+      method: 'POST',
+      body: JSON.stringify({ notes }),
+    }),
+  cancelCount: (id: string, reason: string) =>
+    apiRequest<InventoryCount>(`/inventory-counts/${id}/cancel`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    }),
+};

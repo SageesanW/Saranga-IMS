@@ -43,5 +43,10 @@ public interface IAppDbContext
     // Module 7: Excel / CSV Bulk Inventory Import
     DbSet<InventoryImportBatch> InventoryImportBatches { get; }
 
+    // Module 8: Inventory Count & Physical Stock Verification
+    DbSet<InventoryCount> InventoryCounts { get; }
+    DbSet<InventoryCountLine> InventoryCountLines { get; }
+    DbSet<InventoryCountUnexpectedItem> InventoryCountUnexpectedItems { get; }
+
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }
