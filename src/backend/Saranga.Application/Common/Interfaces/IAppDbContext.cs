@@ -1,10 +1,15 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Saranga.Domain.Entities;
 
 namespace Saranga.Application.Common.Interfaces;
 
 public interface IAppDbContext
 {
+    DatabaseFacade Database { get; }
+    EntityEntry<TEntity> Entry<TEntity>(TEntity entity) where TEntity : class;
+
     DbSet<User> Users { get; }
     DbSet<Branch> Branches { get; }
     DbSet<Role> Roles { get; }

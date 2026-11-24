@@ -1,9 +1,11 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
 import AppLayout from '@/components/AppLayout';
 import { useAuth } from '@/lib/auth-context';
 import { useBranch } from '@/lib/branch-context';
+import { BarcodeDisplay } from '@/components/BarcodeDisplay';
 import {
   InventoryItem,
   InventoryLookup,
@@ -299,6 +301,7 @@ export default function InventoryPage() {
           description: formDescription.trim() || undefined,
           isActive: formIsActive,
           specifications: specsPayload,
+          version: editingItem.version,
         });
         setSuccess(`Inventory item '${formName}' updated successfully.`);
       } else {
@@ -327,7 +330,11 @@ export default function InventoryPage() {
       setIsFormModalOpen(false);
       loadInventory(currentPage);
     } catch (err: any) {
-      setError(err?.message || 'Failed to save inventory item');
+      if (err?.status === 409 || err?.message?.includes('modified by another user')) {
+        setError('This inventory item was modified by another user. Refresh the item before saving again.');
+      } else {
+        setError(err?.message || 'Failed to save inventory item');
+      }
     }
   };
 
@@ -351,24 +358,27 @@ export default function InventoryPage() {
             <h1 className="text-2xl font-bold tracking-tight text-gray-900 flex items-center space-x-2">
               <span>Inventory Core & Barcodes</span>
               <span className="text-xs px-2.5 py-0.5 rounded-full font-semibold bg-[#0D3826]/10 text-[#0D3826] border border-[#0D3826]/20">
-                Module 4
+                Module 5
               </span>
             </h1>
             <p className="text-sm text-gray-500 mt-1">
-              Real-time physical jewellery tracking, weights (Net = Gross - Stone), barcode generation, branch location isolation, and audit readiness.
+              Physical jewellery inventory tracking, single-item creation workflow, weights (Net = Gross - Stone), barcodes, and branch isolation.
             </p>
           </div>
 
           <div className="flex items-center space-x-3">
-            {canCreate && (
-              <button
-                onClick={handleOpenCreate}
-                className="inline-flex items-center space-x-2 px-4 py-2 bg-[#0D3826] hover:bg-[#1B6543] text-white text-sm font-semibold rounded-lg shadow-sm border border-[#D4AF37]/50 transition"
-              >
-                <span>+</span>
-                <span>Add Jewellery Item</span>
-              </button>
-            )}
+            <Link
+              href={canCreate ? "/inventory/new" : "#"}
+              className={`inline-flex items-center space-x-2 px-4 py-2 text-white text-sm font-semibold rounded-lg shadow-sm border border-[#D4AF37]/50 transition ${
+                canCreate
+                  ? 'bg-[#0D3826] hover:bg-[#1B6543]'
+                  : 'bg-gray-400 cursor-not-allowed opacity-60'
+              }`}
+              title={canCreate ? "Launch Manual Item Creation Wizard" : "INVENTORY_CREATE permission required"}
+            >
+              <span className="text-base font-bold">+</span>
+              <span>Add Inventory Item</span>
+            </Link>
           </div>
         </div>
 
@@ -593,21 +603,29 @@ export default function InventoryPage() {
                       <div className="font-medium text-gray-800">{item.locationName}</div>
                       <div className="text-[10px] text-gray-400">{item.branchCode} • {item.locationType}</div>
                     </td>
-                    <td className="px-4 py-3 text-center">
-                      <span
-                        className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                          item.status === 1
-                            ? 'bg-emerald-100 text-emerald-800'
-                            : item.status === 2
-                            ? 'bg-amber-100 text-amber-800'
-                            : 'bg-red-100 text-red-800'
-                        }`}
-                      >
-                        {item.statusName}
-                      </span>
-                      {!item.isActive && (
-                        <div className="text-[9px] text-gray-400 font-semibold uppercase mt-0.5">Inactive</div>
-                      )}
+                    <td className="px-4 py-3 text-center space-y-1">
+                      <div>
+                        <span
+                          className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                            item.status === 1
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : item.status === 2
+                              ? 'bg-amber-100 text-amber-800'
+                              : 'bg-red-100 text-red-800'
+                          }`}
+                        >
+                          {item.statusName}
+                        </span>
+                      </div>
+                      <div>
+                        <span
+                          className={`inline-flex px-1.5 py-0.2 rounded text-[9px] font-bold uppercase ${
+                            item.isActive ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'bg-gray-100 text-gray-500'
+                          }`}
+                        >
+                          {item.isActive ? 'ACTIVE' : 'INACTIVE'}
+                        </span>
+                      </div>
                     </td>
                     <td className="px-4 py-3 text-right space-x-2">
                       <button
@@ -626,6 +644,11 @@ export default function InventoryPage() {
                         >
                           Edit
                         </button>
+                      )}
+                      {item.status === 3 && (
+                        <span className="text-[10px] text-gray-400 font-medium italic">
+                          Locked
+                        </span>
                       )}
                       {canEdit && item.status !== 3 && (
                         <button
@@ -711,6 +734,11 @@ export default function InventoryPage() {
                   </span>
                 </div>
 
+                {/* Scanned Barcode Display */}
+                <div className="flex justify-center p-2.5 bg-gray-50 border border-gray-200 rounded-xl">
+                  <BarcodeDisplay value={scannedResult.barcode} width={260} height={65} />
+                </div>
+
                 <div className="grid grid-cols-2 gap-3 bg-gray-50 p-3 rounded-lg">
                   <div>
                     <span className="text-[10px] text-gray-400 uppercase font-semibold">Material & Purity</span>
@@ -758,6 +786,11 @@ export default function InventoryPage() {
               </div>
 
               <div className="p-6 space-y-5 text-xs max-h-[80vh] overflow-y-auto">
+                {/* Visual Barcode */}
+                <div className="flex justify-center p-3 bg-gray-50 border border-gray-200 rounded-xl">
+                  <BarcodeDisplay value={selectedItem.barcode} width={280} height={70} />
+                </div>
+
                 {/* Weight Breakdown Card */}
                 <div className="bg-amber-50/50 border border-amber-200 p-4 rounded-xl">
                   <h4 className="font-bold text-amber-900 text-xs uppercase tracking-wider mb-2">Weight Breakdown (Jewellery Standard)</h4>

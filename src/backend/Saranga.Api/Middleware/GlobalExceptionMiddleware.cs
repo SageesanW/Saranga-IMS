@@ -42,6 +42,20 @@ public class GlobalExceptionMiddleware
             context.Response.StatusCode = (int)HttpStatusCode.BadRequest;
             await context.Response.WriteAsync(JsonSerializer.Serialize(new { message = ex.Message }));
         }
+        catch (ConflictException ex)
+        {
+            _logger.LogWarning(ex, "Conflict exception: {Message}", ex.Message);
+            context.Response.ContentType = "application/json";
+            context.Response.StatusCode = (int)HttpStatusCode.Conflict;
+            await context.Response.WriteAsync(JsonSerializer.Serialize(new { message = ex.Message }));
+        }
+        catch (Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException ex)
+        {
+            _logger.LogWarning(ex, "Concurrency conflict occurred: {Message}", ex.Message);
+            context.Response.ContentType = "application/json";
+            context.Response.StatusCode = (int)HttpStatusCode.Conflict;
+            await context.Response.WriteAsync(JsonSerializer.Serialize(new { message = "This inventory item was modified by another user. Refresh the item before saving again." }));
+        }
         catch (UnauthorizedAccessException ex)
         {
             _logger.LogWarning(ex, "Unauthorized access: {Message}", ex.Message);

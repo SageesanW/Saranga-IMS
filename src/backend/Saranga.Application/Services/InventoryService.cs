@@ -21,6 +21,7 @@ public interface IInventoryService
     Task<InventoryItemDto> AdminStatusCorrectionAsync(Guid id, AdminStatusCorrectionRequest request, CancellationToken cancellationToken = default);
     Task<InventoryLookupDto> LookupByBarcodeAsync(string barcode, CancellationToken cancellationToken = default);
     Task<InventoryLookupDto> LookupByTagAsync(string tagNumber, CancellationToken cancellationToken = default);
+    Task<FileUploadResultDto> UploadFileAsync(Stream stream, string fileName, string contentType, long fileSize, CancellationToken cancellationToken = default);
 }
 
 public class InventoryService : IInventoryService
@@ -326,29 +327,61 @@ public class InventoryService : IInventoryService
             }
         }
 
-        _context.InventoryItems.Add(item);
-
-        RecordAudit("InventoryItem", item.Id, "CREATE", null, new
+        // 9. Media
+        if (request.Media != null && request.Media.Count > 0)
         {
-            item.BranchId,
-            item.StockLocationId,
-            item.Name,
-            item.ItemCode,
-            item.TagNumber,
-            item.Barcode,
-            item.MaterialId,
-            item.CategoryId,
-            item.PurityId,
-            item.GrossWeight,
-            item.StoneWeight,
-            item.NetWeight,
-            item.PieceCount,
-            item.MakingChargeMethod,
-            item.MakingChargeValue,
-            Status = item.Status.ToString()
-        }, item.BranchId);
+            foreach (var m in request.Media)
+            {
+                item.Media.Add(new InventoryItemMedia
+                {
+                    InventoryItemId = item.Id,
+                    FileName = m.FileName.Trim(),
+                    StoragePath = m.StoragePath.Trim(),
+                    ContentType = m.ContentType.Trim(),
+                    FileSize = m.FileSize,
+                    MediaType = (InventoryMediaType)m.MediaType,
+                    SortOrder = m.SortOrder,
+                    IsPrimary = m.IsPrimary,
+                    UploadedAt = DateTimeOffset.UtcNow,
+                    CreatedAt = DateTimeOffset.UtcNow,
+                    CreatedBy = _currentUserService.UserId
+                });
+            }
+        }
 
-        await _context.SaveChangesAsync(cancellationToken);
+        await using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
+        try
+        {
+            _context.InventoryItems.Add(item);
+
+            RecordAudit("InventoryItem", item.Id, "CREATE", null, new
+            {
+                item.BranchId,
+                item.StockLocationId,
+                item.Name,
+                item.ItemCode,
+                item.TagNumber,
+                item.Barcode,
+                item.MaterialId,
+                item.CategoryId,
+                item.PurityId,
+                item.GrossWeight,
+                item.StoneWeight,
+                item.NetWeight,
+                item.PieceCount,
+                item.MakingChargeMethod,
+                item.MakingChargeValue,
+                Status = item.Status.ToString()
+            }, item.BranchId);
+
+            await _context.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+        }
+        catch
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            throw;
+        }
 
         return await GetInventoryItemByIdAsync(item.Id, cancellationToken);
     }
@@ -362,6 +395,7 @@ public class InventoryService : IInventoryService
 
         var item = await _context.InventoryItems
             .Include(i => i.Specifications)
+            .Include(i => i.Media)
             .FirstOrDefaultAsync(i => i.Id == id, cancellationToken);
 
         if (item == null)
@@ -454,6 +488,12 @@ public class InventoryService : IInventoryService
         item.UpdatedAt = DateTimeOffset.UtcNow;
         item.UpdatedBy = _currentUserService.UserId;
 
+        // Concurrency token verification
+        if (request.Version.HasValue && request.Version.Value != 0)
+        {
+            _context.Entry(item).Property(i => i.Version).OriginalValue = request.Version.Value;
+        }
+
         // Update Specifications
         if (request.Specifications != null)
         {
@@ -467,20 +507,55 @@ public class InventoryService : IInventoryService
             }
         }
 
-        RecordAudit("InventoryItem", item.Id, "UPDATE", oldValues, new
+        // Update Media
+        if (request.Media != null)
         {
-            item.Name,
-            item.StockLocationId,
-            item.GrossWeight,
-            item.StoneWeight,
-            item.NetWeight,
-            item.PieceCount,
-            item.MakingChargeMethod,
-            item.MakingChargeValue,
-            item.IsActive
-        }, item.BranchId);
+            _context.InventoryItemMedia.RemoveRange(item.Media);
+            item.Media.Clear();
 
-        await _context.SaveChangesAsync(cancellationToken);
+            foreach (var m in request.Media)
+            {
+                item.Media.Add(new InventoryItemMedia
+                {
+                    InventoryItemId = item.Id,
+                    FileName = m.FileName.Trim(),
+                    StoragePath = m.StoragePath.Trim(),
+                    ContentType = m.ContentType.Trim(),
+                    FileSize = m.FileSize,
+                    MediaType = (InventoryMediaType)m.MediaType,
+                    SortOrder = m.SortOrder,
+                    IsPrimary = m.IsPrimary,
+                    UploadedAt = DateTimeOffset.UtcNow,
+                    CreatedAt = DateTimeOffset.UtcNow,
+                    CreatedBy = _currentUserService.UserId
+                });
+            }
+        }
+
+        await using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
+        try
+        {
+            RecordAudit("InventoryItem", item.Id, "UPDATE", oldValues, new
+            {
+                item.Name,
+                item.StockLocationId,
+                item.GrossWeight,
+                item.StoneWeight,
+                item.NetWeight,
+                item.PieceCount,
+                item.MakingChargeMethod,
+                item.MakingChargeValue,
+                item.IsActive
+            }, item.BranchId);
+
+            await _context.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+        }
+        catch
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            throw;
+        }
 
         return await GetInventoryItemByIdAsync(item.Id, cancellationToken);
     }
@@ -682,6 +757,7 @@ public class InventoryService : IInventoryService
             i.Status.ToString().ToUpperInvariant(),
             i.Description,
             i.IsActive,
+            i.Version,
             i.Specifications.Select(s => new InventoryItemSpecificationDto(
                 s.Id,
                 s.SpecificationId,
@@ -804,5 +880,57 @@ public class InventoryService : IInventoryService
             CreatedAt = DateTimeOffset.UtcNow,
             CreatedBy = _currentUserService.UserId
         };
+    }
+
+    public async Task<FileUploadResultDto> UploadFileAsync(
+        Stream stream,
+        string fileName,
+        string contentType,
+        long fileSize,
+        CancellationToken cancellationToken = default)
+    {
+        if (stream == null || fileSize <= 0)
+        {
+            throw new BusinessRuleException("Uploaded file cannot be empty.");
+        }
+
+        var normalizedContentType = contentType?.Trim().ToLowerInvariant() ?? string.Empty;
+        var isImage = normalizedContentType is "image/jpeg" or "image/png" or "image/webp";
+        var isDoc = normalizedContentType is "application/pdf";
+
+        if (!isImage && !isDoc)
+        {
+            throw new BusinessRuleException("Unsupported file type. Only JPEG, PNG, WebP images and PDF documents are allowed.");
+        }
+
+        // 5MB limit for images, 10MB limit for documents
+        var maxBytes = isImage ? 5 * 1024 * 1024 : 10 * 1024 * 1024;
+        if (fileSize > maxBytes)
+        {
+            var maxMb = isImage ? 5 : 10;
+            throw new BusinessRuleException($"File size exceeds the allowable limit of {maxMb}MB.");
+        }
+
+        var safeExtension = Path.GetExtension(fileName).ToLowerInvariant();
+        var safeFileName = $"{Guid.NewGuid():N}{safeExtension}";
+        var uploadFolder = Path.Combine(Directory.GetCurrentDirectory(), "uploads", "inventory");
+        Directory.CreateDirectory(uploadFolder);
+        var fullPath = Path.Combine(uploadFolder, safeFileName);
+
+        await using (var fileStream = new FileStream(fullPath, FileMode.Create))
+        {
+            await stream.CopyToAsync(fileStream, cancellationToken);
+        }
+
+        var storageRelativePath = $"/uploads/inventory/{safeFileName}";
+        var mediaType = isImage ? (int)InventoryMediaType.Image : (int)InventoryMediaType.Document;
+
+        return new FileUploadResultDto(
+            Path.GetFileName(fileName),
+            storageRelativePath,
+            normalizedContentType,
+            fileSize,
+            mediaType
+        );
     }
 }

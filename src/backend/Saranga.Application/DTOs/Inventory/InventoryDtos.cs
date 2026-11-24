@@ -37,6 +37,7 @@ public record InventoryItemDto(
     string StatusName,
     string Description,
     bool IsActive,
+    uint Version,
     List<InventoryItemSpecificationDto> Specifications,
     List<InventoryItemMediaDto> Media,
     DateTimeOffset CreatedAt,
@@ -67,6 +68,24 @@ public record InventoryItemMediaDto(
     DateTimeOffset UploadedAt
 );
 
+public record CreateInventoryItemMediaRequest(
+    string FileName,
+    string StoragePath,
+    string ContentType,
+    long FileSize,
+    int MediaType = 1,
+    int SortOrder = 0,
+    bool IsPrimary = false
+);
+
+public record FileUploadResultDto(
+    string FileName,
+    string StoragePath,
+    string ContentType,
+    long FileSize,
+    int MediaType
+);
+
 public record CreateInventoryItemRequest(
     Guid BranchId,
     Guid StockLocationId,
@@ -84,7 +103,8 @@ public record CreateInventoryItemRequest(
     decimal MakingChargeValue = 0.00m,
     string? Description = null,
     bool IsActive = true,
-    List<CreateInventoryItemSpecificationRequest>? Specifications = null
+    List<CreateInventoryItemSpecificationRequest>? Specifications = null,
+    List<CreateInventoryItemMediaRequest>? Media = null
 );
 
 public record CreateInventoryItemSpecificationRequest(
@@ -107,7 +127,9 @@ public record UpdateInventoryItemRequest(
     decimal MakingChargeValue,
     string? Description,
     bool IsActive,
-    List<CreateInventoryItemSpecificationRequest>? Specifications = null
+    List<CreateInventoryItemSpecificationRequest>? Specifications = null,
+    List<CreateInventoryItemMediaRequest>? Media = null,
+    uint? Version = null
 );
 
 public record AdminStatusCorrectionRequest(

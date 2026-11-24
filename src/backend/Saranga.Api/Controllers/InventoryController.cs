@@ -101,4 +101,26 @@ public class InventoryController : ControllerBase
         var item = await _inventoryService.LookupByTagAsync(tagNumber, cancellationToken);
         return Ok(item);
     }
+
+    [HttpPost("upload-file")]
+    [RequirePermission(Permissions.InventoryCreate)]
+    public async Task<ActionResult<FileUploadResultDto>> UploadInventoryMedia(
+        IFormFile file,
+        CancellationToken cancellationToken)
+    {
+        if (file == null || file.Length == 0)
+        {
+            return BadRequest(new { message = "No file was provided." });
+        }
+
+        await using var stream = file.OpenReadStream();
+        var result = await _inventoryService.UploadFileAsync(
+            stream,
+            file.FileName,
+            file.ContentType,
+            file.Length,
+            cancellationToken);
+
+        return Ok(result);
+    }
 }

@@ -446,6 +446,7 @@ export interface InventoryItem {
   statusName: string;
   description: string;
   isActive: boolean;
+  version: number;
   specifications: InventoryItemSpecification[];
   media: InventoryItemMedia[];
   createdAt: string;
@@ -525,6 +526,7 @@ export const inventoryApi = {
     description?: string;
     isActive?: boolean;
     specifications?: { specificationId: string; specificationOptionId?: string | null; customValue?: string | null }[];
+    media?: { fileName: string; storagePath: string; contentType: string; fileSize: number; mediaType?: number; sortOrder?: number; isPrimary?: boolean; }[];
   }) => apiRequest<InventoryItem>('/inventory', { method: 'POST', body: JSON.stringify(data) }),
   updateInventoryItem: (id: string, data: {
     stockLocationId: string;
@@ -541,7 +543,32 @@ export const inventoryApi = {
     description?: string;
     isActive: boolean;
     specifications?: { specificationId: string; specificationOptionId?: string | null; customValue?: string | null }[];
+    media?: { fileName: string; storagePath: string; contentType: string; fileSize: number; mediaType?: number; sortOrder?: number; isPrimary?: boolean; }[];
+    version?: number;
   }) => apiRequest<InventoryItem>(`/inventory/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  uploadMedia: async (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const token = getAccessToken();
+    const headers: HeadersInit = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const res = await fetch(`${API_BASE_URL}/inventory/upload-file`, {
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new ApiError(res.status, err.message || 'File upload failed');
+    }
+    return res.json() as Promise<{
+      fileName: string;
+      storagePath: string;
+      contentType: string;
+      fileSize: number;
+      mediaType: number;
+    }>;
+  },
   toggleActive: (id: string) => apiRequest<InventoryItem>(`/inventory/${id}/toggle-active`, { method: 'PATCH' }),
   toggleStatus: (id: string) => apiRequest<InventoryItem>(`/inventory/${id}/toggle-active`, { method: 'PATCH' }),
   adminStatusCorrection: (id: string, targetStatus: number, reason: string) =>
