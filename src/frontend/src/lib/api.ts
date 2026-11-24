@@ -108,9 +108,12 @@ export async function apiRequest<T>(
   const activeBranchId = getActiveBranchId();
 
   const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
     ...(options.headers as Record<string, string>),
   };
+
+  if (!(options.body instanceof FormData) && !headers['Content-Type']) {
+    headers['Content-Type'] = 'application/json';
+  }
 
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
@@ -712,6 +715,104 @@ export const compositionApi = {
       method: 'POST',
       body: rowVersion ? JSON.stringify({ rowVersion }) : undefined,
     }),
-  detachMemberOnSale: (data: { inventoryItemId: string; saleInvoiceNumber?: string }) =>
-    apiRequest<any>('/compositions/internal/detach-member-on-sale', { method: 'POST', body: JSON.stringify(data) }),
+};
+
+export interface BulkImportRow {
+  rowNumber: number;
+  itemName: string;
+  itemCode?: string;
+  materialCode: string;
+  categoryCode: string;
+  purityCode: string;
+  grossWeight: number;
+  stoneWeight: number;
+  netWeight: number;
+  pieceCount: number;
+  stockLocationCode: string;
+  makingChargeMethod: string;
+  makingChargeValue: number;
+  description?: string;
+  isValid: boolean;
+  errors: string[];
+}
+
+export interface BulkImportError {
+  rowNumber: number;
+  field: string;
+  message: string;
+}
+
+export interface BulkImportValidationResult {
+  batchId: string;
+  branchId: string;
+  branchCode: string;
+  branchName: string;
+  originalFileName: string;
+  fileType: string;
+  totalRows: number;
+  validRows: number;
+  invalidRows: number;
+  isAllValid: boolean;
+  rows: BulkImportRow[];
+  errors: BulkImportError[];
+}
+
+export interface ImportedItemSummary {
+  id: string;
+  itemName: string;
+  tagNumber: string;
+  barcode: string;
+  grossWeight: number;
+  netWeight: number;
+  stockLocationCode: string;
+}
+
+export interface BulkImportResult {
+  batchId: string;
+  branchId: string;
+  status: string;
+  totalImported: number;
+  confirmedAt: string;
+  createdItems: ImportedItemSummary[];
+}
+
+export interface InventoryImportBatch {
+  id: string;
+  branchId: string;
+  branchName: string;
+  originalFileName: string;
+  fileType: string;
+  totalRows: number;
+  validRows: number;
+  invalidRows: number;
+  status: number;
+  statusName: string;
+  importedBy: string;
+  confirmedAt?: string;
+  createdAt: string;
+}
+
+export const bulkImportApi = {
+  getTemplateDownloadUrl: (format: 'xlsx' | 'csv' = 'xlsx') =>
+    `${API_BASE_URL}/inventory/import/template?format=${format}`,
+  validateFile: async (branchId: string, file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return apiRequest<BulkImportValidationResult>(`/inventory/import/validate?branchId=${encodeURIComponent(branchId)}`, {
+      method: 'POST',
+      body: formData,
+    });
+  },
+  getBatchValidation: (batchId: string) =>
+    apiRequest<BulkImportValidationResult>(`/inventory/import/batches/${batchId}`),
+  confirmImport: (batchId: string, idempotencyKey?: string) =>
+    apiRequest<BulkImportResult>('/inventory/import/confirm', {
+      method: 'POST',
+      headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined,
+      body: JSON.stringify({ batchId }),
+    }),
+  getBatches: (branchId?: string) => {
+    const q = branchId ? `?branchId=${encodeURIComponent(branchId)}` : '';
+    return apiRequest<InventoryImportBatch[]>(`/inventory/import/batches${q}`);
+  },
 };

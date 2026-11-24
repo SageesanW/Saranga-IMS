@@ -59,6 +59,9 @@ public class AppDbContext : DbContext, IAppDbContext
     public DbSet<InventoryComposition> InventoryCompositions => Set<InventoryComposition>();
     public DbSet<InventoryCompositionMember> InventoryCompositionMembers => Set<InventoryCompositionMember>();
 
+    // Module 7: Excel / CSV Bulk Inventory Import
+    public DbSet<InventoryImportBatch> InventoryImportBatches => Set<InventoryImportBatch>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -484,6 +487,27 @@ public class AppDbContext : DbContext, IAppDbContext
             entity.HasOne(m => m.InventoryItem)
                   .WithMany()
                   .HasForeignKey(m => m.InventoryItemId)
+                  .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // Module 7: InventoryImportBatch Configuration
+        modelBuilder.Entity<InventoryImportBatch>(entity =>
+        {
+            entity.ToTable("InventoryImportBatches");
+            entity.HasKey(b => b.Id);
+
+            entity.HasIndex(b => new { b.BranchId, b.Status });
+            entity.HasIndex(b => b.IdempotencyKey);
+            entity.HasIndex(b => b.CreatedAt);
+
+            entity.Property(b => b.OriginalFileName).HasMaxLength(255).IsRequired();
+            entity.Property(b => b.FileType).HasMaxLength(10).IsRequired();
+            entity.Property(b => b.Status).HasConversion<int>().IsRequired();
+            entity.Property(b => b.IdempotencyKey).HasMaxLength(100);
+
+            entity.HasOne(b => b.Branch)
+                  .WithMany()
+                  .HasForeignKey(b => b.BranchId)
                   .OnDelete(DeleteBehavior.Restrict);
         });
     }

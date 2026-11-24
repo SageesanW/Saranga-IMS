@@ -40,5 +40,8 @@ public interface IAppDbContext
     DbSet<InventoryComposition> InventoryCompositions { get; }
     DbSet<InventoryCompositionMember> InventoryCompositionMembers { get; }
 
+    // Module 7: Excel / CSV Bulk Inventory Import
+    DbSet<InventoryImportBatch> InventoryImportBatches { get; }
+
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

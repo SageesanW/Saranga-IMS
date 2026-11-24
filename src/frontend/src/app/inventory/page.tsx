@@ -33,6 +33,7 @@ export default function InventoryPage() {
   const canCreate = user?.isGlobalAdmin || user?.permissions.includes('INVENTORY_CREATE') || user?.permissions.includes('INVENTORY_COMPOSITION_CREATE');
   const canEdit = user?.isGlobalAdmin || user?.permissions.includes('INVENTORY_EDIT');
   const canDissolve = user?.isGlobalAdmin || user?.permissions.includes('INVENTORY_COMPOSITION_DISSOLVE');
+  const canBulkImport = user?.isGlobalAdmin || user?.permissions.includes('INVENTORY_BULK_IMPORT');
 
   // Master Reference Data
   const [materials, setMaterials] = useState<Material[]>([]);
@@ -439,7 +440,19 @@ export default function InventoryPage() {
             </p>
           </div>
 
-          <div className="relative">
+          <div className="flex items-center space-x-2">
+            {canBulkImport && (
+              <Link
+                href="/inventory/import"
+                className="inline-flex items-center space-x-1.5 px-3 py-2 bg-white text-[#0D3826] border border-[#0D3826]/30 hover:bg-green-50 text-sm font-semibold rounded-lg shadow-sm transition"
+                title="Bulk import inventory items from Excel or CSV"
+              >
+                <span>📥</span>
+                <span>Bulk Import</span>
+              </Link>
+            )}
+
+            <div className="relative">
             <button
               type="button"
               onClick={() => setIsAddMenuOpen(!isAddMenuOpen)}
@@ -501,9 +514,30 @@ export default function InventoryPage() {
                     <div className="text-[11px] text-gray-500">Bundle 2+ items across different categories (e.g. Bridal set).</div>
                   </div>
                 </Link>
+
+                {canBulkImport && (
+                  <>
+                    <div className="border-t border-gray-100 my-1" />
+                    <Link
+                      href="/inventory/import"
+                      onClick={() => setIsAddMenuOpen(false)}
+                      className="flex items-start px-4 py-2.5 hover:bg-gray-50 transition"
+                    >
+                      <span className="text-lg mr-3">📥</span>
+                      <div>
+                        <div className="text-xs font-bold text-[#0D3826] flex items-center space-x-1.5">
+                          <span>Bulk Import</span>
+                          <span className="text-[9px] bg-green-100 text-green-800 px-1.5 py-0.2 rounded font-semibold">Excel / CSV</span>
+                        </div>
+                        <div className="text-[11px] text-gray-500">Digitize and batch-create multiple items from spreadsheet.</div>
+                      </div>
+                    </Link>
+                  </>
+                )}
               </div>
             )}
           </div>
+        </div>
         </div>
 
         {/* Notifications */}

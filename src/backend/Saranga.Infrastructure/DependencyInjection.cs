@@ -45,6 +45,7 @@ public static class DependencyInjection
         services.AddScoped<ITagGeneratorService, TagGeneratorService>();
         services.AddScoped<IInventoryService, InventoryService>();
         services.AddScoped<ICompositionService, CompositionService>();
+        services.AddScoped<IBulkImportService, BulkImportService>();
 
         // Authorization Handler & Policy Provider
         services.AddSingleton<IAuthorizationPolicyProvider, PermissionPolicyProvider>();

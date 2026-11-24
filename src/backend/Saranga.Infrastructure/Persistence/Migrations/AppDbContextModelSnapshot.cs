@@ -401,6 +401,85 @@ namespace Saranga.Infrastructure.Persistence.Migrations
                     b.ToTable("InventoryCompositionMembers", (string)null);
                 });
 
+            modelBuilder.Entity("Saranga.Domain.Entities.InventoryImportBatch", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("BranchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("ConfirmedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("FileType")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<string>("IdempotencyKey")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Guid>("ImportedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("InvalidRows")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("OriginalFileName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<string>("PayloadJson")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ResultSummaryJson")
+                        .HasColumnType("text");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("TotalRows")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("ValidRows")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ValidationErrorsJson")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedAt");
+
+                    b.HasIndex("IdempotencyKey");
+
+                    b.HasIndex("BranchId", "Status");
+
+                    b.ToTable("InventoryImportBatches", (string)null);
+                });
+
             modelBuilder.Entity("Saranga.Domain.Entities.InventoryItem", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1221,6 +1300,17 @@ namespace Saranga.Infrastructure.Persistence.Migrations
                     b.Navigation("Composition");
 
                     b.Navigation("InventoryItem");
+                });
+
+            modelBuilder.Entity("Saranga.Domain.Entities.InventoryImportBatch", b =>
+                {
+                    b.HasOne("Saranga.Domain.Entities.Branch", "Branch")
+                        .WithMany()
+                        .HasForeignKey("BranchId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Branch");
                 });
 
             modelBuilder.Entity("Saranga.Domain.Entities.InventoryItem", b =>
