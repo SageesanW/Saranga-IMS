@@ -1190,3 +1190,129 @@ export const pricingApi = {
       body: JSON.stringify(data),
     }),
 };
+
+// Module 10: Customer Management Types & API
+export interface Customer {
+  id: string;
+  customerCode: string;
+  fullName: string;
+  primaryPhone: string;
+  normalizedPrimaryPhone: string;
+  secondaryPhone?: string | null;
+  normalizedSecondaryPhone?: string | null;
+  email?: string | null;
+  addressLine1?: string | null;
+  addressLine2?: string | null;
+  city?: string | null;
+  districtProvince?: string | null;
+  postalCode?: string | null;
+  country?: string | null;
+  dateOfBirth?: string | null;
+  notes?: string | null;
+  isActive: boolean;
+  rowVersion: string;
+  createdAt: string;
+  updatedAt?: string | null;
+  createdBy?: string | null;
+  updatedBy?: string | null;
+}
+
+export interface CustomerLookup {
+  id: string;
+  customerCode: string;
+  fullName: string;
+  primaryPhone: string;
+  email?: string | null;
+  city?: string | null;
+  isActive: boolean;
+}
+
+export interface CustomerDuplicateCheckResult {
+  isDuplicate: boolean;
+  duplicateReason?: string | null;
+  existingCustomerId?: string | null;
+}
+
+export interface CreateCustomerRequest {
+  fullName: string;
+  primaryPhone: string;
+  secondaryPhone?: string | null;
+  email?: string | null;
+  addressLine1?: string | null;
+  addressLine2?: string | null;
+  city?: string | null;
+  districtProvince?: string | null;
+  postalCode?: string | null;
+  country?: string | null;
+  dateOfBirth?: string | null;
+  notes?: string | null;
+}
+
+export interface UpdateCustomerRequest {
+  fullName: string;
+  primaryPhone: string;
+  secondaryPhone?: string | null;
+  email?: string | null;
+  addressLine1?: string | null;
+  addressLine2?: string | null;
+  city?: string | null;
+  districtProvince?: string | null;
+  postalCode?: string | null;
+  country?: string | null;
+  dateOfBirth?: string | null;
+  notes?: string | null;
+  rowVersion: string;
+}
+
+export interface UpdateCustomerStatusRequest {
+  isActive: boolean;
+  reason?: string | null;
+}
+
+export const customerApi = {
+  getCustomers: (params?: {
+    search?: string;
+    isActive?: boolean;
+    page?: number;
+    pageSize?: number;
+    sortBy?: string;
+    sortDescending?: boolean;
+  }) => {
+    const p = new URLSearchParams();
+    if (params?.search) p.append('search', params.search);
+    if (params?.isActive !== undefined) p.append('isActive', params.isActive.toString());
+    if (params?.page) p.append('page', params.page.toString());
+    if (params?.pageSize) p.append('pageSize', params.pageSize.toString());
+    if (params?.sortBy) p.append('sortBy', params.sortBy);
+    if (params?.sortDescending !== undefined) p.append('sortDescending', params.sortDescending.toString());
+    return apiRequest<PagedResult<Customer>>(`/customers?${p.toString()}`);
+  },
+  searchCustomers: (query: string, maxResults = 20) =>
+    apiRequest<CustomerLookup[]>(`/customers/search?q=${encodeURIComponent(query)}&maxResults=${maxResults}`),
+  getCustomerById: (id: string) =>
+    apiRequest<Customer>(`/customers/${id}`),
+  getCustomerByCode: (code: string) =>
+    apiRequest<Customer>(`/customers/code/${encodeURIComponent(code)}`),
+  checkDuplicate: (primaryPhone: string, email?: string | null, excludeCustomerId?: string | null) => {
+    const p = new URLSearchParams();
+    p.append('primaryPhone', primaryPhone);
+    if (email) p.append('email', email);
+    if (excludeCustomerId) p.append('excludeCustomerId', excludeCustomerId);
+    return apiRequest<CustomerDuplicateCheckResult>(`/customers/check-duplicate?${p.toString()}`);
+  },
+  createCustomer: (data: CreateCustomerRequest) =>
+    apiRequest<Customer>('/customers', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  updateCustomer: (id: string, data: UpdateCustomerRequest) =>
+    apiRequest<Customer>(`/customers/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+  updateCustomerStatus: (id: string, data: UpdateCustomerStatusRequest) =>
+    apiRequest<Customer>(`/customers/${id}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+};

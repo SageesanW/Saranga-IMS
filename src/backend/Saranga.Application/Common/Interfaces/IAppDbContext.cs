@@ -52,5 +52,8 @@ public interface IAppDbContext
     DbSet<MetalRate> MetalRates { get; }
     DbSet<VatConfiguration> VatConfigurations { get; }
 
+    // Module 10: Customer Management
+    DbSet<Customer> Customers { get; }
+
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

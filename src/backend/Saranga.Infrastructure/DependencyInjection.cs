@@ -56,6 +56,9 @@ public static class DependencyInjection
         services.AddScoped<IVatConfigurationService, VatConfigurationService>();
         services.AddScoped<IReferencePricingService, ReferencePricingService>();
 
+        // Module 10: Customer Management
+        services.AddScoped<ICustomerService, CustomerService>();
+
         // Authorization Handler & Policy Provider
         services.AddSingleton<IAuthorizationPolicyProvider, PermissionPolicyProvider>();
         services.AddScoped<IAuthorizationHandler, PermissionAuthorizationHandler>();

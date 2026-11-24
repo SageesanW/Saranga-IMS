@@ -61,6 +61,9 @@ public static class Permissions
     // Module: Customers
     public const string CustomerView = "CUSTOMER_VIEW";
     public const string CustomerManage = "CUSTOMER_MANAGE";
+    public const string CustomerCreate = "CUSTOMER_CREATE";
+    public const string CustomerEdit = "CUSTOMER_EDIT";
+    public const string CustomerActivateDeactivate = "CUSTOMER_ACTIVATE_DEACTIVATE";
 
     // Module: POS & Orders / Repairs
     public const string PosView = "POS_VIEW";
@@ -138,7 +141,10 @@ public static class Permissions
 
         // Customers
         new(CustomerView, "View customer profiles and history", "Customers"),
-        new(CustomerManage, "Create and edit customer records", "Customers"),
+        new(CustomerManage, "Manage customer profiles and operations", "Customers"),
+        new(CustomerCreate, "Create new customer records", "Customers"),
+        new(CustomerEdit, "Edit customer contact and profile details", "Customers"),
+        new(CustomerActivateDeactivate, "Activate or deactivate customer accounts", "Customers"),
 
         // POS
         new(PosView, "Access point-of-sale terminal", "POS"),

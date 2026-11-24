@@ -49,10 +49,10 @@ export default function AppLayout({ children }: AppLayoutProps) {
     { name: 'Inventory Count', href: '/inventory/count', icon: '📋' },
     { name: 'Metal Rates', href: '/rates', icon: '🪙' },
     { name: 'VAT Configuration', href: '/vat', icon: '🏷️' },
+    { name: 'Customers', href: '/customers', icon: '👤' },
   ];
 
   const upcomingModules = [
-    { name: 'Customers', icon: '👤' },
     { name: 'POS & Billing', icon: '🧾' },
     { name: 'Shift & Cash Ledger', icon: '💵' },
     { name: 'Sales Verification', icon: '🔍' },

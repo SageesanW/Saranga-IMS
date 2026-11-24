@@ -71,6 +71,9 @@ public class AppDbContext : DbContext, IAppDbContext
     public DbSet<MetalRate> MetalRates => Set<MetalRate>();
     public DbSet<VatConfiguration> VatConfigurations => Set<VatConfiguration>();
 
+    // Module 10: Customer Management
+    public DbSet<Customer> Customers => Set<Customer>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -735,6 +738,55 @@ public class AppDbContext : DbContext, IAppDbContext
             entity.HasOne(v => v.Updater)
                   .WithMany()
                   .HasForeignKey(v => v.UpdatedBy)
+                  .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // Module 10: Customer Management Configuration
+        modelBuilder.HasSequence<long>("CustomerCodeSequence").StartsAt(1).IncrementsBy(1);
+
+        modelBuilder.Entity<Customer>(entity =>
+        {
+            entity.ToTable("Customers");
+            entity.HasKey(c => c.Id);
+
+            entity.Property(c => c.CustomerCode).HasMaxLength(50).IsRequired();
+            entity.HasIndex(c => c.CustomerCode).IsUnique();
+
+            entity.Property(c => c.FullName).HasMaxLength(200).IsRequired();
+            entity.HasIndex(c => c.FullName);
+
+            entity.Property(c => c.PrimaryPhone).HasMaxLength(50).IsRequired();
+            entity.Property(c => c.NormalizedPrimaryPhone).HasMaxLength(50).IsRequired();
+            entity.HasIndex(c => c.NormalizedPrimaryPhone);
+
+            entity.Property(c => c.SecondaryPhone).HasMaxLength(50);
+            entity.Property(c => c.NormalizedSecondaryPhone).HasMaxLength(50);
+            entity.HasIndex(c => c.NormalizedSecondaryPhone);
+
+            entity.Property(c => c.Email).HasMaxLength(200);
+            entity.HasIndex(c => c.Email);
+
+            entity.Property(c => c.AddressLine1).HasMaxLength(200);
+            entity.Property(c => c.AddressLine2).HasMaxLength(200);
+            entity.Property(c => c.City).HasMaxLength(100);
+            entity.Property(c => c.DistrictProvince).HasMaxLength(100);
+            entity.Property(c => c.PostalCode).HasMaxLength(20);
+            entity.Property(c => c.Country).HasMaxLength(100).IsRequired();
+            entity.Property(c => c.Notes).HasMaxLength(2000);
+
+            entity.Property(c => c.Version).IsRowVersion();
+
+            entity.HasIndex(c => c.IsActive);
+            entity.HasIndex(c => c.CreatedAt);
+
+            entity.HasOne(c => c.Creator)
+                  .WithMany()
+                  .HasForeignKey(c => c.CreatedBy)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(c => c.Updater)
+                  .WithMany()
+                  .HasForeignKey(c => c.UpdatedBy)
                   .OnDelete(DeleteBehavior.Restrict);
         });
     }

@@ -12,7 +12,7 @@ public class GoldApiRateProvider : IMetalRateProvider
     private readonly IConfiguration _configuration;
     private readonly ILogger<GoldApiRateProvider> _logger;
 
-    public string ProviderName => "GoldApi";
+    public string ProviderName => _configuration["GoldApi:ProviderName"] ?? "GoldApi.dev";
 
     public GoldApiRateProvider(
         HttpClient httpClient,
@@ -29,20 +29,21 @@ public class GoldApiRateProvider : IMetalRateProvider
         var apiKey = _configuration["GoldApi:ApiKey"] ?? Environment.GetEnvironmentVariable("GOLD_API_KEY");
         if (string.IsNullOrWhiteSpace(apiKey))
         {
-            _logger.LogWarning("GoldApi rate refresh requested but no API key is configured in GoldApi:ApiKey or GOLD_API_KEY environment variable.");
+            _logger.LogWarning("{Provider} rate refresh requested but no API key is configured in GoldApi:ApiKey or GOLD_API_KEY environment variable.", ProviderName);
             return new MetalRateProviderResult(
                 IsSuccess: false,
                 ProviderName: ProviderName,
                 Timestamp: DateTimeOffset.UtcNow,
                 NormalizedRates: new List<ProviderNormalizedRate>(),
-                ErrorMessage: "External gold provider API key is not configured. Manual rate management remains fully operational."
+                ErrorMessage: $"External gold provider API key is not configured for {ProviderName}. Manual rate management remains fully operational."
             );
         }
 
         try
         {
             var targetCurrency = string.IsNullOrWhiteSpace(currencyCode) ? "LKR" : currencyCode.ToUpperInvariant();
-            var requestUri = $"https://www.goldapi.io/api/XAU/{targetCurrency}";
+            var baseUrl = _configuration["GoldApi:BaseUrl"] ?? "https://www.goldapi.dev/api";
+            var requestUri = $"{baseUrl.TrimEnd('/')}/XAU/{targetCurrency}";
 
             using var request = new HttpRequestMessage(HttpMethod.Get, requestUri);
             request.Headers.Add("x-access-token", apiKey);
@@ -52,15 +53,15 @@ public class GoldApiRateProvider : IMetalRateProvider
             if (!response.IsSuccessStatusCode)
             {
                 var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
-                _logger.LogWarning("GoldApi returned non-success HTTP {StatusCode}. Body summary: {Summary}",
-                    (int)response.StatusCode, errorBody.Length > 200 ? errorBody[..200] : errorBody);
+                _logger.LogWarning("{Provider} returned non-success HTTP {StatusCode}. Body summary: {Summary}",
+                    ProviderName, (int)response.StatusCode, errorBody.Length > 200 ? errorBody[..200] : errorBody);
 
                 return new MetalRateProviderResult(
                     IsSuccess: false,
                     ProviderName: ProviderName,
                     Timestamp: DateTimeOffset.UtcNow,
                     NormalizedRates: new List<ProviderNormalizedRate>(),
-                    ErrorMessage: $"External gold provider returned HTTP {(int)response.StatusCode}. Existing store rates retained."
+                    ErrorMessage: $"External gold provider ({ProviderName}) returned HTTP {(int)response.StatusCode}. Existing store rates retained."
                 );
             }
 
