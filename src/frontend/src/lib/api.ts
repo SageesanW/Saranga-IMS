@@ -699,14 +699,19 @@ export const compositionApi = {
     name: string;
     type: number;
     description?: string;
-    tagNumber?: string;
-    barcode?: string;
     childItemIds: string[];
   }) => apiRequest<InventoryComposition>('/compositions', { method: 'POST', body: JSON.stringify(data) }),
+  updateComposition: (id: string, data: { name: string; description?: string; rowVersion?: number }) =>
+    apiRequest<InventoryComposition>(`/compositions/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   addMember: (id: string, data: { inventoryItemId: string; sortOrder?: number }) =>
     apiRequest<InventoryComposition>(`/compositions/${id}/members`, { method: 'POST', body: JSON.stringify(data) }),
   removeMember: (id: string, inventoryItemId: string) =>
     apiRequest<InventoryComposition>(`/compositions/${id}/members/${inventoryItemId}`, { method: 'DELETE' }),
-  dissolveComposition: (id: string) =>
-    apiRequest<InventoryComposition>(`/compositions/${id}/dissolve`, { method: 'POST' }),
+  dissolveComposition: (id: string, rowVersion?: number) =>
+    apiRequest<InventoryComposition>(`/compositions/${id}/dissolve`, {
+      method: 'POST',
+      body: rowVersion ? JSON.stringify({ rowVersion }) : undefined,
+    }),
+  detachMemberOnSale: (data: { inventoryItemId: string; saleInvoiceNumber?: string }) =>
+    apiRequest<any>('/compositions/internal/detach-member-on-sale', { method: 'POST', body: JSON.stringify(data) }),
 };

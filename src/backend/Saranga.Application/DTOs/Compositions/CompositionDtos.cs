@@ -62,14 +62,43 @@ public record CreateCompositionRequest(
     string Name,
     int Type, // 1 = Assembly, 2 = Group
     string? Description,
-    string? TagNumber,
-    string? Barcode,
     List<Guid> ChildItemIds
+);
+
+public record UpdateCompositionRequest(
+    string Name,
+    string? Description,
+    uint? RowVersion = null
+);
+
+public record DissolveCompositionRequest(
+    uint? RowVersion = null
 );
 
 public record AddCompositionMemberRequest(
     Guid InventoryItemId,
     int? SortOrder
+);
+
+public record DetachMemberOnSaleRequest(
+    Guid InventoryItemId,
+    string? SaleInvoiceNumber = null
+);
+
+public record MemberDetachmentResultDto(
+    Guid InventoryItemId,
+    string ItemTagNumber,
+    Guid CompositionId,
+    string CompositionTagNumber,
+    int PreviousActiveMemberCount,
+    int RemainingActiveMemberCount,
+    bool CompositionWasDissolved,
+    int Status,
+    string StatusName,
+    decimal NewTotalGrossWeight,
+    decimal NewTotalStoneWeight,
+    decimal NewTotalNetWeight,
+    int NewTotalPieceCount
 );
 
 public record CompositionQueryParams(

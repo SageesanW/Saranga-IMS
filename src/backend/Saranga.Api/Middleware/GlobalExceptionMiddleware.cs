@@ -54,7 +54,7 @@ public class GlobalExceptionMiddleware
             _logger.LogWarning(ex, "Concurrency conflict occurred: {Message}", ex.Message);
             context.Response.ContentType = "application/json";
             context.Response.StatusCode = (int)HttpStatusCode.Conflict;
-            await context.Response.WriteAsync(JsonSerializer.Serialize(new { message = "This inventory item was modified by another user. Refresh the item before saving again." }));
+            await context.Response.WriteAsync(JsonSerializer.Serialize(new { message = "This record was modified by another user / modified concurrently by another transaction. Please refresh and try again." }));
         }
         catch (UnauthorizedAccessException ex)
         {

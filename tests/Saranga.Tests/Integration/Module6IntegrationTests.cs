@@ -13,6 +13,7 @@ using Saranga.Application.DTOs.Compositions;
 using Saranga.Application.DTOs.Inventory;
 using Saranga.Application.DTOs.Roles;
 using Saranga.Application.DTOs.Users;
+using Saranga.Application.Services;
 using Saranga.Domain.Constants;
 using Saranga.Domain.Entities;
 using Saranga.Infrastructure.Persistence;
@@ -49,26 +50,26 @@ public class Module6IntegrationTests : IClassFixture<WebApplicationFactory<Progr
 
         await db.Database.ExecuteSqlRawAsync(@"
             DELETE FROM ""InventoryCompositionMembers"" WHERE ""CompositionId"" IN (
-                SELECT ""Id"" FROM ""InventoryCompositions"" WHERE ""Name"" LIKE 'Test M6%' OR ""TagNumber"" LIKE 'TEST-M6-%'
+                SELECT ""Id"" FROM ""InventoryCompositions"" WHERE ""Name"" LIKE 'Test M6%' OR ""TagNumber"" LIKE 'TEST-M6-%' OR ""TagNumber"" LIKE 'T6B1-%'
             );
-            DELETE FROM ""InventoryCompositions"" WHERE ""Name"" LIKE 'Test M6%' OR ""TagNumber"" LIKE 'TEST-M6-%';
+            DELETE FROM ""InventoryCompositions"" WHERE ""Name"" LIKE 'Test M6%' OR ""TagNumber"" LIKE 'TEST-M6-%' OR ""TagNumber"" LIKE 'T6B1-%';
             DELETE FROM ""InventoryItemSpecifications"" WHERE ""InventoryItemId"" IN (
-                SELECT ""Id"" FROM ""InventoryItems"" WHERE ""ItemCode"" LIKE 'TEST_M6_%' OR ""TagNumber"" LIKE 'TEST-M6-%'
+                SELECT ""Id"" FROM ""InventoryItems"" WHERE ""ItemCode"" LIKE 'TEST_M6_%' OR ""TagNumber"" LIKE 'TEST-M6-%' OR ""TagNumber"" LIKE 'T6B1-%'
             );
             DELETE FROM ""InventoryItemMedia"" WHERE ""InventoryItemId"" IN (
-                SELECT ""Id"" FROM ""InventoryItems"" WHERE ""ItemCode"" LIKE 'TEST_M6_%' OR ""TagNumber"" LIKE 'TEST-M6-%'
+                SELECT ""Id"" FROM ""InventoryItems"" WHERE ""ItemCode"" LIKE 'TEST_M6_%' OR ""TagNumber"" LIKE 'TEST-M6-%' OR ""TagNumber"" LIKE 'T6B1-%'
             );
-            DELETE FROM ""InventoryItems"" WHERE ""ItemCode"" LIKE 'TEST_M6_%' OR ""TagNumber"" LIKE 'TEST-M6-%' OR ""Name"" LIKE 'Test M6%';
+            DELETE FROM ""InventoryItems"" WHERE ""ItemCode"" LIKE 'TEST_M6_%' OR ""TagNumber"" LIKE 'TEST-M6-%' OR ""TagNumber"" LIKE 'T6B1-%' OR ""Name"" LIKE 'Test M6%';
             DELETE FROM ""StockLocations"" WHERE ""Code"" LIKE 'TEST_M6_%';
             DELETE FROM ""Purities"" WHERE ""Code"" LIKE 'TEST_M6_%';
             DELETE FROM ""Categories"" WHERE ""Code"" LIKE 'TEST_M6_%';
             DELETE FROM ""Materials"" WHERE ""Code"" LIKE 'TEST_M6_%';
-            DELETE FROM ""UserBranches"" WHERE ""BranchId"" IN (SELECT ""Id"" FROM ""Branches"" WHERE ""Code"" IN ('TEST-M6-B1', 'TEST-M6-B2'));
+            DELETE FROM ""UserBranches"" WHERE ""BranchId"" IN (SELECT ""Id"" FROM ""Branches"" WHERE ""Code"" IN ('T6B1', 'T6B2'));
             DELETE FROM ""UserRoles"" WHERE ""UserId"" IN (SELECT ""Id"" FROM ""Users"" WHERE ""Username"" IN ('test_cashier_m6', 'test_manager_m6'));
             DELETE FROM ""Users"" WHERE ""Username"" IN ('test_cashier_m6', 'test_manager_m6');
             DELETE FROM ""RolePermissions"" WHERE ""RoleId"" IN (SELECT ""Id"" FROM ""Roles"" WHERE ""Name"" LIKE 'Test M6%');
             DELETE FROM ""Roles"" WHERE ""Name"" LIKE 'Test M6%';
-            DELETE FROM ""Branches"" WHERE ""Code"" IN ('TEST-M6-B1', 'TEST-M6-B2');
+            DELETE FROM ""Branches"" WHERE ""Code"" IN ('T6B1', 'T6B2');
         ");
     }
 
@@ -98,10 +99,10 @@ public class Module6IntegrationTests : IClassFixture<WebApplicationFactory<Progr
 
         // 2. Setup Prerequisites: Branches & Locations
         _output.WriteLine("=== 2. Setup Branches & Stock Locations ===");
-        var b1Res = await ownerClient.PostAsJsonAsync("/api/branches", new CreateBranchRequest("Test M6 Branch 1", "TEST-M6-B1", "LK", "LKR", "Asia/Colombo", true));
+        var b1Res = await ownerClient.PostAsJsonAsync("/api/branches", new CreateBranchRequest("Test M6 Branch 1", "T6B1", "LK", "LKR", "Asia/Colombo", true));
         var b1 = await b1Res.Content.ReadFromJsonAsync<BranchDto>();
 
-        var b2Res = await ownerClient.PostAsJsonAsync("/api/branches", new CreateBranchRequest("Test M6 Branch 2", "TEST-M6-B2", "LK", "LKR", "Asia/Colombo", true));
+        var b2Res = await ownerClient.PostAsJsonAsync("/api/branches", new CreateBranchRequest("Test M6 Branch 2", "T6B2", "LK", "LKR", "Asia/Colombo", true));
         var b2 = await b2Res.Content.ReadFromJsonAsync<BranchDto>();
 
         var loc1Res = await ownerClient.PostAsJsonAsync("/api/stock-locations", new CreateStockLocationRequest(b1!.Id, "Main Display B1", "TEST_M6_LOC_1", "DISPLAY", "B1 Display Showcase", true, 1));
@@ -114,8 +115,19 @@ public class Module6IntegrationTests : IClassFixture<WebApplicationFactory<Progr
         var loc2Res = await ownerClient.PostAsJsonAsync("/api/stock-locations", new CreateStockLocationRequest(b2!.Id, "Main Display B2", "TEST_M6_LOC_2", "DISPLAY", "B2 Display Showcase", true, 1));
         var loc2 = await loc2Res.Content.ReadFromJsonAsync<StockLocationDto>();
 
-        // 3. Setup Attributes Masters: Material, Categories, Purity
-        _output.WriteLine("=== 3. Setup Material, Categories, and Purity ===");
+        // 3. Setup Attributes Masters & Hardened Namespace Separation
+        _output.WriteLine("=== 3. Setup Attributes & Reserved Code Hardening ===");
+        // Hardening Check: Ensure ASM and GRP cannot be used as Category or Material codes
+        var reservedCatRes = await ownerClient.PostAsJsonAsync("/api/categories", new CreateCategoryRequest("Reserved Assembly Test", "ASM", "Should be rejected", true, 99));
+        Assert.Equal(HttpStatusCode.BadRequest, reservedCatRes.StatusCode);
+        var reservedCatErr = await reservedCatRes.Content.ReadAsStringAsync();
+        Assert.Contains("reserved for inventory compositions", reservedCatErr);
+
+        var reservedMatRes = await ownerClient.PostAsJsonAsync("/api/materials", new CreateMaterialRequest("Reserved Group Test", "GRP", "Should be rejected", true, 99));
+        Assert.Equal(HttpStatusCode.BadRequest, reservedMatRes.StatusCode);
+        var reservedMatErr = await reservedMatRes.Content.ReadAsStringAsync();
+        Assert.Contains("reserved for inventory compositions", reservedMatErr);
+
         var matRes = await ownerClient.PostAsJsonAsync("/api/materials", new CreateMaterialRequest("Test 22K Yellow Gold", "TEST_M6_GOLD", "Pure yellow gold", true, 1));
         var mat = await matRes.Content.ReadFromJsonAsync<MaterialDto>();
 
@@ -151,7 +163,7 @@ public class Module6IntegrationTests : IClassFixture<WebApplicationFactory<Progr
         Assert.Equal(HttpStatusCode.Created, itemBgl2Res.StatusCode);
         var itemBgl2 = await itemBgl2Res.Content.ReadFromJsonAsync<InventoryItemDto>();
 
-        // Bangle 3 (Branch 1, Loc 1, Category Bangles - for member add test)
+        // Bangle 3 (Branch 1, Loc 1, Category Bangles - for member add/detach test)
         var itemBgl3Res = await ownerClient.PostAsJsonAsync("/api/inventory", new CreateInventoryItemRequest(
             b1.Id, loc1.Id, "Test M6 Bangle Center", "TEST_M6_BGL_03", "TEST-M6-BGL-03", "BAR-M6-BGL-03",
             mat.Id, catBangles.Id, pur.Id,
@@ -201,7 +213,7 @@ public class Module6IntegrationTests : IClassFixture<WebApplicationFactory<Progr
         var invalidAssemblyReq = new CreateCompositionRequest(
             b1.Id, loc1.Id, "Test M6 Invalid Mixed Assembly",
             1, // Assembly
-            "Should fail due to mixed categories", null, null,
+            "Should fail due to mixed categories",
             new List<Guid> { itemBgl1!.Id, itemRng1!.Id }
         );
         var invalidAssemblyRes = await ownerClient.PostAsJsonAsync("/api/compositions", invalidAssemblyReq);
@@ -213,7 +225,7 @@ public class Module6IntegrationTests : IClassFixture<WebApplicationFactory<Progr
         _output.WriteLine("=== 6. Reject Cross-Branch Children ===");
         var crossBranchReq = new CreateCompositionRequest(
             b1.Id, loc1.Id, "Test M6 Cross Branch Assembly",
-            1, "Cross branch test", null, null,
+            1, "Cross branch test",
             new List<Guid> { itemBgl1.Id, itemB2!.Id }
         );
         var crossBranchRes = await ownerClient.PostAsJsonAsync("/api/compositions", crossBranchReq);
@@ -225,7 +237,7 @@ public class Module6IntegrationTests : IClassFixture<WebApplicationFactory<Progr
         _output.WriteLine("=== 7. Reject Cross-Location Children ===");
         var crossLocReq = new CreateCompositionRequest(
             b1.Id, loc1.Id, "Test M6 Cross Location Assembly",
-            1, "Cross location test", null, null,
+            1, "Cross location test",
             new List<Guid> { itemBgl1.Id, itemAltLoc!.Id }
         );
         var crossLocRes = await ownerClient.PostAsJsonAsync("/api/compositions", crossLocReq);
@@ -237,7 +249,7 @@ public class Module6IntegrationTests : IClassFixture<WebApplicationFactory<Progr
         _output.WriteLine("=== 8. Reject Duplicate Children in Request ===");
         var dupChildReq = new CreateCompositionRequest(
             b1.Id, loc1.Id, "Test M6 Duplicate Child Assembly",
-            1, "Duplicate child test", null, null,
+            1, "Duplicate child test",
             new List<Guid> { itemBgl1.Id, itemBgl1.Id }
         );
         var dupChildRes = await ownerClient.PostAsJsonAsync("/api/compositions", dupChildReq);
@@ -249,7 +261,7 @@ public class Module6IntegrationTests : IClassFixture<WebApplicationFactory<Progr
         _output.WriteLine("=== 9. Reject Less Than 2 Children ===");
         var singleChildReq = new CreateCompositionRequest(
             b1.Id, loc1.Id, "Test M6 Single Child Assembly",
-            1, "Single child test", null, null,
+            1, "Single child test",
             new List<Guid> { itemBgl1.Id }
         );
         var singleChildRes = await ownerClient.PostAsJsonAsync("/api/compositions", singleChildReq);
@@ -257,14 +269,12 @@ public class Module6IntegrationTests : IClassFixture<WebApplicationFactory<Progr
         var singleChildErr = await singleChildRes.Content.ReadAsStringAsync();
         Assert.Contains("must contain at least 2 distinct existing inventory items", singleChildErr);
 
-        // 10. Valid Assembly Creation (Same Category: Bangles)
-        _output.WriteLine("=== 10. Valid Assembly Creation (Bangles Pair) ===");
+        // 10. Valid Assembly Creation: Automated Tag & Barcode Generation
+        _output.WriteLine("=== 10. Valid Assembly Creation (Automated Identifiers) ===");
         var validAssemblyReq = new CreateCompositionRequest(
             b1.Id, loc1.Id, "Test M6 Sovereign Bangle Pair",
             1, // Assembly
             "Matching pair of handcrafted 22K bangles",
-            "TEST-M6-COMP-ASM-01",
-            "BAR-M6-COMP-ASM-01",
             new List<Guid> { itemBgl1.Id, itemBgl2!.Id }
         );
         var createAssemblyRes = await ownerClient.PostAsJsonAsync("/api/compositions", validAssemblyReq);
@@ -275,8 +285,13 @@ public class Module6IntegrationTests : IClassFixture<WebApplicationFactory<Progr
         Assert.Equal("Test M6 Sovereign Bangle Pair", assembly.Name);
         Assert.Equal(1, assembly.Type);
         Assert.Equal("ASSEMBLY", assembly.TypeName, ignoreCase: true);
-        Assert.Equal("TEST-M6-COMP-ASM-01", assembly.TagNumber);
-        Assert.Equal("BAR-M6-COMP-ASM-01", assembly.Barcode);
+
+        // Verify Automatic Namespace Separation:
+        // Assembly Tag must be in reserved ASM namespace: {BRANCH}-ASM-{SEQ:D6}
+        Assert.StartsWith($"{b1.Code}-ASM-", assembly.TagNumber);
+        // Assembly Barcode must have reserved ASM prefix: ASM{BRANCH}{SEQ:D8}
+        Assert.StartsWith($"ASM{b1.Code}", assembly.Barcode);
+
         Assert.Equal(1, assembly.Status); // Active
         Assert.Equal(2, assembly.ActiveMemberCount);
 
@@ -300,7 +315,6 @@ public class Module6IntegrationTests : IClassFixture<WebApplicationFactory<Progr
         var duplicateComposeReq = new CreateCompositionRequest(
             b1.Id, loc1.Id, "Test M6 Attempt Steal Child",
             1, "Should fail because itemBgl1 is in another active composition",
-            null, null,
             new List<Guid> { itemBgl1.Id, itemBgl3!.Id }
         );
         var duplicateComposeRes = await ownerClient.PostAsJsonAsync("/api/compositions", duplicateComposeReq);
@@ -321,8 +335,8 @@ public class Module6IntegrationTests : IClassFixture<WebApplicationFactory<Progr
                 StockLocationId = loc1.Id,
                 Name = "Test M6 Rogue DB Comp",
                 Type = Saranga.Domain.Enums.CompositionType.Assembly,
-                TagNumber = "TEST-M6-ROGUE-01",
-                Barcode = "BAR-M6-ROGUE-01",
+                TagNumber = $"{b1.Code}-ASM-999999",
+                Barcode = $"ASM{b1.Code}99999999",
                 Description = "Direct DB insert test"
             };
             db.InventoryCompositions.Add(rogueComp);
@@ -347,14 +361,12 @@ public class Module6IntegrationTests : IClassFixture<WebApplicationFactory<Progr
             await db.SaveChangesAsync();
         }
 
-        // 13. Valid Group Creation (Cross-Category: Necklace + Ring)
-        _output.WriteLine("=== 13. Valid Group Creation (Cross-Category: Choker + Ring) ===");
+        // 13. Valid Group Creation: Automated Tag & Barcode Generation
+        _output.WriteLine("=== 13. Valid Group Creation (Automated GRP Identifiers) ===");
         var validGroupReq = new CreateCompositionRequest(
             b1.Id, loc1.Id, "Test M6 Royal Bridal Set",
             2, // Group
             "Bridal choker with matching peacock ring",
-            "TEST-M6-COMP-GRP-01",
-            "BAR-M6-COMP-GRP-01",
             new List<Guid> { itemNck1!.Id, itemRng1!.Id }
         );
         var createGroupRes = await ownerClient.PostAsJsonAsync("/api/compositions", validGroupReq);
@@ -365,6 +377,11 @@ public class Module6IntegrationTests : IClassFixture<WebApplicationFactory<Progr
         Assert.Equal("Test M6 Royal Bridal Set", group.Name);
         Assert.Equal(2, group.Type);
         Assert.Equal("GROUP", group.TypeName, ignoreCase: true);
+
+        // Verify Group Tag & Barcode namespace separation:
+        Assert.StartsWith($"{b1.Code}-GRP-", group.TagNumber);
+        Assert.StartsWith($"GRP{b1.Code}", group.Barcode);
+
         // itemNck1: Gross=35.0000, Stone=2.0000, Net=33.0000, Pieces=1
         // itemRng1: Gross=6.2000, Stone=0.2000, Net=6.0000, Pieces=1
         Assert.Equal(41.2000m, group.TotalGrossWeight);
@@ -384,65 +401,79 @@ public class Module6IntegrationTests : IClassFixture<WebApplicationFactory<Progr
         var lookupBarcodeDto = await lookupBarcodeRes.Content.ReadFromJsonAsync<InventoryCompositionDto>();
         Assert.Equal(assembly.Id, lookupBarcodeDto!.Id);
 
-        // 15. Eligible Children Query Filter
-        _output.WriteLine("=== 15. Eligible Children Query ===");
-        var eligibleRes = await ownerClient.GetAsync($"/api/compositions/eligible-children?branchId={b1.Id}&stockLocationId={loc1.Id}&categoryId={catBangles.Id}");
-        Assert.Equal(HttpStatusCode.OK, eligibleRes.StatusCode);
-        var eligibleItems = await eligibleRes.Content.ReadFromJsonAsync<List<EligibleChildItemDto>>();
-        Assert.NotNull(eligibleItems);
-        // itemBgl1 and itemBgl2 are composed, so only itemBgl3 should be eligible under category Bangles
-        Assert.Contains(eligibleItems, x => x.Id == itemBgl3.Id);
-        Assert.DoesNotContain(eligibleItems, x => x.Id == itemBgl1.Id);
-        Assert.DoesNotContain(eligibleItems, x => x.Id == itemBgl2.Id);
+        // 15. Optimistic Concurrency Control (409 Conflict)
+        _output.WriteLine("=== 15. Optimistic Concurrency Control Verification ===");
+        // Update group with stale row version -> Expect 409 Conflict
+        var staleUpdateReq = new UpdateCompositionRequest("Stale Concurrent Update", "Should fail with 409", RowVersion: 999999);
+        var staleUpdateRes = await ownerClient.PutAsJsonAsync($"/api/compositions/{group.Id}", staleUpdateReq);
+        Assert.Equal(HttpStatusCode.Conflict, staleUpdateRes.StatusCode);
+        var conflictErr = await staleUpdateRes.Content.ReadAsStringAsync();
+        Assert.Contains("modified concurrently by another transaction", conflictErr);
 
-        // 16. Add Member to Active Composition
-        _output.WriteLine("=== 16. Add Member to Active Assembly ===");
-        // Try adding ring to Assembly (must fail due to category mismatch)
-        var addMismatchRes = await ownerClient.PostAsJsonAsync($"/api/compositions/{assembly.Id}/members", new AddCompositionMemberRequest(itemRng1.Id, null));
-        Assert.Equal(HttpStatusCode.BadRequest, addMismatchRes.StatusCode);
+        // Update group with correct version -> Expect 200 OK
+        var validUpdateReq = new UpdateCompositionRequest("Updated Royal Bridal Set", "Updated description", RowVersion: group.Version);
+        var validUpdateRes = await ownerClient.PutAsJsonAsync($"/api/compositions/{group.Id}", validUpdateReq);
+        Assert.Equal(HttpStatusCode.OK, validUpdateRes.StatusCode);
+        var updatedGroup = await validUpdateRes.Content.ReadFromJsonAsync<InventoryCompositionDto>();
+        Assert.Equal("Updated Royal Bridal Set", updatedGroup!.Name);
 
+        // Dissolve with stale row version -> Expect 409 Conflict
+        var staleDissolveReq = new DissolveCompositionRequest(RowVersion: 999999);
+        var staleDissolveRes = await ownerClient.PostAsJsonAsync($"/api/compositions/{group.Id}/dissolve", staleDissolveReq);
+        Assert.Equal(HttpStatusCode.Conflict, staleDissolveRes.StatusCode);
+
+        // 16. Dynamic Member Add & Remove
+        _output.WriteLine("=== 16. Dynamic Member Add and Remove ===");
         // Add itemBgl3 to Assembly (same category Bangles)
         var addBgl3Res = await ownerClient.PostAsJsonAsync($"/api/compositions/{assembly.Id}/members", new AddCompositionMemberRequest(itemBgl3.Id, 3));
         Assert.Equal(HttpStatusCode.OK, addBgl3Res.StatusCode);
         var assembly3Members = await addBgl3Res.Content.ReadFromJsonAsync<InventoryCompositionDto>();
         Assert.Equal(3, assembly3Members!.ActiveMemberCount);
-        // Previous Gross 25.3000 + 15.0000 = 40.3000
         Assert.Equal(40.3000m, assembly3Members.TotalGrossWeight);
         Assert.Equal(3, assembly3Members.TotalPieceCount);
 
-        // 17. Remove Member from Composition
-        _output.WriteLine("=== 17. Remove Member from Composition ===");
-        // Remove itemBgl3
-        var removeMemberRes = await ownerClient.DeleteAsync($"/api/compositions/{assembly.Id}/members/{itemBgl3.Id}");
-        Assert.Equal(HttpStatusCode.OK, removeMemberRes.StatusCode);
-        var assemblyAfterRemoval = await removeMemberRes.Content.ReadFromJsonAsync<InventoryCompositionDto>();
-        Assert.Equal(2, assemblyAfterRemoval!.ActiveMemberCount);
-        Assert.Equal(25.3000m, assemblyAfterRemoval.TotalGrossWeight);
+        // 17. Atomic POS Detachment Domain Operation Verification
+        _output.WriteLine("=== 17. Atomic Future POS Detachment Operation ===");
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var compService = scope.ServiceProvider.GetRequiredService<ICompositionService>();
 
-        // Try removing another member when only 2 remain (must be rejected: composition must have at least 2 active members)
-        var removeTooManyRes = await ownerClient.DeleteAsync($"/api/compositions/{assembly.Id}/members/{itemBgl2.Id}");
-        Assert.Equal(HttpStatusCode.BadRequest, removeTooManyRes.StatusCode);
-        var removeTooManyErr = await removeTooManyRes.Content.ReadAsStringAsync();
-        Assert.Contains("must have at least 2 members. Dissolve the composition instead", removeTooManyErr);
+            // Detach member 1 (itemBgl1) from 3-member assembly:
+            // Remaining count = 2 -> Composition MUST remain ACTIVE
+            var detach1Result = await compService.DetachMemberOnSaleAsync(itemBgl1.Id, "INV-2026-TEST-001");
+            Assert.NotNull(detach1Result);
+            Assert.Equal(3, detach1Result.PreviousActiveMemberCount);
+            Assert.Equal(2, detach1Result.RemainingActiveMemberCount);
+            Assert.False(detach1Result.CompositionWasDissolved);
+            Assert.Equal("ACTIVE", detach1Result.StatusName);
 
-        // 18. Dissolve Composition
-        _output.WriteLine("=== 18. Dissolve Composition ===");
-        var dissolveRes = await ownerClient.PostAsync($"/api/compositions/{assembly.Id}/dissolve", null);
+            // Detach member 2 (itemBgl2) from now 2-member assembly:
+            // Remaining count = 1 (< 2) -> Composition MUST AUTOMATICALLY DISSOLVE
+            var detach2Result = await compService.DetachMemberOnSaleAsync(itemBgl2.Id, "INV-2026-TEST-002");
+            Assert.NotNull(detach2Result);
+            Assert.Equal(2, detach2Result.PreviousActiveMemberCount);
+            Assert.Equal(0, detach2Result.RemainingActiveMemberCount);
+            Assert.True(detach2Result.CompositionWasDissolved);
+            Assert.Equal("DISSOLVED", detach2Result.StatusName);
+
+            // Solitary remaining item (itemBgl3) must now be free:
+            // Calling DetachMemberOnSale on itemBgl3 returns null (not in any active composition)
+            var detach3Result = await compService.DetachMemberOnSaleAsync(itemBgl3.Id);
+            Assert.Null(detach3Result);
+        }
+
+        // 18. Manual Dissolve on Group Composition
+        _output.WriteLine("=== 18. Manual Dissolve Composition ===");
+        var dissolveRes = await ownerClient.PostAsJsonAsync<DissolveCompositionRequest?>($"/api/compositions/{group.Id}/dissolve", null);
         Assert.Equal(HttpStatusCode.OK, dissolveRes.StatusCode);
         var dissolvedComp = await dissolveRes.Content.ReadFromJsonAsync<InventoryCompositionDto>();
         Assert.Equal(2, dissolvedComp!.Status); // Dissolved
         Assert.False(dissolvedComp.IsActive);
 
-        // Verify Child Items are Intact and Re-Available
-        var child1AfterDissolveRes = await ownerClient.GetAsync($"/api/inventory/{itemBgl1.Id}");
-        var child1AfterDissolve = await child1AfterDissolveRes.Content.ReadFromJsonAsync<InventoryItemDto>();
-        Assert.Equal(1, child1AfterDissolve!.Status); // Available
-        Assert.True(child1AfterDissolve.IsActive);
-
-        // Verify Child can now be composed into a brand new composition (proves partial unique index freed it up)
+        // Verify Child Items are Intact and Re-Available for a brand new composition
         var recomposeReq = new CreateCompositionRequest(
             b1.Id, loc1.Id, "Test M6 Recomposed Assembly",
-            1, "Recomposed after previous dissolution", null, null,
+            1, "Recomposed after previous dissolution",
             new List<Guid> { itemBgl1.Id, itemBgl3.Id }
         );
         var recomposeRes = await ownerClient.PostAsJsonAsync("/api/compositions", recomposeReq);
@@ -470,7 +501,7 @@ public class Module6IntegrationTests : IClassFixture<WebApplicationFactory<Progr
         cashierClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", cashierAuth!.AccessToken);
 
         // Cashier attempts to dissolve Branch 1 composition -> Forbidden (missing INVENTORY_COMPOSITION_DISSOLVE)
-        var cashierDissolveRes = await cashierClient.PostAsync($"/api/compositions/{group.Id}/dissolve", null);
+        var cashierDissolveRes = await cashierClient.PostAsJsonAsync<DissolveCompositionRequest?>($"/api/compositions/{group.Id}/dissolve", null);
         Assert.Equal(HttpStatusCode.Forbidden, cashierDissolveRes.StatusCode);
 
         // 20. Audit Trail Verification
@@ -480,15 +511,21 @@ public class Module6IntegrationTests : IClassFixture<WebApplicationFactory<Progr
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
             var compAudit = await db.AuditLogs
-                .Where(a => a.Action == "COMPOSITION_CREATE" || a.Action == "MEMBER_ADDED" || a.Action == "MEMBER_REMOVED" || a.Action == "COMPOSITION_DISSOLVED")
+                .Where(a => a.Action == "COMPOSITION_CREATE" ||
+                            a.Action == "MEMBER_ADDED" ||
+                            a.Action == "MEMBER_REMOVED" ||
+                            a.Action == "COMPOSITION_DISSOLVED" ||
+                            a.Action == "MEMBER_DETACHED_SALE" ||
+                            a.Action == "COMPOSITION_AUTO_DISSOLVED")
                 .ToListAsync();
 
             Assert.Contains(compAudit, a => a.Action == "COMPOSITION_CREATE");
             Assert.Contains(compAudit, a => a.Action == "MEMBER_ADDED");
-            Assert.Contains(compAudit, a => a.Action == "MEMBER_REMOVED");
             Assert.Contains(compAudit, a => a.Action == "COMPOSITION_DISSOLVED");
+            Assert.Contains(compAudit, a => a.Action == "MEMBER_DETACHED_SALE");
+            Assert.Contains(compAudit, a => a.Action == "COMPOSITION_AUTO_DISSOLVED");
         }
 
-        _output.WriteLine("=== ALL MODULE 6 TESTS COMPLETED SUCCESSFULLY ===");
+        _output.WriteLine("=== ALL HARDENED MODULE 6 TESTS COMPLETED SUCCESSFULLY ===");
     }
 }

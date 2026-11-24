@@ -849,6 +849,17 @@ function CompositionCreationContent() {
                   </table>
                 </div>
               </div>
+
+              {/* Automated Tag & Barcode Notification */}
+              <div className="bg-emerald-50 border border-emerald-200 p-3.5 rounded-xl flex items-start space-x-3 text-xs">
+                <span className="text-base">🔒</span>
+                <div>
+                  <h4 className="font-bold text-emerald-900">Automatic Namespace-Separated Identifiers</h4>
+                  <p className="text-emerald-700 mt-0.5">
+                    Parent Tag Number and Barcode are generated automatically by the backend with dedicated collision-free namespaces ({type === 1 ? 'ASM namespace for Assembly' : 'GRP namespace for Group'}). Manual override is disabled to protect historical identity integrity.
+                  </p>
+                </div>
+              </div>
             </div>
           )}
         </div>

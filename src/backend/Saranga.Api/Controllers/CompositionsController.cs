@@ -74,6 +74,17 @@ public class CompositionsController : ControllerBase
         return CreatedAtAction(nameof(GetCompositionById), new { id = result.Id }, result);
     }
 
+    [HttpPut("{id:guid}")]
+    [RequirePermission(Permissions.InventoryCompositionEdit, Permissions.InventoryEdit)]
+    public async Task<ActionResult<InventoryCompositionDto>> UpdateComposition(
+        Guid id,
+        [FromBody] UpdateCompositionRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _compositionService.UpdateCompositionAsync(id, request, cancellationToken);
+        return Ok(result);
+    }
+
     [HttpPost("{id:guid}/members")]
     [RequirePermission(Permissions.InventoryCompositionEdit, Permissions.InventoryEdit)]
     public async Task<ActionResult<InventoryCompositionDto>> AddMember(
@@ -100,9 +111,34 @@ public class CompositionsController : ControllerBase
     [RequirePermission(Permissions.InventoryCompositionDissolve, Permissions.InventoryEdit)]
     public async Task<ActionResult<InventoryCompositionDto>> DissolveComposition(
         Guid id,
+        [FromBody] DissolveCompositionRequest? request,
         CancellationToken cancellationToken)
     {
-        var result = await _compositionService.DissolveCompositionAsync(id, cancellationToken);
+        var result = await _compositionService.DissolveCompositionAsync(id, request?.RowVersion, cancellationToken);
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Atomic POS domain operation: detached member when individually sold.
+    /// If remaining active members falls below 2, automatically dissolves composition.
+    /// </summary>
+    [HttpPost("internal/detach-member-on-sale")]
+    [RequirePermission(Permissions.InventoryEdit, Permissions.InventoryCompositionEdit)]
+    public async Task<ActionResult<MemberDetachmentResultDto>> DetachMemberOnSale(
+        [FromBody] DetachMemberOnSaleRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _compositionService.DetachMemberOnSaleAsync(
+            request.InventoryItemId,
+            request.SaleInvoiceNumber,
+            null,
+            cancellationToken);
+
+        if (result == null)
+        {
+            return NotFound(new { message = "Item is not an active member of any composition." });
+        }
+
         return Ok(result);
     }
 }

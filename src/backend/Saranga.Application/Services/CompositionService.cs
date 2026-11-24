@@ -19,9 +19,11 @@ public interface ICompositionService
     Task<InventoryCompositionDto> LookupByBarcodeAsync(string barcode, CancellationToken cancellationToken = default);
     Task<List<EligibleChildItemDto>> GetEligibleChildrenAsync(EligibleChildQueryParams queryParams, CancellationToken cancellationToken = default);
     Task<InventoryCompositionDto> CreateCompositionAsync(CreateCompositionRequest request, CancellationToken cancellationToken = default);
+    Task<InventoryCompositionDto> UpdateCompositionAsync(Guid id, UpdateCompositionRequest request, CancellationToken cancellationToken = default);
     Task<InventoryCompositionDto> AddMemberAsync(Guid compositionId, AddCompositionMemberRequest request, CancellationToken cancellationToken = default);
     Task<InventoryCompositionDto> RemoveMemberAsync(Guid compositionId, Guid inventoryItemId, CancellationToken cancellationToken = default);
-    Task<InventoryCompositionDto> DissolveCompositionAsync(Guid compositionId, CancellationToken cancellationToken = default);
+    Task<InventoryCompositionDto> DissolveCompositionAsync(Guid compositionId, uint? rowVersion = null, CancellationToken cancellationToken = default);
+    Task<MemberDetachmentResultDto?> DetachMemberOnSaleAsync(Guid inventoryItemId, string? saleInvoiceNumber = null, Guid? soldByUserId = null, CancellationToken cancellationToken = default);
 }
 
 public class CompositionService : ICompositionService
@@ -52,7 +54,6 @@ public class CompositionService : ICompositionService
     public async Task<PagedResult<InventoryCompositionDto>> GetCompositionsAsync(CompositionQueryParams queryParams, CancellationToken cancellationToken = default)
     {
         var query = _context.InventoryCompositions
-            .AsNoTracking()
             .Include(c => c.Branch)
             .Include(c => c.StockLocation)
             .Include(c => c.Members)
@@ -64,9 +65,18 @@ public class CompositionService : ICompositionService
             .Include(c => c.Members)
                 .ThenInclude(m => m.InventoryItem)
                     .ThenInclude(i => i!.Purity)
+            .AsNoTracking()
             .AsQueryable();
 
-        if (!_currentUserService.IsGlobalAdmin)
+        // Branch Isolation / Filtering
+        if (_currentUserService.IsGlobalAdmin)
+        {
+            if (queryParams.BranchId.HasValue && queryParams.BranchId != Guid.Empty)
+            {
+                query = query.Where(c => c.BranchId == queryParams.BranchId.Value);
+            }
+        }
+        else
         {
             var targetBranchId = queryParams.BranchId ?? _currentUserService.BranchId;
             if (targetBranchId.HasValue && targetBranchId != Guid.Empty)
@@ -79,10 +89,6 @@ public class CompositionService : ICompositionService
                 var accessible = _currentUserService.AccessibleBranchIds;
                 query = query.Where(c => accessible.Contains(c.BranchId));
             }
-        }
-        else if (queryParams.BranchId.HasValue)
-        {
-            query = query.Where(c => c.BranchId == queryParams.BranchId.Value);
         }
 
         if (queryParams.StockLocationId.HasValue)
@@ -129,7 +135,6 @@ public class CompositionService : ICompositionService
     public async Task<InventoryCompositionDto> GetCompositionByIdAsync(Guid id, CancellationToken cancellationToken = default)
     {
         var composition = await _context.InventoryCompositions
-            .AsNoTracking()
             .Include(c => c.Branch)
             .Include(c => c.StockLocation)
             .Include(c => c.Members)
@@ -141,6 +146,7 @@ public class CompositionService : ICompositionService
             .Include(c => c.Members)
                 .ThenInclude(m => m.InventoryItem)
                     .ThenInclude(i => i!.Purity)
+            .AsNoTracking()
             .FirstOrDefaultAsync(c => c.Id == id, cancellationToken);
 
         if (composition == null)
@@ -149,7 +155,6 @@ public class CompositionService : ICompositionService
         }
 
         await _branchAuthService.EnsureBranchAccessAsync(composition.BranchId, cancellationToken);
-
         return MapToDto(composition);
     }
 
@@ -161,9 +166,7 @@ public class CompositionService : ICompositionService
         }
 
         var normalized = tagNumber.Trim().ToUpperInvariant();
-
         var composition = await _context.InventoryCompositions
-            .AsNoTracking()
             .Include(c => c.Branch)
             .Include(c => c.StockLocation)
             .Include(c => c.Members)
@@ -175,15 +178,15 @@ public class CompositionService : ICompositionService
             .Include(c => c.Members)
                 .ThenInclude(m => m.InventoryItem)
                     .ThenInclude(i => i!.Purity)
+            .AsNoTracking()
             .FirstOrDefaultAsync(c => c.TagNumber.ToUpper() == normalized, cancellationToken);
 
         if (composition == null)
         {
-            throw new NotFoundException($"Composition with tag number '{tagNumber}' not found.");
+            throw new NotFoundException($"Composition with tag '{tagNumber}' was not found.");
         }
 
         await _branchAuthService.EnsureBranchAccessAsync(composition.BranchId, cancellationToken);
-
         return MapToDto(composition);
     }
 
@@ -195,9 +198,7 @@ public class CompositionService : ICompositionService
         }
 
         var normalized = barcode.Trim().ToUpperInvariant();
-
         var composition = await _context.InventoryCompositions
-            .AsNoTracking()
             .Include(c => c.Branch)
             .Include(c => c.StockLocation)
             .Include(c => c.Members)
@@ -209,15 +210,15 @@ public class CompositionService : ICompositionService
             .Include(c => c.Members)
                 .ThenInclude(m => m.InventoryItem)
                     .ThenInclude(i => i!.Purity)
+            .AsNoTracking()
             .FirstOrDefaultAsync(c => c.Barcode.ToUpper() == normalized, cancellationToken);
 
         if (composition == null)
         {
-            throw new NotFoundException($"Composition with barcode '{barcode}' not found.");
+            throw new NotFoundException($"Composition with barcode '{barcode}' was not found.");
         }
 
         await _branchAuthService.EnsureBranchAccessAsync(composition.BranchId, cancellationToken);
-
         return MapToDto(composition);
     }
 
@@ -247,11 +248,11 @@ public class CompositionService : ICompositionService
         if (!string.IsNullOrWhiteSpace(queryParams.SearchTerm))
         {
             var term = queryParams.SearchTerm.Trim().ToLower();
-            query = query.Where(i =>
-                i.Name.ToLower().Contains(term) ||
-                i.TagNumber.ToLower().Contains(term) ||
-                i.Barcode.ToLower().Contains(term) ||
-                i.ItemCode.ToLower().Contains(term)
+            query = query.Where(c =>
+                c.Name.ToLower().Contains(term) ||
+                c.TagNumber.ToLower().Contains(term) ||
+                c.Barcode.ToLower().Contains(term) ||
+                c.ItemCode.ToLower().Contains(term)
             );
         }
 
@@ -332,43 +333,13 @@ public class CompositionService : ICompositionService
             throw new BusinessRuleException($"Stock location '{location.Name}' is inactive.");
         }
 
-        // 3. Generate Tag and Barcode
-        string typeCode = compositionType == CompositionType.Assembly ? "ASM" : "GRP";
-        string tagNumber;
-        string barcode;
-
-        if (string.IsNullOrWhiteSpace(request.TagNumber) || string.IsNullOrWhiteSpace(request.Barcode))
-        {
-            var generated = await _tagGeneratorService.GenerateTagAndBarcodeAsync(branch.Code, typeCode, cancellationToken);
-            tagNumber = string.IsNullOrWhiteSpace(request.TagNumber) ? generated.TagNumber : request.TagNumber.Trim().ToUpperInvariant();
-            barcode = string.IsNullOrWhiteSpace(request.Barcode) ? generated.Barcode : request.Barcode.Trim().ToUpperInvariant();
-        }
-        else
-        {
-            tagNumber = request.TagNumber.Trim().ToUpperInvariant();
-            barcode = request.Barcode.Trim().ToUpperInvariant();
-        }
-
-        // Check Tag uniqueness across compositions and inventory
-        var tagInCompositions = await _context.InventoryCompositions.AnyAsync(c => c.TagNumber.ToUpper() == tagNumber, cancellationToken);
-        var tagInInventory = await _context.InventoryItems.AnyAsync(i => i.TagNumber.ToUpper() == tagNumber, cancellationToken);
-        if (tagInCompositions || tagInInventory)
-        {
-            throw new BusinessRuleException($"Tag number '{tagNumber}' is already in use.");
-        }
-
-        // Check Barcode uniqueness across compositions and inventory
-        var barcodeInCompositions = await _context.InventoryCompositions.AnyAsync(c => c.Barcode.ToUpper() == barcode, cancellationToken);
-        var barcodeInInventory = await _context.InventoryItems.AnyAsync(i => i.Barcode.ToUpper() == barcode, cancellationToken);
-        if (barcodeInCompositions || barcodeInInventory)
-        {
-            throw new BusinessRuleException($"Barcode '{barcode}' is already in use.");
-        }
+        // 3. Automated Namespace-Separated Tag and Barcode Generation (No Manual Override Allowed)
+        var (tagNumber, barcode) = await _tagGeneratorService.GenerateCompositionTagAndBarcodeAsync(branch.Code, compositionType, cancellationToken);
 
         await using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
         try
         {
-            // 4. Validate Child Items with Pessimistic Locking
+            // 4. Validate Child Items
             var children = await _context.InventoryItems
                 .Include(i => i.Category)
                 .Where(i => distinctChildIds.Contains(i.Id))
@@ -453,15 +424,15 @@ public class CompositionService : ICompositionService
 
             _context.InventoryCompositions.Add(composition);
 
-            // 8. Create Composition Members
-            var sortOrder = 0;
-            foreach (var childId in distinctChildIds)
+            // 8. Add Members with explicit Added state to avoid EF Core navigation tracking anomalies
+            for (int i = 0; i < children.Count; i++)
             {
+                var child = children[i];
                 var member = new InventoryCompositionMember
                 {
                     CompositionId = composition.Id,
-                    InventoryItemId = childId,
-                    SortOrder = sortOrder++,
+                    InventoryItemId = child.Id,
+                    SortOrder = i + 1,
                     IsActive = true,
                     AddedAt = DateTimeOffset.UtcNow,
                     AddedBy = _currentUserService.UserId,
@@ -471,17 +442,17 @@ public class CompositionService : ICompositionService
                 _context.InventoryCompositionMembers.Add(member);
             }
 
+            // 9. Audit Logging
             RecordAudit("InventoryComposition", composition.Id, "COMPOSITION_CREATE", null, new
             {
                 composition.BranchId,
                 composition.StockLocationId,
                 composition.Name,
-                Type = composition.Type.ToString(),
+                composition.Type,
                 composition.TagNumber,
                 composition.Barcode,
-                Status = composition.Status.ToString(),
-                MemberCount = distinctChildIds.Count,
-                MemberTags = children.Select(c => c.TagNumber).ToList()
+                ChildCount = children.Count,
+                ChildIds = distinctChildIds
             }, composition.BranchId);
 
             await _context.SaveChangesAsync(cancellationToken);
@@ -493,18 +464,9 @@ public class CompositionService : ICompositionService
         {
             await transaction.RollbackAsync(cancellationToken);
             var msg = ex.InnerException?.Message ?? ex.Message;
-            if (msg.Contains("IX_InventoryCompositionMembers_InventoryItemId", StringComparison.OrdinalIgnoreCase) ||
-                msg.Contains("23505", StringComparison.OrdinalIgnoreCase))
+            if (msg.Contains("IX_InventoryCompositionMembers_InventoryItemId") || msg.Contains("23505"))
             {
-                throw new BusinessRuleException("One or more child items are already assigned to another active composition. Please refresh and try again.");
-            }
-            if (msg.Contains("TagNumber", StringComparison.OrdinalIgnoreCase))
-            {
-                throw new BusinessRuleException($"Tag number '{tagNumber}' is already in use.");
-            }
-            if (msg.Contains("Barcode", StringComparison.OrdinalIgnoreCase))
-            {
-                throw new BusinessRuleException($"Barcode '{barcode}' is already in use.");
+                throw new BusinessRuleException("One or more selected child items are already part of another active composition. Please refresh available stock.");
             }
             throw;
         }
@@ -513,6 +475,42 @@ public class CompositionService : ICompositionService
             await transaction.RollbackAsync(cancellationToken);
             throw;
         }
+    }
+
+    public async Task<InventoryCompositionDto> UpdateCompositionAsync(Guid id, UpdateCompositionRequest request, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(request.Name))
+        {
+            throw new BusinessRuleException("Composition name cannot be empty.");
+        }
+
+        var composition = await _context.InventoryCompositions
+            .FirstOrDefaultAsync(c => c.Id == id, cancellationToken);
+
+        if (composition == null)
+        {
+            throw new NotFoundException("InventoryComposition", id);
+        }
+
+        await _branchAuthService.EnsureBranchAccessAsync(composition.BranchId, cancellationToken);
+
+        // Optimistic concurrency check: if client supplied RowVersion, enforce it against original loaded value
+        if (request.RowVersion.HasValue && request.RowVersion.Value > 0)
+        {
+            _context.Entry(composition).Property(c => c.Version).OriginalValue = request.RowVersion.Value;
+        }
+
+        var oldValues = new { composition.Name, composition.Description };
+
+        composition.Name = request.Name.Trim();
+        composition.Description = request.Description?.Trim() ?? string.Empty;
+        composition.UpdatedAt = DateTimeOffset.UtcNow;
+        composition.UpdatedBy = _currentUserService.UserId;
+
+        RecordAudit("InventoryComposition", composition.Id, "UPDATE", oldValues, new { composition.Name, composition.Description }, composition.BranchId);
+
+        await _context.SaveChangesAsync(cancellationToken);
+        return await GetCompositionByIdAsync(composition.Id, cancellationToken);
     }
 
     public async Task<InventoryCompositionDto> AddMemberAsync(Guid compositionId, AddCompositionMemberRequest request, CancellationToken cancellationToken = default)
@@ -598,6 +596,10 @@ public class CompositionService : ICompositionService
 
         _context.InventoryCompositionMembers.Add(member);
 
+        // Touch parent composition update time to advance rowversion
+        composition.UpdatedAt = DateTimeOffset.UtcNow;
+        composition.UpdatedBy = _currentUserService.UserId;
+
         RecordAudit("InventoryComposition", composition.Id, "MEMBER_ADDED", null, new
         {
             MemberId = member.Id,
@@ -613,10 +615,9 @@ public class CompositionService : ICompositionService
         catch (DbUpdateException ex)
         {
             var msg = ex.InnerException?.Message ?? ex.Message;
-            if (msg.Contains("IX_InventoryCompositionMembers_InventoryItemId", StringComparison.OrdinalIgnoreCase) ||
-                msg.Contains("23505", StringComparison.OrdinalIgnoreCase))
+            if (msg.Contains("IX_InventoryCompositionMembers_InventoryItemId") || msg.Contains("23505"))
             {
-                throw new BusinessRuleException($"Child item '{child.TagNumber}' is already assigned to another active composition.");
+                throw new BusinessRuleException($"Child item '{child.TagNumber}' is already part of another active composition.");
             }
             throw;
         }
@@ -662,6 +663,10 @@ public class CompositionService : ICompositionService
         member.UpdatedAt = DateTimeOffset.UtcNow;
         member.UpdatedBy = _currentUserService.UserId;
 
+        // Touch parent composition update time to advance rowversion
+        composition.UpdatedAt = DateTimeOffset.UtcNow;
+        composition.UpdatedBy = _currentUserService.UserId;
+
         RecordAudit("InventoryComposition", composition.Id, "MEMBER_REMOVED", new
         {
             MemberId = member.Id,
@@ -670,11 +675,10 @@ public class CompositionService : ICompositionService
         }, null, composition.BranchId);
 
         await _context.SaveChangesAsync(cancellationToken);
-
         return await GetCompositionByIdAsync(composition.Id, cancellationToken);
     }
 
-    public async Task<InventoryCompositionDto> DissolveCompositionAsync(Guid compositionId, CancellationToken cancellationToken = default)
+    public async Task<InventoryCompositionDto> DissolveCompositionAsync(Guid compositionId, uint? rowVersion = null, CancellationToken cancellationToken = default)
     {
         var composition = await _context.InventoryCompositions
             .Include(c => c.Members)
@@ -691,6 +695,12 @@ public class CompositionService : ICompositionService
         if (composition.Status == CompositionStatus.Dissolved)
         {
             throw new BusinessRuleException("Composition is already dissolved.");
+        }
+
+        // Optimistic concurrency check
+        if (rowVersion.HasValue && rowVersion.Value > 0)
+        {
+            _context.Entry(composition).Property(c => c.Version).OriginalValue = rowVersion.Value;
         }
 
         var now = DateTimeOffset.UtcNow;
@@ -713,13 +723,129 @@ public class CompositionService : ICompositionService
         }
 
         RecordAudit("InventoryComposition", composition.Id, "COMPOSITION_DISSOLVED",
-            new { Status = "Active", ActiveMembers = activeMembers.Count },
-            new { Status = "Dissolved" },
+            new { ActiveMembersAtDissolution = activeMembers.Count },
+            new { composition.Status, composition.IsActive },
             composition.BranchId);
 
         await _context.SaveChangesAsync(cancellationToken);
-
         return await GetCompositionByIdAsync(composition.Id, cancellationToken);
+    }
+
+    public async Task<MemberDetachmentResultDto?> DetachMemberOnSaleAsync(
+        Guid inventoryItemId,
+        string? saleInvoiceNumber = null,
+        Guid? soldByUserId = null,
+        CancellationToken cancellationToken = default)
+    {
+        // 1. Locate active membership
+        var membership = await _context.InventoryCompositionMembers
+            .Include(m => m.InventoryItem)
+            .Include(m => m.Composition)
+                .ThenInclude(c => c!.Members)
+                    .ThenInclude(m => m.InventoryItem)
+            .FirstOrDefaultAsync(m => m.InventoryItemId == inventoryItemId && m.IsActive, cancellationToken);
+
+        if (membership == null || membership.Composition == null)
+        {
+            // Item was not part of an active composition, POS sale can proceed as single item
+            return null;
+        }
+
+        var composition = membership.Composition;
+        var userId = soldByUserId ?? _currentUserService.UserId;
+
+        await using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
+        try
+        {
+            var activeMembersBefore = composition.Members.Where(m => m.IsActive).ToList();
+            int previousCount = activeMembersBefore.Count;
+
+            // 2. Deactivate the detached member
+            membership.IsActive = false;
+            membership.RemovedAt = DateTimeOffset.UtcNow;
+            membership.RemovedBy = userId;
+            membership.UpdatedAt = DateTimeOffset.UtcNow;
+            membership.UpdatedBy = userId;
+
+            // Remaining active members excluding the detached item
+            var remainingActive = activeMembersBefore.Where(m => m.Id != membership.Id).ToList();
+            int remainingCount = remainingActive.Count;
+            bool dissolved = false;
+
+            // Touch parent composition update time to update concurrency token
+            composition.UpdatedAt = DateTimeOffset.UtcNow;
+            composition.UpdatedBy = userId;
+
+            // 3. If fewer than 2 remain, automatically dissolve
+            if (remainingCount < 2)
+            {
+                composition.Status = CompositionStatus.Dissolved;
+                composition.IsActive = false;
+                dissolved = true;
+
+                // Deactivate any remaining solitary member so it is freed for independent operations
+                foreach (var solitary in remainingActive)
+                {
+                    solitary.IsActive = false;
+                    solitary.RemovedAt = DateTimeOffset.UtcNow;
+                    solitary.RemovedBy = userId;
+                    solitary.UpdatedAt = DateTimeOffset.UtcNow;
+                    solitary.UpdatedBy = userId;
+                }
+
+                RecordAudit("InventoryComposition", composition.Id, "COMPOSITION_AUTO_DISSOLVED",
+                    new { PreviousMemberCount = previousCount },
+                    new { RemainingMemberCount = remainingCount, TriggeredByItem = membership.InventoryItem?.TagNumber, SaleInvoiceNumber = saleInvoiceNumber },
+                    composition.BranchId);
+            }
+
+            RecordAudit("InventoryComposition", composition.Id, "MEMBER_DETACHED_SALE",
+                new { MemberId = membership.Id, membership.InventoryItemId, membership.InventoryItem?.TagNumber },
+                new { SaleInvoiceNumber = saleInvoiceNumber, RemainingMemberCount = remainingCount, CompositionStatus = composition.Status.ToString() },
+                composition.BranchId);
+
+            await _context.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+
+            // 4. Calculate updated totals for remaining active members
+            decimal newGross = 0;
+            decimal newStone = 0;
+            int newPieces = 0;
+
+            if (!dissolved)
+            {
+                foreach (var rm in remainingActive)
+                {
+                    if (rm.InventoryItem != null)
+                    {
+                        newGross += rm.InventoryItem.GrossWeight;
+                        newStone += rm.InventoryItem.StoneWeight;
+                        newPieces += rm.InventoryItem.PieceCount;
+                    }
+                }
+            }
+
+            return new MemberDetachmentResultDto(
+                inventoryItemId,
+                membership.InventoryItem?.TagNumber ?? string.Empty,
+                composition.Id,
+                composition.TagNumber,
+                previousCount,
+                dissolved ? 0 : remainingCount,
+                dissolved,
+                (int)composition.Status,
+                composition.Status.ToString().ToUpperInvariant(),
+                newGross,
+                newStone,
+                newGross - newStone,
+                newPieces
+            );
+        }
+        catch
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            throw;
+        }
     }
 
     private void RecordAudit(string entityName, Guid entityId, string action, object? oldValues, object? newValues, Guid? branchId = null)

@@ -94,6 +94,10 @@ public class AttributesService : IAttributesService
         if (string.IsNullOrWhiteSpace(request.Code)) throw new BusinessRuleException("Material code cannot be empty.");
 
         var normalizedCode = request.Code.Trim().ToUpperInvariant();
+        if (normalizedCode is "ASM" or "GRP")
+        {
+            throw new BusinessRuleException($"Code '{normalizedCode}' is reserved for inventory compositions and cannot be assigned to a material.");
+        }
         var exists = await _context.Materials.AnyAsync(m => m.Code.ToUpper() == normalizedCode, cancellationToken);
         if (exists) throw new BusinessRuleException($"A material with code '{request.Code}' already exists.");
 
@@ -180,6 +184,10 @@ public class AttributesService : IAttributesService
         if (string.IsNullOrWhiteSpace(request.Code)) throw new BusinessRuleException("Category code cannot be empty.");
 
         var normalizedCode = request.Code.Trim().ToUpperInvariant();
+        if (normalizedCode is "ASM" or "GRP")
+        {
+            throw new BusinessRuleException($"Code '{normalizedCode}' is reserved for inventory compositions and cannot be assigned to a category.");
+        }
         var exists = await _context.Categories.AnyAsync(c => c.Code.ToUpper() == normalizedCode, cancellationToken);
         if (exists) throw new BusinessRuleException($"A category with code '{request.Code}' already exists.");
 
