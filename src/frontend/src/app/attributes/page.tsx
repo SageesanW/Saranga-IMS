@@ -76,7 +76,7 @@ export default function AttributesPage() {
 
   // Stock Location specific form fields
   const [formBranchId, setFormBranchId] = useState('');
-  const [formLocationType, setFormLocationType] = useState('Display');
+  const [formLocationType, setFormLocationType] = useState('DISPLAY');
 
   // Auto-select branch for locations
   useEffect(() => {
@@ -135,7 +135,7 @@ export default function AttributesPage() {
     setFormIsActive(true);
     setFormKaratValue('22.0');
     setFormPurityPercentage('91.67');
-    setFormLocationType('Display');
+    setFormLocationType('DISPLAY');
     setFormBranchId(selectedBranchId || activeBranchId || (branches[0]?.id ?? ''));
     setError(null);
     setIsModalOpen(true);
@@ -154,7 +154,7 @@ export default function AttributesPage() {
       setFormPurityPercentage(String(item.purityPercentage));
     }
     if (activeTab === 'locations') {
-      setFormLocationType(item.locationType || 'Display');
+      setFormLocationType(item.locationType || 'DISPLAY');
       setFormBranchId(item.branchId);
     }
     setError(null);
@@ -835,7 +835,17 @@ export default function AttributesPage() {
                         </td>
                         <td className="px-4 py-3">
                           <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-700 font-medium border border-blue-200 text-[10px]">
-                            {l.locationType}
+                            {l.locationType === 'DISPLAY'
+                              ? 'Display Showcase'
+                              : l.locationType === 'VAULT'
+                              ? 'Vault / Safe'
+                              : l.locationType === 'WORKSHOP'
+                              ? 'Workshop / Repair'
+                              : l.locationType === 'TRANSIT'
+                              ? 'In Transit'
+                              : l.locationType === 'STORAGE'
+                              ? 'Backroom Storage'
+                              : l.locationType}
                           </span>
                         </td>
                         <td className="px-4 py-3 text-gray-500">{l.description || '—'}</td>
@@ -1040,10 +1050,11 @@ export default function AttributesPage() {
                       onChange={(e) => setFormLocationType(e.target.value)}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-1 focus:ring-[#0D3826]"
                     >
-                      <option value="Display">Display Showcase</option>
-                      <option value="Vault">Vault / Safe</option>
-                      <option value="Workshop">Workshop / Repair</option>
-                      <option value="Transit">In Transit</option>
+                      <option value="DISPLAY">Display Showcase (Default)</option>
+                      <option value="VAULT">Vault / Safe</option>
+                      <option value="WORKSHOP">Workshop / Repair</option>
+                      <option value="TRANSIT">In Transit</option>
+                      <option value="STORAGE">Backroom Storage</option>
                     </select>
                   </div>
                 )}

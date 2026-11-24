@@ -86,16 +86,16 @@ public class Module3IntegrationTests : IClassFixture<WebApplicationFactory<Progr
         // =========================================================================
         _output.WriteLine("=== PART 1: Materials Master ===");
 
-        // Create Material
-        var matReq = new CreateMaterialRequest("Yellow Gold 22K Raw", "TEST_GOLD_RAW", "Standard raw jewellery gold", true, 1);
+        // Create Material (with lowercase code to verify normalization to uppercase)
+        var matReq = new CreateMaterialRequest("Yellow Gold 22K Raw", "test_gold_raw", "Standard raw jewellery gold", true, 1);
         var createMatRes = await ownerClient.PostAsJsonAsync("/api/materials", matReq);
         Assert.Equal(HttpStatusCode.Created, createMatRes.StatusCode);
         var createdMat = await createMatRes.Content.ReadFromJsonAsync<MaterialDto>();
         Assert.NotNull(createdMat);
-        Assert.Equal("TEST_GOLD_RAW", createdMat.Code);
+        Assert.Equal("TEST_GOLD_RAW", createdMat.Code); // Normalized to uppercase
 
-        // Duplicate Code Rejection
-        var dupMatRes = await ownerClient.PostAsJsonAsync("/api/materials", matReq);
+        // Case-Insensitive Duplicate Code Rejection (e.g. Test_Gold_Raw)
+        var dupMatRes = await ownerClient.PostAsJsonAsync("/api/materials", new CreateMaterialRequest("Yellow Gold Duplicate", "Test_Gold_Raw", "Duplicate", true, 1));
         Assert.Equal(HttpStatusCode.BadRequest, dupMatRes.StatusCode);
 
         // Update Material
@@ -215,9 +215,15 @@ public class Module3IntegrationTests : IClassFixture<WebApplicationFactory<Progr
         Assert.Equal(HttpStatusCode.Created, createLoc1Res.StatusCode);
         var createdLoc1 = await createLoc1Res.Content.ReadFromJsonAsync<StockLocationDto>();
         Assert.NotNull(createdLoc1);
+        Assert.Equal("DISPLAY", createdLoc1.LocationType); // Controlled stable uppercase value
 
-        // Duplicate code in same branch rejected
-        var dupLocRes = await ownerClient.PostAsJsonAsync("/api/stock-locations", locReq1);
+        // Uncontrolled/invalid location type rejection
+        var badTypeRes = await ownerClient.PostAsJsonAsync("/api/stock-locations", new CreateStockLocationRequest(b1.Id, "Invalid Type Loc", "TEST_BAD_TYPE", "unrestricted_random_string", "Desc"));
+        Assert.Equal(HttpStatusCode.BadRequest, badTypeRes.StatusCode);
+        _output.WriteLine("Verified: Unrestricted location type strings rejected.");
+
+        // Duplicate code in same branch rejected (case-insensitive)
+        var dupLocRes = await ownerClient.PostAsJsonAsync("/api/stock-locations", new CreateStockLocationRequest(b1.Id, "Duplicate Display", "test_disp_01", "DISPLAY", "Duplicate Desc"));
         Assert.Equal(HttpStatusCode.BadRequest, dupLocRes.StatusCode);
 
         // Same code in Branch 2 is allowed (branch-specific scope)

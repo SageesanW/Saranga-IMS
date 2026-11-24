@@ -5,6 +5,7 @@ using Saranga.Application.Common.Interfaces;
 using Saranga.Application.DTOs.Attributes;
 using Saranga.Domain.Entities;
 using Saranga.Domain.Enums;
+using Saranga.Domain.Constants;
 
 namespace Saranga.Application.Services;
 
@@ -629,12 +630,22 @@ public class AttributesService : IAttributesService
             throw new BusinessRuleException($"A stock location with code '{request.Code}' already exists for branch '{branch.Code}'.");
         }
 
+        string locationType;
+        try
+        {
+            locationType = StockLocationTypes.Normalize(request.LocationType);
+        }
+        catch (ArgumentException ex)
+        {
+            throw new BusinessRuleException(ex.Message);
+        }
+
         var location = new StockLocation
         {
             BranchId = request.BranchId,
             Name = request.Name.Trim(),
             Code = normalizedCode,
-            LocationType = string.IsNullOrWhiteSpace(request.LocationType) ? "Display" : request.LocationType.Trim(),
+            LocationType = locationType,
             Description = request.Description?.Trim() ?? string.Empty,
             IsActive = request.IsActive,
             SortOrder = request.SortOrder,
@@ -671,10 +682,20 @@ public class AttributesService : IAttributesService
         // Branch boundary check
         await _branchAuthService.EnsureBranchAccessAsync(l.BranchId, cancellationToken);
 
+        string locationType;
+        try
+        {
+            locationType = StockLocationTypes.Normalize(request.LocationType);
+        }
+        catch (ArgumentException ex)
+        {
+            throw new BusinessRuleException(ex.Message);
+        }
+
         var oldValues = new { l.Name, l.LocationType, l.Description, l.IsActive, l.SortOrder };
 
         l.Name = request.Name.Trim();
-        l.LocationType = string.IsNullOrWhiteSpace(request.LocationType) ? "Display" : request.LocationType.Trim();
+        l.LocationType = locationType;
         l.Description = request.Description?.Trim() ?? string.Empty;
         l.IsActive = request.IsActive;
         l.SortOrder = request.SortOrder;
