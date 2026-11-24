@@ -16,13 +16,11 @@ namespace Saranga.Application.Services;
 
 public class BulkImportService : IBulkImportService
 {
-    private const int MaxAllowedRows = 1000;
-    private const long MaxFileSizeBytes = 5 * 1024 * 1024; // 5 MB
-
     private readonly IAppDbContext _context;
     private readonly ICurrentUserService _currentUserService;
     private readonly IBranchAuthorizationService _branchAuthService;
     private readonly ITagGeneratorService _tagGeneratorService;
+    private readonly IInventoryValidationService _inventoryValidationService;
     private readonly ILogger<BulkImportService> _logger;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -36,12 +34,14 @@ public class BulkImportService : IBulkImportService
         ICurrentUserService currentUserService,
         IBranchAuthorizationService branchAuthService,
         ITagGeneratorService tagGeneratorService,
+        IInventoryValidationService inventoryValidationService,
         ILogger<BulkImportService> logger)
     {
         _context = context;
         _currentUserService = currentUserService;
         _branchAuthService = branchAuthService;
         _tagGeneratorService = tagGeneratorService;
+        _inventoryValidationService = inventoryValidationService;
         _logger = logger;
     }
 
@@ -159,9 +159,9 @@ public class BulkImportService : IBulkImportService
             throw new BusinessRuleException("The uploaded file is empty.");
         }
 
-        if (stream.Length > MaxFileSizeBytes)
+        if (stream.Length > BulkImportConstants.MaxFileSizeBytes)
         {
-            throw new BusinessRuleException($"File size exceeds maximum permitted limit of {MaxFileSizeBytes / (1024 * 1024)} MB.");
+            throw new BusinessRuleException($"File size exceeds maximum permitted limit of {BulkImportConstants.MaxFileSizeMb} MB.");
         }
 
         // Branch verification
@@ -196,9 +196,9 @@ public class BulkImportService : IBulkImportService
             throw new BusinessRuleException("The uploaded file contains no data rows.");
         }
 
-        if (rawRows.Count > MaxAllowedRows)
+        if (rawRows.Count > BulkImportConstants.MaxAllowedRows)
         {
-            throw new BusinessRuleException($"File contains {rawRows.Count} rows, which exceeds the maximum allowed limit of {MaxAllowedRows} rows per import batch.");
+            throw new BusinessRuleException($"File contains {rawRows.Count} rows, which exceeds the maximum allowed limit of {BulkImportConstants.MaxAllowedRows} rows per import batch.");
         }
 
         // Efficient batch resolution: Load all branch stock locations, materials, categories, purities into lookup dictionaries
@@ -239,11 +239,11 @@ public class BulkImportService : IBulkImportService
             var errors = new List<string>();
 
             // 1. Item Name
-            if (string.IsNullOrWhiteSpace(raw.ItemName))
+            var nameErr = _inventoryValidationService.ValidateItemName(raw.ItemName);
+            if (nameErr != null)
             {
-                var err = "Item Name is required.";
-                errors.Add(err);
-                globalErrors.Add(new BulkImportErrorDto(rowNumber, "ItemName", err));
+                errors.Add(nameErr);
+                globalErrors.Add(new BulkImportErrorDto(rowNumber, "ItemName", nameErr));
             }
 
             // 2. Material Code
@@ -263,15 +263,18 @@ public class BulkImportService : IBulkImportService
                     errors.Add(err);
                     globalErrors.Add(new BulkImportErrorDto(rowNumber, "MaterialCode", err));
                 }
-                else if (!mat.IsActive)
-                {
-                    var err = $"Material \"{mat.Name}\" ({norm}) is inactive.";
-                    errors.Add(err);
-                    globalErrors.Add(new BulkImportErrorDto(rowNumber, "MaterialCode", err));
-                }
                 else
                 {
-                    materialId = mat.Id;
+                    var activeErr = _inventoryValidationService.ValidateEntityActive("Material", $"\"{mat.Name}\" ({norm})", mat.IsActive);
+                    if (activeErr != null)
+                    {
+                        errors.Add(activeErr);
+                        globalErrors.Add(new BulkImportErrorDto(rowNumber, "MaterialCode", activeErr));
+                    }
+                    else
+                    {
+                        materialId = mat.Id;
+                    }
                 }
             }
 
@@ -292,15 +295,18 @@ public class BulkImportService : IBulkImportService
                     errors.Add(err);
                     globalErrors.Add(new BulkImportErrorDto(rowNumber, "CategoryCode", err));
                 }
-                else if (!cat.IsActive)
-                {
-                    var err = $"Category \"{cat.Name}\" ({norm}) is inactive.";
-                    errors.Add(err);
-                    globalErrors.Add(new BulkImportErrorDto(rowNumber, "CategoryCode", err));
-                }
                 else
                 {
-                    categoryId = cat.Id;
+                    var activeErr = _inventoryValidationService.ValidateEntityActive("Category", $"\"{cat.Name}\" ({norm})", cat.IsActive);
+                    if (activeErr != null)
+                    {
+                        errors.Add(activeErr);
+                        globalErrors.Add(new BulkImportErrorDto(rowNumber, "CategoryCode", activeErr));
+                    }
+                    else
+                    {
+                        categoryId = cat.Id;
+                    }
                 }
             }
 
@@ -321,15 +327,18 @@ public class BulkImportService : IBulkImportService
                     errors.Add(err);
                     globalErrors.Add(new BulkImportErrorDto(rowNumber, "PurityCode", err));
                 }
-                else if (!pur.IsActive)
-                {
-                    var err = $"Purity \"{pur.Name}\" ({norm}) is inactive.";
-                    errors.Add(err);
-                    globalErrors.Add(new BulkImportErrorDto(rowNumber, "PurityCode", err));
-                }
                 else
                 {
-                    purityId = pur.Id;
+                    var activeErr = _inventoryValidationService.ValidateEntityActive("Purity", $"\"{pur.Name}\" ({norm})", pur.IsActive);
+                    if (activeErr != null)
+                    {
+                        errors.Add(activeErr);
+                        globalErrors.Add(new BulkImportErrorDto(rowNumber, "PurityCode", activeErr));
+                    }
+                    else
+                    {
+                        purityId = pur.Id;
+                    }
                 }
             }
 
@@ -346,11 +355,11 @@ public class BulkImportService : IBulkImportService
                 var norm = raw.StockLocationCode.Trim().ToUpperInvariant();
                 if (locationByCode.TryGetValue(norm, out var loc))
                 {
-                    if (!loc.IsActive)
+                    var activeErr = _inventoryValidationService.ValidateEntityActive("Stock location", $"\"{loc.Name}\" ({norm})", loc.IsActive);
+                    if (activeErr != null)
                     {
-                        var err = $"Stock location \"{loc.Name}\" ({norm}) is inactive.";
-                        errors.Add(err);
-                        globalErrors.Add(new BulkImportErrorDto(rowNumber, "StockLocationCode", err));
+                        errors.Add(activeErr);
+                        globalErrors.Add(new BulkImportErrorDto(rowNumber, "StockLocationCode", activeErr));
                     }
                     else
                     {
@@ -359,7 +368,8 @@ public class BulkImportService : IBulkImportService
                 }
                 else if (allLocationByCode.TryGetValue(norm, out var crossLoc))
                 {
-                    var err = $"Stock location \"{crossLoc.Code}\" does not belong to selected branch.";
+                    var branchErr = _inventoryValidationService.ValidateStockLocationBranch(crossLoc.BranchId, branchId, crossLoc.Code, branch.Code);
+                    var err = branchErr ?? $"Stock location \"{crossLoc.Code}\" does not belong to selected branch.";
                     errors.Add(err);
                     globalErrors.Add(new BulkImportErrorDto(rowNumber, "StockLocationCode", err));
                 }
@@ -371,75 +381,96 @@ public class BulkImportService : IBulkImportService
                 }
             }
 
-            // 6. Gross Weight (> 0)
+            // 6 & 7. Weights (Gross > 0, Stone >= 0, Stone <= Gross, Net = Gross - Stone >= 0)
             decimal grossWeight = 0;
-            if (!decimal.TryParse(raw.GrossWeightStr, NumberStyles.Any, CultureInfo.InvariantCulture, out grossWeight) || grossWeight <= 0)
-            {
-                var err = "Gross weight must be greater than zero.";
-                errors.Add(err);
-                globalErrors.Add(new BulkImportErrorDto(rowNumber, "GrossWeight", err));
-            }
+            bool grossParsed = decimal.TryParse(raw.GrossWeightStr, NumberStyles.Any, CultureInfo.InvariantCulture, out grossWeight);
 
-            // 7. Stone Weight (>= 0 and <= Gross Weight)
             decimal stoneWeight = 0;
+            bool stoneParsed = true;
             if (!string.IsNullOrWhiteSpace(raw.StoneWeightStr))
             {
-                if (!decimal.TryParse(raw.StoneWeightStr, NumberStyles.Any, CultureInfo.InvariantCulture, out stoneWeight) || stoneWeight < 0)
+                stoneParsed = decimal.TryParse(raw.StoneWeightStr, NumberStyles.Any, CultureInfo.InvariantCulture, out stoneWeight);
+            }
+
+            decimal netWeight = 0;
+            if (!grossParsed || !stoneParsed)
+            {
+                if (!grossParsed)
+                {
+                    var err = "Gross weight must be greater than zero.";
+                    errors.Add(err);
+                    globalErrors.Add(new BulkImportErrorDto(rowNumber, "GrossWeight", err));
+                }
+                if (!stoneParsed)
                 {
                     var err = "Stone weight must be greater than or equal to zero.";
                     errors.Add(err);
                     globalErrors.Add(new BulkImportErrorDto(rowNumber, "StoneWeight", err));
                 }
             }
-
-            if (grossWeight > 0 && stoneWeight > grossWeight)
+            else
             {
-                var err = $"Stone Weight cannot exceed Gross Weight.";
-                errors.Add(err);
-                globalErrors.Add(new BulkImportErrorDto(rowNumber, "StoneWeight", err));
+                var weightCheck = _inventoryValidationService.ValidateWeights(grossWeight, stoneWeight);
+                if (!weightCheck.IsValid)
+                {
+                    errors.Add(weightCheck.Error!);
+                    var field = grossWeight <= 0 ? "GrossWeight" : "StoneWeight";
+                    globalErrors.Add(new BulkImportErrorDto(rowNumber, field, weightCheck.Error!));
+                }
+                else
+                {
+                    netWeight = weightCheck.NetWeight;
+                }
             }
-
-            decimal netWeight = Math.Max(0, grossWeight - stoneWeight);
 
             // 8. Piece Count (>= 1)
             int pieceCount = 1;
             if (!string.IsNullOrWhiteSpace(raw.PieceCountStr))
             {
-                if (!int.TryParse(raw.PieceCountStr, NumberStyles.Integer, CultureInfo.InvariantCulture, out pieceCount) || pieceCount < 1)
+                if (!int.TryParse(raw.PieceCountStr, NumberStyles.Integer, CultureInfo.InvariantCulture, out pieceCount))
                 {
                     var err = "Piece count must be at least 1.";
                     errors.Add(err);
                     globalErrors.Add(new BulkImportErrorDto(rowNumber, "PieceCount", err));
                 }
+                else
+                {
+                    var pcErr = _inventoryValidationService.ValidatePieceCount(pieceCount);
+                    if (pcErr != null)
+                    {
+                        errors.Add(pcErr);
+                        globalErrors.Add(new BulkImportErrorDto(rowNumber, "PieceCount", pcErr));
+                    }
+                }
             }
 
             // 9. Making Charge Method
-            int methodVal = (int)MakingChargeMethod.PerGram;
-            var rawMethod = raw.MakingChargeMethod?.Trim().ToUpperInvariant() ?? string.Empty;
-            if (rawMethod == "PER_GRAM" || rawMethod == "PERGRAM" || rawMethod == "PER GRAM" || rawMethod == "1")
+            var mcParsed = _inventoryValidationService.ParseAndValidateMakingChargeMethod(raw.MakingChargeMethod);
+            int methodVal = (int)mcParsed.Method;
+            if (!mcParsed.Success)
             {
-                methodVal = (int)MakingChargeMethod.PerGram;
-            }
-            else if (rawMethod == "PER_ITEM" || rawMethod == "PERITEM" || rawMethod == "PER ITEM" || rawMethod == "FIXED" || rawMethod == "2")
-            {
-                methodVal = (int)MakingChargeMethod.PerItem;
-            }
-            else
-            {
-                var err = $"Invalid making charge method \"{raw.MakingChargeMethod}\". Allowed: PER_GRAM, PER_ITEM (or FIXED).";
-                errors.Add(err);
-                globalErrors.Add(new BulkImportErrorDto(rowNumber, "MakingChargeMethod", err));
+                errors.Add(mcParsed.Error!);
+                globalErrors.Add(new BulkImportErrorDto(rowNumber, "MakingChargeMethod", mcParsed.Error!));
             }
 
             // 10. Making Charge Value (>= 0)
             decimal mcValue = 0;
             if (!string.IsNullOrWhiteSpace(raw.MakingChargeValueStr))
             {
-                if (!decimal.TryParse(raw.MakingChargeValueStr, NumberStyles.Any, CultureInfo.InvariantCulture, out mcValue) || mcValue < 0)
+                if (!decimal.TryParse(raw.MakingChargeValueStr, NumberStyles.Any, CultureInfo.InvariantCulture, out mcValue))
                 {
                     var err = "Making charge value must be greater than or equal to zero.";
                     errors.Add(err);
                     globalErrors.Add(new BulkImportErrorDto(rowNumber, "MakingChargeValue", err));
+                }
+                else
+                {
+                    var mcErr = _inventoryValidationService.ValidateMakingCharge(mcParsed.Method, mcValue);
+                    if (mcErr != null)
+                    {
+                        errors.Add(mcErr);
+                        globalErrors.Add(new BulkImportErrorDto(rowNumber, "MakingChargeValue", mcErr));
+                    }
                 }
             }
 

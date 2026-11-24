@@ -446,10 +446,10 @@ namespace Saranga.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(255)");
 
                     b.Property<string>("PayloadJson")
-                        .HasColumnType("text");
+                        .HasColumnType("jsonb");
 
                     b.Property<string>("ResultSummaryJson")
-                        .HasColumnType("text");
+                        .HasColumnType("jsonb");
 
                     b.Property<int>("Status")
                         .HasColumnType("integer");
@@ -467,7 +467,7 @@ namespace Saranga.Infrastructure.Persistence.Migrations
                         .HasColumnType("integer");
 
                     b.Property<string>("ValidationErrorsJson")
-                        .HasColumnType("text");
+                        .HasColumnType("jsonb");
 
                     b.HasKey("Id");
 

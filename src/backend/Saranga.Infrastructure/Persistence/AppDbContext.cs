@@ -505,6 +505,10 @@ public class AppDbContext : DbContext, IAppDbContext
             entity.Property(b => b.Status).HasConversion<int>().IsRequired();
             entity.Property(b => b.IdempotencyKey).HasMaxLength(100);
 
+            entity.Property(b => b.PayloadJson).HasColumnType("jsonb");
+            entity.Property(b => b.ValidationErrorsJson).HasColumnType("jsonb");
+            entity.Property(b => b.ResultSummaryJson).HasColumnType("jsonb");
+
             entity.HasOne(b => b.Branch)
                   .WithMany()
                   .HasForeignKey(b => b.BranchId)

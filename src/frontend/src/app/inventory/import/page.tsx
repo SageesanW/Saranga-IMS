@@ -95,6 +95,10 @@ export default function BulkImportPage() {
         setError('Only .xlsx and .csv files are supported.');
         return;
       }
+      if (file.size > 5 * 1024 * 1024) {
+        setError('File size exceeds the maximum limit of 5 MB.');
+        return;
+      }
       setSelectedFile(file);
       setError(null);
     }

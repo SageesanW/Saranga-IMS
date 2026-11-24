@@ -43,6 +43,7 @@ public static class DependencyInjection
         services.AddScoped<IPermissionService, PermissionService>();
         services.AddScoped<IAttributesService, AttributesService>();
         services.AddScoped<ITagGeneratorService, TagGeneratorService>();
+        services.AddScoped<IInventoryValidationService, InventoryValidationService>();
         services.AddScoped<IInventoryService, InventoryService>();
         services.AddScoped<ICompositionService, CompositionService>();
         services.AddScoped<IBulkImportService, BulkImportService>();

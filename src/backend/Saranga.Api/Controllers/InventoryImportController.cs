@@ -37,7 +37,7 @@ public class InventoryImportController : ControllerBase
     /// </summary>
     [HttpPost("validate")]
     [RequirePermission(Permissions.InventoryBulkImport)]
-    [RequestSizeLimit(10 * 1024 * 1024)] // 10MB
+    [RequestSizeLimit(BulkImportConstants.MaxFileSizeBytes)] // 5MB
     public async Task<ActionResult<BulkImportValidationResultDto>> ValidateImport(
         [FromQuery] Guid branchId,
         IFormFile file,

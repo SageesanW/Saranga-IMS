@@ -35,6 +35,7 @@ public class InventoryService : IInventoryService
     private readonly ICurrentUserService _currentUserService;
     private readonly IBranchAuthorizationService _branchAuthService;
     private readonly ITagGeneratorService _tagGeneratorService;
+    private readonly IInventoryValidationService _inventoryValidationService;
 
     private static readonly JsonSerializerOptions AuditJsonOptions = new()
     {
@@ -46,12 +47,14 @@ public class InventoryService : IInventoryService
         IAppDbContext context,
         ICurrentUserService currentUserService,
         IBranchAuthorizationService branchAuthService,
-        ITagGeneratorService tagGeneratorService)
+        ITagGeneratorService tagGeneratorService,
+        IInventoryValidationService inventoryValidationService)
     {
         _context = context;
         _currentUserService = currentUserService;
         _branchAuthService = branchAuthService;
         _tagGeneratorService = tagGeneratorService;
+        _inventoryValidationService = inventoryValidationService;
     }
 
     public async Task<PagedResult<InventoryItemDto>> GetInventoryAsync(InventoryQueryParams queryParams, CancellationToken cancellationToken = default)
@@ -213,84 +216,16 @@ public class InventoryService : IInventoryService
         // 1. Branch Authorization
         await _branchAuthService.EnsureBranchAccessAsync(request.BranchId, cancellationToken);
 
-        var branch = await _context.Branches.FirstOrDefaultAsync(b => b.Id == request.BranchId, cancellationToken);
-        if (branch == null || !branch.IsActive)
-        {
-            throw new BusinessRuleException("Target branch does not exist or is inactive.");
-        }
+        // 2. Comprehensive Domain Validation via Shared IInventoryValidationService
+        var validated = await _inventoryValidationService.ValidateManualItemCreationAsync(request, cancellationToken);
+        var branch = validated.Branch;
+        var location = validated.StockLocation;
+        var material = validated.Material;
+        var category = validated.Category;
+        var purity = validated.Purity;
+        var netWeight = validated.NetWeight;
 
-        // 2. Stock Location Validation (Must belong to target branch and be active)
-        var location = await _context.StockLocations.FirstOrDefaultAsync(l => l.Id == request.StockLocationId, cancellationToken);
-        if (location == null)
-        {
-            throw new BusinessRuleException("Specified stock location does not exist.");
-        }
-        if (location.BranchId != request.BranchId)
-        {
-            throw new BusinessRuleException($"Stock location '{location.Code}' belongs to a different branch and cannot be assigned to an item in '{branch.Code}'.");
-        }
-        if (!location.IsActive)
-        {
-            throw new BusinessRuleException($"Stock location '{location.Name}' is inactive.");
-        }
-
-        // 3. Master References Validation (Must exist and be active)
-        var material = await _context.Materials.FirstOrDefaultAsync(m => m.Id == request.MaterialId, cancellationToken);
-        if (material == null || !material.IsActive)
-        {
-            throw new BusinessRuleException("Selected material does not exist or is inactive.");
-        }
-
-        var category = await _context.Categories.FirstOrDefaultAsync(c => c.Id == request.CategoryId, cancellationToken);
-        if (category == null || !category.IsActive)
-        {
-            throw new BusinessRuleException("Selected category does not exist or is inactive.");
-        }
-
-        var purity = await _context.Purities.FirstOrDefaultAsync(p => p.Id == request.PurityId, cancellationToken);
-        if (purity == null || !purity.IsActive)
-        {
-            throw new BusinessRuleException("Selected purity does not exist or is inactive.");
-        }
-
-        // 4. Weight Rules
-        if (request.GrossWeight < 0)
-        {
-            throw new BusinessRuleException("Gross weight cannot be negative.");
-        }
-        if (request.StoneWeight < 0)
-        {
-            throw new BusinessRuleException("Stone weight cannot be negative.");
-        }
-        if (request.StoneWeight > request.GrossWeight)
-        {
-            throw new BusinessRuleException($"Stone weight ({request.StoneWeight}g) cannot exceed gross weight ({request.GrossWeight}g).");
-        }
-
-        // Net weight calculated strictly by backend
-        var netWeight = request.GrossWeight - request.StoneWeight;
-        if (netWeight < 0)
-        {
-            throw new BusinessRuleException("Net weight cannot be negative.");
-        }
-
-        // 5. Piece Count
-        if (request.PieceCount <= 0)
-        {
-            throw new BusinessRuleException("Piece count must be at least 1.");
-        }
-
-        // 6. Making Charge
-        if (request.MakingChargeValue < 0)
-        {
-            throw new BusinessRuleException("Making charge value cannot be negative.");
-        }
-        if (!Enum.IsDefined(typeof(MakingChargeMethod), request.MakingChargeMethod))
-        {
-            throw new BusinessRuleException("Invalid making charge method.");
-        }
-
-        // 7. Tag and Barcode Generation / Validation
+        // 3. Tag and Barcode Generation / Validation
         string tagNumber;
         string barcode;
 
@@ -348,12 +283,12 @@ public class InventoryService : IInventoryService
             CreatedBy = _currentUserService.UserId
         };
 
-        // 8. Specifications
-        if (request.Specifications != null && request.Specifications.Count > 0)
+        // 4. Specifications
+        if (validated.Specifications != null && validated.Specifications.Count > 0)
         {
-            foreach (var specReq in request.Specifications)
+            foreach (var itemSpec in validated.Specifications)
             {
-                var itemSpec = await ValidateAndCreateItemSpecificationAsync(item.Id, specReq, cancellationToken);
+                itemSpec.InventoryItemId = item.Id;
                 item.Specifications.Add(itemSpec);
             }
         }
@@ -480,51 +415,9 @@ public class InventoryService : IInventoryService
             throw new BusinessRuleException("Sold inventory items are locked and cannot be edited.");
         }
 
-        // 1. Stock Location Validation
-        var location = await _context.StockLocations.FirstOrDefaultAsync(l => l.Id == request.StockLocationId, cancellationToken);
-        if (location == null)
-        {
-            throw new BusinessRuleException("Specified stock location does not exist.");
-        }
-        if (location.BranchId != item.BranchId)
-        {
-            throw new BusinessRuleException("Stock location belongs to a different branch and cannot be assigned.");
-        }
-        if (!location.IsActive)
-        {
-            throw new BusinessRuleException($"Stock location '{location.Name}' is inactive.");
-        }
-
-        // 2. Master References Validation
-        var material = await _context.Materials.FirstOrDefaultAsync(m => m.Id == request.MaterialId, cancellationToken);
-        if (material == null)
-        {
-            throw new BusinessRuleException("Selected material does not exist.");
-        }
-
-        var category = await _context.Categories.FirstOrDefaultAsync(c => c.Id == request.CategoryId, cancellationToken);
-        if (category == null)
-        {
-            throw new BusinessRuleException("Selected category does not exist.");
-        }
-
-        var purity = await _context.Purities.FirstOrDefaultAsync(p => p.Id == request.PurityId, cancellationToken);
-        if (purity == null)
-        {
-            throw new BusinessRuleException("Selected purity does not exist.");
-        }
-
-        // 3. Weight Rules
-        if (request.GrossWeight < 0) throw new BusinessRuleException("Gross weight cannot be negative.");
-        if (request.StoneWeight < 0) throw new BusinessRuleException("Stone weight cannot be negative.");
-        if (request.StoneWeight > request.GrossWeight) throw new BusinessRuleException("Stone weight cannot exceed gross weight.");
-
-        var netWeight = request.GrossWeight - request.StoneWeight;
-        if (netWeight < 0) throw new BusinessRuleException("Net weight cannot be negative.");
-
-        if (request.PieceCount <= 0) throw new BusinessRuleException("Piece count must be at least 1.");
-        if (request.MakingChargeValue < 0) throw new BusinessRuleException("Making charge value cannot be negative.");
-        if (!Enum.IsDefined(typeof(MakingChargeMethod), request.MakingChargeMethod)) throw new BusinessRuleException("Invalid making charge method.");
+        // Domain Validation via Shared IInventoryValidationService
+        var validated = await _inventoryValidationService.ValidateManualItemUpdateAsync(request, item.BranchId, cancellationToken);
+        var netWeight = validated.NetWeight;
 
         var oldValues = new
         {
@@ -894,49 +787,10 @@ public class InventoryService : IInventoryService
             throw new BusinessRuleException($"Specification with ID '{specReq.SpecificationId}' is invalid or inactive.");
         }
 
-        var inputType = string.IsNullOrWhiteSpace(spec.InputType) ? SpecificationInputTypes.Predefined : spec.InputType.Trim().ToUpperInvariant();
-
-        if (inputType == SpecificationInputTypes.Predefined)
+        var specErr = _inventoryValidationService.ValidateSpecification(spec, specReq.SpecificationOptionId, specReq.CustomValue);
+        if (specErr != null)
         {
-            if (!specReq.SpecificationOptionId.HasValue)
-            {
-                throw new BusinessRuleException($"Specification '{spec.Name}' requires a predefined option to be selected.");
-            }
-            if (!string.IsNullOrWhiteSpace(specReq.CustomValue))
-            {
-                throw new BusinessRuleException($"Specification '{spec.Name}' uses predefined options only; CustomValue is disallowed.");
-            }
-            var opt = spec.Options.FirstOrDefault(o => o.Id == specReq.SpecificationOptionId.Value);
-            if (opt == null || !opt.IsActive)
-            {
-                throw new BusinessRuleException($"Specification option is invalid or inactive for specification '{spec.Name}'.");
-            }
-        }
-        else if (inputType == SpecificationInputTypes.FreeText)
-        {
-            if (specReq.SpecificationOptionId.HasValue)
-            {
-                throw new BusinessRuleException($"Specification '{spec.Name}' is configured for free-text only; selecting a predefined option is disallowed.");
-            }
-            if (string.IsNullOrWhiteSpace(specReq.CustomValue))
-            {
-                throw new BusinessRuleException($"Specification '{spec.Name}' requires a custom value.");
-            }
-        }
-        else if (inputType == SpecificationInputTypes.Hybrid)
-        {
-            if (!specReq.SpecificationOptionId.HasValue && string.IsNullOrWhiteSpace(specReq.CustomValue))
-            {
-                throw new BusinessRuleException($"Specification '{spec.Name}' requires either a predefined option or a custom value.");
-            }
-            if (specReq.SpecificationOptionId.HasValue)
-            {
-                var opt = spec.Options.FirstOrDefault(o => o.Id == specReq.SpecificationOptionId.Value);
-                if (opt == null || !opt.IsActive)
-                {
-                    throw new BusinessRuleException($"Specification option is invalid or inactive for specification '{spec.Name}'.");
-                }
-            }
+            throw new BusinessRuleException(specErr);
         }
 
         return new InventoryItemSpecification
