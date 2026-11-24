@@ -11,6 +11,7 @@ using Saranga.Application.DTOs.Auth;
 using Saranga.Application.DTOs.Branches;
 using Saranga.Application.DTOs.Common;
 using Saranga.Application.DTOs.Inventory;
+using Saranga.Application.DTOs.Roles;
 using Saranga.Application.DTOs.Users;
 using Saranga.Domain.Constants;
 using Saranga.Infrastructure.Persistence;
@@ -46,6 +47,7 @@ public class Module5IntegrationTests : IClassFixture<WebApplicationFactory<Progr
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
         await db.Database.ExecuteSqlRawAsync(@"
+            DELETE FROM ""IdempotencyRecords"" WHERE ""Key"" LIKE 'test-m5-%';
             DELETE FROM ""InventoryItemSpecifications"" WHERE ""InventoryItemId"" IN (SELECT ""Id"" FROM ""InventoryItems"" WHERE ""ItemCode"" LIKE 'TEST_M5_%' OR ""TagNumber"" LIKE 'TEST-M5-%');
             DELETE FROM ""InventoryItemMedia"" WHERE ""InventoryItemId"" IN (SELECT ""Id"" FROM ""InventoryItems"" WHERE ""ItemCode"" LIKE 'TEST_M5_%' OR ""TagNumber"" LIKE 'TEST-M5-%');
             DELETE FROM ""InventoryItems"" WHERE ""ItemCode"" LIKE 'TEST_M5_%' OR ""TagNumber"" LIKE 'TEST-M5-%' OR ""Name"" LIKE 'Test M5%';
@@ -56,8 +58,10 @@ public class Module5IntegrationTests : IClassFixture<WebApplicationFactory<Progr
             DELETE FROM ""Categories"" WHERE ""Code"" LIKE 'TEST_M5_%';
             DELETE FROM ""Materials"" WHERE ""Code"" LIKE 'TEST_M5_%';
             DELETE FROM ""UserBranches"" WHERE ""BranchId"" IN (SELECT ""Id"" FROM ""Branches"" WHERE ""Code"" IN ('TEST-M5-B1', 'TEST-M5-B2'));
-            DELETE FROM ""UserRoles"" WHERE ""UserId"" IN (SELECT ""Id"" FROM ""Users"" WHERE ""Username"" IN ('test_cashier_m5'));
-            DELETE FROM ""Users"" WHERE ""Username"" IN ('test_cashier_m5');
+            DELETE FROM ""UserRoles"" WHERE ""UserId"" IN (SELECT ""Id"" FROM ""Users"" WHERE ""Username"" IN ('test_cashier_m5', 'test_editor_m5'));
+            DELETE FROM ""Users"" WHERE ""Username"" IN ('test_cashier_m5', 'test_editor_m5');
+            DELETE FROM ""RolePermissions"" WHERE ""RoleId"" IN (SELECT ""Id"" FROM ""Roles"" WHERE ""Name"" LIKE 'Test M5%');
+            DELETE FROM ""Roles"" WHERE ""Name"" LIKE 'Test M5%';
             DELETE FROM ""Branches"" WHERE ""Code"" IN ('TEST-M5-B1', 'TEST-M5-B2');
         ");
     }
@@ -425,5 +429,202 @@ public class Module5IntegrationTests : IClassFixture<WebApplicationFactory<Progr
             Assert.Contains(audits, a => a.Action == "UPDATE");
             _output.WriteLine($"Verified: {audits.Count} audit records created with initial parameters and update diffs.");
         }
+    }
+
+    [Fact]
+    public async Task ManualItemCreation_IdempotencyAndMediaLifecycle_HardenedVerification()
+    {
+        var client = CreateClientWithCookieHandler();
+
+        // 1. Authenticate as Owner / Super Admin
+        var loginResponse = await client.PostAsJsonAsync("/api/auth/login", new LoginRequest("saranga_owner", "OwnerSuperAdmin@2026#Secure"));
+        Assert.Equal(HttpStatusCode.OK, loginResponse.StatusCode);
+        var authData = await loginResponse.Content.ReadFromJsonAsync<AuthResponse>();
+        var ownerToken = authData!.AccessToken;
+
+        var ownerClient = CreateClientWithCookieHandler();
+        ownerClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", ownerToken);
+
+        // 2. Setup branch, location, and master references
+        var b1Res = await ownerClient.PostAsJsonAsync("/api/branches", new CreateBranchRequest("Test M5 Branch 1", "TEST-M5-B1", "LK", "LKR", "Asia/Colombo", true));
+        var b1 = await b1Res.Content.ReadFromJsonAsync<BranchDto>();
+
+        var loc1Res = await ownerClient.PostAsJsonAsync("/api/stock-locations", new CreateStockLocationRequest(b1!.Id, "Main Display B1", "TEST_M5_LOC_1", "DISPLAY", "B1 Display Showcase", true, 1));
+        var loc1 = await loc1Res.Content.ReadFromJsonAsync<StockLocationDto>();
+
+        var matRes = await ownerClient.PostAsJsonAsync("/api/materials", new CreateMaterialRequest("Test M5 Gold", "TEST_M5_GOLD", "Test Material", true, 1));
+        var mat = await matRes.Content.ReadFromJsonAsync<MaterialDto>();
+
+        var catRes = await ownerClient.PostAsJsonAsync("/api/categories", new CreateCategoryRequest("Test M5 Bangles", "TEST_M5_BAN", "Test Category", true, 1));
+        var cat = await catRes.Content.ReadFromJsonAsync<CategoryDto>();
+
+        var purRes = await ownerClient.PostAsJsonAsync("/api/purities", new CreatePurityRequest("Test M5 22K", "TEST_M5_22K", 22.0m, 91.67m, "Test Purity", true, 1));
+        var pur = await purRes.Content.ReadFromJsonAsync<PurityDto>();
+
+        // 3. Test Temporary Media Upload
+        _output.WriteLine("=== Testing Temporary Media Upload ===");
+        var imageBytes = Encoding.UTF8.GetBytes("FAKE_TEST_JPEG_IMAGE_CONTENT_M5_HARDENING");
+        using var multiContent = new MultipartFormDataContent();
+        var fileContent = new ByteArrayContent(imageBytes);
+        fileContent.Headers.ContentType = new MediaTypeHeaderValue("image/jpeg");
+        multiContent.Add(fileContent, "file", "test_item_sample.jpg");
+
+        var uploadRes = await ownerClient.PostAsync("/api/inventory/upload-file", multiContent);
+        Assert.Equal(HttpStatusCode.OK, uploadRes.StatusCode);
+        var uploadedFile = await uploadRes.Content.ReadFromJsonAsync<FileUploadResultDto>();
+        Assert.NotNull(uploadedFile);
+        Assert.StartsWith("/uploads/temp/", uploadedFile.StoragePath);
+        _output.WriteLine($"Verified: Uploaded file is staged at temporary location '{uploadedFile.StoragePath}'.");
+
+        // 4. Test Idempotency: Create Item with Idempotency-Key
+        _output.WriteLine("=== Testing Idempotent Item Creation ===");
+        var idempotencyKey = "test-m5-idemp-001";
+        var createReq = new CreateInventoryItemRequest(
+            BranchId: b1!.Id,
+            StockLocationId: loc1!.Id,
+            Name: "Test M5 Idempotent Bangle",
+            ItemCode: "TEST_M5_IDEMP_001",
+            TagNumber: "TEST-M5-IDEMP-001",
+            Barcode: "TEST-M5-IDEMP-BAR-001",
+            MaterialId: mat.Id,
+            CategoryId: cat!.Id,
+            PurityId: pur!.Id,
+            GrossWeight: 18.5000m,
+            StoneWeight: 0.5000m,
+            PieceCount: 1,
+            MakingChargeMethod: 1,
+            MakingChargeValue: 3500.00m,
+            Description: "Idempotency test item",
+            IsActive: true,
+            Specifications: null,
+            Media: new List<CreateInventoryItemMediaRequest>
+            {
+                new(uploadedFile.FileName, uploadedFile.StoragePath, uploadedFile.ContentType, uploadedFile.FileSize, uploadedFile.MediaType, 0, true)
+            }
+        );
+
+        var firstRequest = new HttpRequestMessage(HttpMethod.Post, "/api/inventory")
+        {
+            Content = JsonContent.Create(createReq)
+        };
+        firstRequest.Headers.Add("Idempotency-Key", idempotencyKey);
+
+        var firstRes = await ownerClient.SendAsync(firstRequest);
+        Assert.Equal(HttpStatusCode.Created, firstRes.StatusCode);
+        var firstItem = await firstRes.Content.ReadFromJsonAsync<InventoryItemDto>();
+        Assert.NotNull(firstItem);
+        Assert.Equal("TEST-M5-IDEMP-001", firstItem.TagNumber);
+
+        // Verify media was promoted from temp to inventory permanent directory
+        Assert.Single(firstItem.Media);
+        Assert.StartsWith("/uploads/inventory/", firstItem.Media[0].StoragePath);
+        _output.WriteLine($"Verified: Temporary media successfully finalized to '{firstItem.Media[0].StoragePath}'.");
+
+        // Send IDENTICAL request with the SAME Idempotency-Key
+        var secondRequest = new HttpRequestMessage(HttpMethod.Post, "/api/inventory")
+        {
+            Content = JsonContent.Create(createReq)
+        };
+        secondRequest.Headers.Add("Idempotency-Key", idempotencyKey);
+
+        var secondRes = await ownerClient.SendAsync(secondRequest);
+        Assert.Equal(HttpStatusCode.Created, secondRes.StatusCode);
+        var secondItem = await secondRes.Content.ReadFromJsonAsync<InventoryItemDto>();
+        Assert.NotNull(secondItem);
+        Assert.Equal(firstItem.Id, secondItem.Id);
+        Assert.Equal(firstItem.TagNumber, secondItem.TagNumber);
+        Assert.Equal(firstItem.Barcode, secondItem.Barcode);
+        _output.WriteLine("Verified: Replayed create request returned the exact same item without duplicating.");
+
+        // Check DB directly: exactly one item and one idempotency record exist
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var itemCount = await db.InventoryItems.CountAsync(i => i.TagNumber == "TEST-M5-IDEMP-001");
+            Assert.Equal(1, itemCount);
+
+            var idempCount = await db.IdempotencyRecords.CountAsync(r => r.Key == idempotencyKey);
+            Assert.Equal(1, idempCount);
+            _output.WriteLine("Verified: Database contains exactly 1 InventoryItem and 1 IdempotencyRecord.");
+        }
+
+        // Send DIFFERENT payload with the SAME Idempotency-Key -> Expected 400 Bad Request
+        var modifiedReq = createReq with { GrossWeight = 99.9999m, Name = "Tampered Payload Name" };
+        var tamperedRequest = new HttpRequestMessage(HttpMethod.Post, "/api/inventory")
+        {
+            Content = JsonContent.Create(modifiedReq)
+        };
+        tamperedRequest.Headers.Add("Idempotency-Key", idempotencyKey);
+
+        var tamperedRes = await ownerClient.SendAsync(tamperedRequest);
+        Assert.Equal(HttpStatusCode.BadRequest, tamperedRes.StatusCode);
+        var tamperedError = await tamperedRes.Content.ReadAsStringAsync();
+        Assert.Contains("Idempotency key has already been used with a different request payload", tamperedError);
+        _output.WriteLine("Verified: Reusing idempotency key with different payload was rejected with 400 Bad Request.");
+
+        // 5. Test INVENTORY_EDIT Media Authorization & Lifecycle
+        _output.WriteLine("=== Testing INVENTORY_EDIT Media Upload & Attachment ===");
+        Guid editorRoleId;
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var viewPerm = await db.Permissions.FirstAsync(p => p.Name == Permissions.InventoryView);
+            var editPerm = await db.Permissions.FirstAsync(p => p.Name == Permissions.InventoryEdit);
+
+            var editorRoleReq = new CreateRoleRequest("Test M5 Inventory Editor", "Role with edit permission only", new List<Guid> { viewPerm.Id, editPerm.Id });
+            var roleRes = await ownerClient.PostAsJsonAsync("/api/roles", editorRoleReq);
+            Assert.Equal(HttpStatusCode.Created, roleRes.StatusCode);
+            var editorRole = await roleRes.Content.ReadFromJsonAsync<RoleDto>();
+            editorRoleId = editorRole!.Id;
+
+            var userReq = new CreateUserRequest(
+                Username: "test_editor_m5",
+                Email: "editor_m5@saranga.test",
+                Password: "EditorPassword@2026!",
+                FullName: "Test Editor M5",
+                RoleIds: new List<Guid> { editorRoleId },
+                BranchIds: new List<Guid> { b1.Id },
+                DefaultBranchId: b1.Id
+            );
+            var userRes = await ownerClient.PostAsJsonAsync("/api/users", userReq);
+            Assert.Equal(HttpStatusCode.Created, userRes.StatusCode);
+        }
+
+        // Login as editor
+        var editorLoginRes = await client.PostAsJsonAsync("/api/auth/login", new LoginRequest("test_editor_m5", "EditorPassword@2026!"));
+        Assert.Equal(HttpStatusCode.OK, editorLoginRes.StatusCode);
+        var editorAuth = await editorLoginRes.Content.ReadFromJsonAsync<AuthResponse>();
+        var editorClient = CreateClientWithCookieHandler();
+        editorClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", editorAuth!.AccessToken);
+
+        // Editor attempts to create an item -> 403 Forbidden (no INVENTORY_CREATE)
+        var forbiddenCreate = await editorClient.PostAsJsonAsync("/api/inventory", createReq);
+        Assert.Equal(HttpStatusCode.Forbidden, forbiddenCreate.StatusCode);
+        _output.WriteLine("Verified: User with only INVENTORY_EDIT is forbidden from creating new items.");
+
+        // Editor attaches media to existing item via POST /api/inventory/{id}/media -> 200 OK
+        using var attachMulti = new MultipartFormDataContent();
+        var attachBytes = Encoding.UTF8.GetBytes("ATTACHED_IMAGE_M5_BY_EDITOR");
+        var attachFileContent = new ByteArrayContent(attachBytes);
+        attachFileContent.Headers.ContentType = new MediaTypeHeaderValue("image/jpeg");
+        attachMulti.Add(attachFileContent, "file", "attached_by_editor.jpg");
+
+        var attachRes = await editorClient.PostAsync($"/api/inventory/{firstItem.Id}/media?isPrimary=false", attachMulti);
+        Assert.Equal(HttpStatusCode.OK, attachRes.StatusCode);
+        var attachedMedia = await attachRes.Content.ReadFromJsonAsync<InventoryItemMediaDto>();
+        Assert.NotNull(attachedMedia);
+        Assert.Equal("attached_by_editor.jpg", attachedMedia.FileName);
+        _output.WriteLine($"Verified: User with INVENTORY_EDIT successfully attached media '{attachedMedia.FileName}'.");
+
+        // Editor removes attached media via DELETE /api/inventory/{id}/media/{mediaId} -> 204 NoContent
+        var removeRes = await editorClient.DeleteAsync($"/api/inventory/{firstItem.Id}/media/{attachedMedia.Id}");
+        Assert.Equal(HttpStatusCode.NoContent, removeRes.StatusCode);
+        _output.WriteLine("Verified: User with INVENTORY_EDIT successfully removed attached media.");
+
+        // 6. Test Cleanup of Expired Temp Media
+        _output.WriteLine("=== Testing Cleanup of Expired Temp Uploads ===");
+        var cleanupRes = await ownerClient.PostAsync("/api/inventory/cleanup-temp-media?maxAgeHours=0", null);
+        Assert.Equal(HttpStatusCode.OK, cleanupRes.StatusCode);
+        _output.WriteLine("Verified: Temp media cleanup endpoint succeeded.");
     }
 }

@@ -33,5 +33,8 @@ public interface IAppDbContext
     DbSet<InventoryItemSpecification> InventoryItemSpecifications { get; }
     DbSet<InventoryItemMedia> InventoryItemMedia { get; }
 
+    // Module 5 Hardening: Idempotency
+    DbSet<IdempotencyRecord> IdempotencyRecords { get; }
+
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

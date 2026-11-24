@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Saranga.Application.Common.Exceptions;
@@ -14,14 +16,17 @@ public interface IInventoryService
 {
     Task<PagedResult<InventoryItemDto>> GetInventoryAsync(InventoryQueryParams queryParams, CancellationToken cancellationToken = default);
     Task<InventoryItemDto> GetInventoryItemByIdAsync(Guid id, CancellationToken cancellationToken = default);
-    Task<InventoryItemDto> CreateInventoryItemAsync(CreateInventoryItemRequest request, CancellationToken cancellationToken = default);
+    Task<InventoryItemDto> CreateInventoryItemAsync(CreateInventoryItemRequest request, string? idempotencyKey = null, CancellationToken cancellationToken = default);
     Task<InventoryItemDto> UpdateInventoryItemAsync(Guid id, UpdateInventoryItemRequest request, CancellationToken cancellationToken = default);
     Task<InventoryItemDto> ToggleInventoryItemActiveAsync(Guid id, CancellationToken cancellationToken = default);
     Task<InventoryItemDto> ToggleInventoryItemStatusAsync(Guid id, CancellationToken cancellationToken = default);
     Task<InventoryItemDto> AdminStatusCorrectionAsync(Guid id, AdminStatusCorrectionRequest request, CancellationToken cancellationToken = default);
     Task<InventoryLookupDto> LookupByBarcodeAsync(string barcode, CancellationToken cancellationToken = default);
     Task<InventoryLookupDto> LookupByTagAsync(string tagNumber, CancellationToken cancellationToken = default);
-    Task<FileUploadResultDto> UploadFileAsync(Stream stream, string fileName, string contentType, long fileSize, CancellationToken cancellationToken = default);
+    Task<FileUploadResultDto> UploadFileAsync(Stream stream, string fileName, string contentType, long fileSize, bool isTemporary = true, CancellationToken cancellationToken = default);
+    Task<InventoryItemMediaDto> AddMediaToItemAsync(Guid itemId, Stream stream, string fileName, string contentType, long fileSize, bool isPrimary = false, CancellationToken cancellationToken = default);
+    Task RemoveMediaFromItemAsync(Guid itemId, Guid mediaId, CancellationToken cancellationToken = default);
+    Task<int> CleanupExpiredTempUploadsAsync(TimeSpan maxAge, CancellationToken cancellationToken = default);
 }
 
 public class InventoryService : IInventoryService
@@ -172,11 +177,37 @@ public class InventoryService : IInventoryService
         return MapToDto(item);
     }
 
-    public async Task<InventoryItemDto> CreateInventoryItemAsync(CreateInventoryItemRequest request, CancellationToken cancellationToken = default)
+    public async Task<InventoryItemDto> CreateInventoryItemAsync(CreateInventoryItemRequest request, string? idempotencyKey = null, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(request.Name))
         {
             throw new BusinessRuleException("Item name cannot be empty.");
+        }
+
+        // Module 5 Hardening: Idempotency Key Handling
+        string? normalizedKey = idempotencyKey?.Trim();
+        string requestHash = string.Empty;
+        if (!string.IsNullOrWhiteSpace(normalizedKey))
+        {
+            var payloadJson = JsonSerializer.Serialize(request);
+            requestHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(payloadJson)));
+
+            var existingRecord = await _context.IdempotencyRecords
+                .FirstOrDefaultAsync(r => r.UserId == _currentUserService.UserId && r.Key == normalizedKey, cancellationToken);
+
+            if (existingRecord != null)
+            {
+                if (existingRecord.RequestHash != requestHash)
+                {
+                    throw new BusinessRuleException("Idempotency key has already been used with a different request payload.");
+                }
+
+                var cachedDto = JsonSerializer.Deserialize<InventoryItemDto>(existingRecord.ResponseBody);
+                if (cachedDto != null)
+                {
+                    return cachedDto;
+                }
+            }
         }
 
         // 1. Branch Authorization
@@ -327,16 +358,31 @@ public class InventoryService : IInventoryService
             }
         }
 
-        // 9. Media
+        // 9. Media (Module 5 Hardening: promote temp uploads to permanent inventory uploads)
         if (request.Media != null && request.Media.Count > 0)
         {
             foreach (var m in request.Media)
             {
+                var storagePath = m.StoragePath.Trim();
+                if (storagePath.StartsWith("/uploads/temp/", StringComparison.OrdinalIgnoreCase))
+                {
+                    var fileName = Path.GetFileName(storagePath);
+                    var sourcePath = Path.Combine(Directory.GetCurrentDirectory(), "uploads", "temp", fileName);
+                    var destDir = Path.Combine(Directory.GetCurrentDirectory(), "uploads", "inventory");
+                    Directory.CreateDirectory(destDir);
+                    var destPath = Path.Combine(destDir, fileName);
+                    if (File.Exists(sourcePath))
+                    {
+                        File.Move(sourcePath, destPath, overwrite: true);
+                    }
+                    storagePath = $"/uploads/inventory/{fileName}";
+                }
+
                 item.Media.Add(new InventoryItemMedia
                 {
                     InventoryItemId = item.Id,
                     FileName = m.FileName.Trim(),
-                    StoragePath = m.StoragePath.Trim(),
+                    StoragePath = storagePath,
                     ContentType = m.ContentType.Trim(),
                     FileSize = m.FileSize,
                     MediaType = (InventoryMediaType)m.MediaType,
@@ -349,6 +395,7 @@ public class InventoryService : IInventoryService
             }
         }
 
+        InventoryItemDto resultDto;
         await using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
         try
         {
@@ -375,6 +422,27 @@ public class InventoryService : IInventoryService
             }, item.BranchId);
 
             await _context.SaveChangesAsync(cancellationToken);
+
+            resultDto = await GetInventoryItemByIdAsync(item.Id, cancellationToken);
+
+            if (!string.IsNullOrWhiteSpace(normalizedKey))
+            {
+                var record = new IdempotencyRecord
+                {
+                    Key = normalizedKey,
+                    UserId = _currentUserService.UserId,
+                    Endpoint = "POST /api/inventory",
+                    RequestHash = requestHash,
+                    ResponseStatusCode = 201,
+                    ResponseBody = JsonSerializer.Serialize(resultDto),
+                    ExpiresAt = DateTimeOffset.UtcNow.AddDays(1),
+                    CreatedAt = DateTimeOffset.UtcNow,
+                    CreatedBy = _currentUserService.UserId
+                };
+                _context.IdempotencyRecords.Add(record);
+                await _context.SaveChangesAsync(cancellationToken);
+            }
+
             await transaction.CommitAsync(cancellationToken);
         }
         catch
@@ -383,7 +451,7 @@ public class InventoryService : IInventoryService
             throw;
         }
 
-        return await GetInventoryItemByIdAsync(item.Id, cancellationToken);
+        return resultDto;
     }
 
     public async Task<InventoryItemDto> UpdateInventoryItemAsync(Guid id, UpdateInventoryItemRequest request, CancellationToken cancellationToken = default)
@@ -887,6 +955,7 @@ public class InventoryService : IInventoryService
         string fileName,
         string contentType,
         long fileSize,
+        bool isTemporary = true,
         CancellationToken cancellationToken = default)
     {
         if (stream == null || fileSize <= 0)
@@ -913,7 +982,8 @@ public class InventoryService : IInventoryService
 
         var safeExtension = Path.GetExtension(fileName).ToLowerInvariant();
         var safeFileName = $"{Guid.NewGuid():N}{safeExtension}";
-        var uploadFolder = Path.Combine(Directory.GetCurrentDirectory(), "uploads", "inventory");
+        var subFolder = isTemporary ? "temp" : "inventory";
+        var uploadFolder = Path.Combine(Directory.GetCurrentDirectory(), "uploads", subFolder);
         Directory.CreateDirectory(uploadFolder);
         var fullPath = Path.Combine(uploadFolder, safeFileName);
 
@@ -922,7 +992,7 @@ public class InventoryService : IInventoryService
             await stream.CopyToAsync(fileStream, cancellationToken);
         }
 
-        var storageRelativePath = $"/uploads/inventory/{safeFileName}";
+        var storageRelativePath = $"/uploads/{subFolder}/{safeFileName}";
         var mediaType = isImage ? (int)InventoryMediaType.Image : (int)InventoryMediaType.Document;
 
         return new FileUploadResultDto(
@@ -932,5 +1002,162 @@ public class InventoryService : IInventoryService
             fileSize,
             mediaType
         );
+    }
+
+    public async Task<InventoryItemMediaDto> AddMediaToItemAsync(
+        Guid itemId,
+        Stream stream,
+        string fileName,
+        string contentType,
+        long fileSize,
+        bool isPrimary = false,
+        CancellationToken cancellationToken = default)
+    {
+        var item = await _context.InventoryItems
+            .Include(i => i.Media)
+            .FirstOrDefaultAsync(i => i.Id == itemId, cancellationToken);
+
+        if (item == null)
+        {
+            throw new NotFoundException("InventoryItem", itemId);
+        }
+
+        await _branchAuthService.EnsureBranchAccessAsync(item.BranchId, cancellationToken);
+
+        if (item.Status == InventoryStatus.Sold)
+        {
+            throw new BusinessRuleException("Sold inventory items are locked and cannot have media attached.");
+        }
+
+        var uploadResult = await UploadFileAsync(stream, fileName, contentType, fileSize, isTemporary: false, cancellationToken);
+
+        if (isPrimary && item.Media.Count > 0)
+        {
+            foreach (var existing in item.Media)
+            {
+                existing.IsPrimary = false;
+            }
+        }
+
+        var media = new InventoryItemMedia
+        {
+            InventoryItemId = item.Id,
+            FileName = uploadResult.FileName,
+            StoragePath = uploadResult.StoragePath,
+            ContentType = uploadResult.ContentType,
+            FileSize = uploadResult.FileSize,
+            MediaType = (InventoryMediaType)uploadResult.MediaType,
+            SortOrder = item.Media.Count,
+            IsPrimary = isPrimary || item.Media.Count == 0,
+            UploadedAt = DateTimeOffset.UtcNow,
+            CreatedAt = DateTimeOffset.UtcNow,
+            CreatedBy = _currentUserService.UserId
+        };
+
+        _context.InventoryItemMedia.Add(media);
+
+        RecordAudit("InventoryItem", item.Id, "UPDATE", null, new
+        {
+            Action = "AddMedia",
+            MediaId = media.Id,
+            uploadResult.FileName,
+            uploadResult.StoragePath
+        }, item.BranchId);
+
+        await _context.SaveChangesAsync(cancellationToken);
+
+        return new InventoryItemMediaDto(
+            media.Id,
+            media.FileName,
+            media.StoragePath,
+            media.ContentType,
+            media.FileSize,
+            (int)media.MediaType,
+            media.MediaType.ToString().ToUpperInvariant(),
+            media.SortOrder,
+            media.IsPrimary,
+            media.UploadedAt
+        );
+    }
+
+    public async Task RemoveMediaFromItemAsync(Guid itemId, Guid mediaId, CancellationToken cancellationToken = default)
+    {
+        var item = await _context.InventoryItems
+            .Include(i => i.Media)
+            .FirstOrDefaultAsync(i => i.Id == itemId, cancellationToken);
+
+        if (item == null)
+        {
+            throw new NotFoundException("InventoryItem", itemId);
+        }
+
+        await _branchAuthService.EnsureBranchAccessAsync(item.BranchId, cancellationToken);
+
+        if (item.Status == InventoryStatus.Sold)
+        {
+            throw new BusinessRuleException("Sold inventory items are locked and cannot have media removed.");
+        }
+
+        var media = item.Media.FirstOrDefault(m => m.Id == mediaId);
+        if (media == null)
+        {
+            throw new NotFoundException("InventoryItemMedia", mediaId);
+        }
+
+        _context.InventoryItemMedia.Remove(media);
+
+        try
+        {
+            var physicalPath = Path.Combine(Directory.GetCurrentDirectory(), media.StoragePath.TrimStart('/'));
+            if (File.Exists(physicalPath))
+            {
+                File.Delete(physicalPath);
+            }
+        }
+        catch
+        {
+            // Ignore failure to delete non-critical local file
+        }
+
+        RecordAudit("InventoryItem", item.Id, "UPDATE", new
+        {
+            Action = "RemoveMedia",
+            MediaId = media.Id,
+            media.FileName
+        }, null, item.BranchId);
+
+        await _context.SaveChangesAsync(cancellationToken);
+    }
+
+    public Task<int> CleanupExpiredTempUploadsAsync(TimeSpan maxAge, CancellationToken cancellationToken = default)
+    {
+        var tempFolder = Path.Combine(Directory.GetCurrentDirectory(), "uploads", "temp");
+        if (!Directory.Exists(tempFolder))
+        {
+            return Task.FromResult(0);
+        }
+
+        var threshold = DateTime.UtcNow - maxAge;
+        var count = 0;
+
+        foreach (var filePath in Directory.GetFiles(tempFolder))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var fileInfo = new FileInfo(filePath);
+            if (fileInfo.LastWriteTimeUtc < threshold)
+            {
+                try
+                {
+                    fileInfo.Delete();
+                    count++;
+                }
+                catch
+                {
+                    // Ignore locked files
+                }
+            }
+        }
+
+        return Task.FromResult(count);
     }
 }

@@ -42,9 +42,10 @@ public class InventoryController : ControllerBase
     [RequirePermission(Permissions.InventoryCreate)]
     public async Task<ActionResult<InventoryItemDto>> CreateInventoryItem(
         [FromBody] CreateInventoryItemRequest request,
+        [FromHeader(Name = "Idempotency-Key")] string? idempotencyKey,
         CancellationToken cancellationToken)
     {
-        var item = await _inventoryService.CreateInventoryItemAsync(request, cancellationToken);
+        var item = await _inventoryService.CreateInventoryItemAsync(request, idempotencyKey, cancellationToken);
         return CreatedAtAction(nameof(GetInventoryItemById), new { id = item.Id }, item);
     }
 
@@ -103,7 +104,7 @@ public class InventoryController : ControllerBase
     }
 
     [HttpPost("upload-file")]
-    [RequirePermission(Permissions.InventoryCreate)]
+    [RequirePermission(Permissions.InventoryCreate, Permissions.InventoryEdit)]
     public async Task<ActionResult<FileUploadResultDto>> UploadInventoryMedia(
         IFormFile file,
         CancellationToken cancellationToken)
@@ -119,8 +120,56 @@ public class InventoryController : ControllerBase
             file.FileName,
             file.ContentType,
             file.Length,
+            isTemporary: true,
             cancellationToken);
 
         return Ok(result);
+    }
+
+    [HttpPost("{id:guid}/media")]
+    [RequirePermission(Permissions.InventoryEdit)]
+    public async Task<ActionResult<InventoryItemMediaDto>> AddMediaToItem(
+        Guid id,
+        IFormFile file,
+        [FromQuery] bool isPrimary,
+        CancellationToken cancellationToken)
+    {
+        if (file == null || file.Length == 0)
+        {
+            return BadRequest(new { message = "No file was provided." });
+        }
+
+        await using var stream = file.OpenReadStream();
+        var result = await _inventoryService.AddMediaToItemAsync(
+            id,
+            stream,
+            file.FileName,
+            file.ContentType,
+            file.Length,
+            isPrimary,
+            cancellationToken);
+
+        return Ok(result);
+    }
+
+    [HttpDelete("{id:guid}/media/{mediaId:guid}")]
+    [RequirePermission(Permissions.InventoryEdit)]
+    public async Task<IActionResult> RemoveMediaFromItem(
+        Guid id,
+        Guid mediaId,
+        CancellationToken cancellationToken)
+    {
+        await _inventoryService.RemoveMediaFromItemAsync(id, mediaId, cancellationToken);
+        return NoContent();
+    }
+
+    [HttpPost("cleanup-temp-media")]
+    [RequirePermission(Permissions.InventoryEdit, Permissions.InventoryCreate)]
+    public async Task<ActionResult<object>> CleanupTempMedia(
+        [FromQuery] int maxAgeHours = 2,
+        CancellationToken cancellationToken = default)
+    {
+        var deletedCount = await _inventoryService.CleanupExpiredTempUploadsAsync(TimeSpan.FromHours(maxAgeHours), cancellationToken);
+        return Ok(new { deletedCount, message = $"Successfully cleaned up {deletedCount} expired temporary files." });
     }
 }

@@ -52,6 +52,9 @@ public class AppDbContext : DbContext, IAppDbContext
     public DbSet<InventoryItemSpecification> InventoryItemSpecifications => Set<InventoryItemSpecification>();
     public DbSet<InventoryItemMedia> InventoryItemMedia => Set<InventoryItemMedia>();
 
+    // Module 5 Hardening: Idempotency
+    public DbSet<IdempotencyRecord> IdempotencyRecords => Set<IdempotencyRecord>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -405,6 +408,20 @@ public class AppDbContext : DbContext, IAppDbContext
             entity.Property(m => m.MediaType).HasConversion<int>().IsRequired();
             entity.Property(m => m.IsPrimary).HasDefaultValue(false);
             entity.Property(m => m.SortOrder).HasDefaultValue(0);
+        });
+
+        // Module 5 Hardening: IdempotencyRecord Configuration
+        modelBuilder.Entity<IdempotencyRecord>(entity =>
+        {
+            entity.ToTable("IdempotencyRecords");
+            entity.HasKey(i => i.Id);
+            entity.HasIndex(i => new { i.UserId, i.Key }).IsUnique();
+            entity.HasIndex(i => i.ExpiresAt);
+
+            entity.Property(i => i.Key).HasMaxLength(100).IsRequired();
+            entity.Property(i => i.Endpoint).HasMaxLength(150).IsRequired();
+            entity.Property(i => i.RequestHash).HasMaxLength(64).IsRequired();
+            entity.Property(i => i.ResponseBody).IsRequired();
         });
     }
 

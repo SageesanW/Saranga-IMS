@@ -91,6 +91,14 @@ export default function NewInventoryItemPage() {
   const [formError, setFormError] = useState<string | null>(null);
   const [createdItem, setCreatedItem] = useState<InventoryItem | null>(null);
 
+  // Module 5 Hardening: Idempotency Key
+  const [idempotencyKey, setIdempotencyKey] = useState<string>(() => {
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+      return crypto.randomUUID();
+    }
+    return 'idemp-' + Date.now() + '-' + Math.random().toString(36).substring(2, 9);
+  });
+
   // Live Net Weight Calculation
   const parsedGross = parseFloat(grossWeight) || 0;
   const parsedStone = parseFloat(stoneWeight) || 0;
@@ -359,7 +367,7 @@ export default function NewInventoryItemPage() {
         media: mediaPayload.length > 0 ? mediaPayload : undefined,
       };
 
-      const result = await inventoryApi.createInventoryItem(payload);
+      const result = await inventoryApi.createInventoryItem(payload, idempotencyKey);
       setCreatedItem(result);
     } catch (err: any) {
       setFormError(err?.message || 'Failed to create inventory item');
@@ -382,6 +390,11 @@ export default function NewInventoryItemPage() {
     setSelectedSpecs([]);
     setMediaList([]);
     setFormError(null);
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+      setIdempotencyKey(crypto.randomUUID());
+    } else {
+      setIdempotencyKey('idemp-' + Date.now() + '-' + Math.random().toString(36).substring(2, 9));
+    }
   };
 
   // Helper Labels for Review

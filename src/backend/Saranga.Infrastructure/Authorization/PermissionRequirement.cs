@@ -4,10 +4,10 @@ namespace Saranga.Infrastructure.Authorization;
 
 public class PermissionRequirement : IAuthorizationRequirement
 {
-    public string Permission { get; }
+    public string[] Permissions { get; }
 
-    public PermissionRequirement(string permission)
+    public PermissionRequirement(params string[] permissions)
     {
-        Permission = permission ?? throw new ArgumentNullException(nameof(permission));
+        Permissions = permissions ?? throw new ArgumentNullException(nameof(permissions));
     }
 }

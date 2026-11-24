@@ -7,11 +7,11 @@ public class RequirePermissionAttribute : AuthorizeAttribute
 {
     public const string PolicyPrefix = "PERMISSION:";
 
-    public RequirePermissionAttribute(string permission)
+    public RequirePermissionAttribute(params string[] permissions)
     {
-        Permission = permission;
-        Policy = $"{PolicyPrefix}{permission}";
+        Permissions = permissions;
+        Policy = $"{PolicyPrefix}{string.Join(",", permissions)}";
     }
 
-    public string Permission { get; }
+    public string[] Permissions { get; }
 }

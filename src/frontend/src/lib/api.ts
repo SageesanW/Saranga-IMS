@@ -527,7 +527,17 @@ export const inventoryApi = {
     isActive?: boolean;
     specifications?: { specificationId: string; specificationOptionId?: string | null; customValue?: string | null }[];
     media?: { fileName: string; storagePath: string; contentType: string; fileSize: number; mediaType?: number; sortOrder?: number; isPrimary?: boolean; }[];
-  }) => apiRequest<InventoryItem>('/inventory', { method: 'POST', body: JSON.stringify(data) }),
+  }, idempotencyKey?: string) => {
+    const headers: Record<string, string> = {};
+    if (idempotencyKey) {
+      headers['Idempotency-Key'] = idempotencyKey;
+    }
+    return apiRequest<InventoryItem>('/inventory', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(data)
+    });
+  },
   updateInventoryItem: (id: string, data: {
     stockLocationId: string;
     name: string;
