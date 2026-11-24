@@ -38,6 +38,14 @@ public class AppDbContext : DbContext, IAppDbContext
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
 
+    // Module 3: Attributes Master
+    public DbSet<Material> Materials => Set<Material>();
+    public DbSet<Category> Categories => Set<Category>();
+    public DbSet<Purity> Purities => Set<Purity>();
+    public DbSet<Specification> Specifications => Set<Specification>();
+    public DbSet<SpecificationOption> SpecificationOptions => Set<SpecificationOption>();
+    public DbSet<StockLocation> StockLocations => Set<StockLocation>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -192,6 +200,97 @@ public class AppDbContext : DbContext, IAppDbContext
             entity.Property(a => a.NewValues).HasColumnType("jsonb");
             entity.Property(a => a.IpAddress).HasMaxLength(50);
             entity.Property(a => a.UserAgent).HasMaxLength(500);
+        });
+
+        // Module 3: Material Configuration
+        modelBuilder.Entity<Material>(entity =>
+        {
+            entity.ToTable("Materials");
+            entity.HasKey(m => m.Id);
+            entity.HasIndex(m => m.Code).IsUnique();
+            entity.Property(m => m.Name).HasMaxLength(100).IsRequired();
+            entity.Property(m => m.Code).HasMaxLength(50).IsRequired();
+            entity.Property(m => m.Description).HasMaxLength(500);
+            entity.Property(m => m.IsActive).HasDefaultValue(true);
+            entity.Property(m => m.SortOrder).HasDefaultValue(0);
+        });
+
+        // Module 3: Category Configuration
+        modelBuilder.Entity<Category>(entity =>
+        {
+            entity.ToTable("Categories");
+            entity.HasKey(c => c.Id);
+            entity.HasIndex(c => c.Code).IsUnique();
+            entity.Property(c => c.Name).HasMaxLength(100).IsRequired();
+            entity.Property(c => c.Code).HasMaxLength(50).IsRequired();
+            entity.Property(c => c.Description).HasMaxLength(500);
+            entity.Property(c => c.IsActive).HasDefaultValue(true);
+            entity.Property(c => c.SortOrder).HasDefaultValue(0);
+        });
+
+        // Module 3: Purity Configuration
+        modelBuilder.Entity<Purity>(entity =>
+        {
+            entity.ToTable("Purities");
+            entity.HasKey(p => p.Id);
+            entity.HasIndex(p => p.Code).IsUnique();
+            entity.Property(p => p.Name).HasMaxLength(50).IsRequired();
+            entity.Property(p => p.Code).HasMaxLength(20).IsRequired();
+            entity.Property(p => p.KaratValue).HasPrecision(5, 2).IsRequired();
+            entity.Property(p => p.PurityPercentage).HasPrecision(5, 2).IsRequired();
+            entity.Property(p => p.Description).HasMaxLength(500);
+            entity.Property(p => p.IsActive).HasDefaultValue(true);
+            entity.Property(p => p.SortOrder).HasDefaultValue(0);
+        });
+
+        // Module 3: Specification Configuration
+        modelBuilder.Entity<Specification>(entity =>
+        {
+            entity.ToTable("Specifications");
+            entity.HasKey(s => s.Id);
+            entity.HasIndex(s => s.Code).IsUnique();
+            entity.Property(s => s.Name).HasMaxLength(100).IsRequired();
+            entity.Property(s => s.Code).HasMaxLength(50).IsRequired();
+            entity.Property(s => s.Description).HasMaxLength(500);
+            entity.Property(s => s.IsActive).HasDefaultValue(true);
+            entity.Property(s => s.SortOrder).HasDefaultValue(0);
+
+            entity.HasMany(s => s.Options)
+                  .WithOne(o => o.Specification)
+                  .HasForeignKey(o => o.SpecificationId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // Module 3: SpecificationOption Configuration
+        modelBuilder.Entity<SpecificationOption>(entity =>
+        {
+            entity.ToTable("SpecificationOptions");
+            entity.HasKey(o => o.Id);
+            entity.HasIndex(o => new { o.SpecificationId, o.Code }).IsUnique();
+            entity.Property(o => o.Value).HasMaxLength(100).IsRequired();
+            entity.Property(o => o.Code).HasMaxLength(50).IsRequired();
+            entity.Property(o => o.Description).HasMaxLength(500);
+            entity.Property(o => o.IsActive).HasDefaultValue(true);
+            entity.Property(o => o.SortOrder).HasDefaultValue(0);
+        });
+
+        // Module 3: StockLocation Configuration (Branch-scoped)
+        modelBuilder.Entity<StockLocation>(entity =>
+        {
+            entity.ToTable("StockLocations");
+            entity.HasKey(l => l.Id);
+            entity.HasIndex(l => new { l.BranchId, l.Code }).IsUnique();
+            entity.Property(l => l.Name).HasMaxLength(100).IsRequired();
+            entity.Property(l => l.Code).HasMaxLength(50).IsRequired();
+            entity.Property(l => l.LocationType).HasMaxLength(50).HasDefaultValue("Display").IsRequired();
+            entity.Property(l => l.Description).HasMaxLength(500);
+            entity.Property(l => l.IsActive).HasDefaultValue(true);
+            entity.Property(l => l.SortOrder).HasDefaultValue(0);
+
+            entity.HasOne(l => l.Branch)
+                  .WithMany(b => b.StockLocations)
+                  .HasForeignKey(l => l.BranchId)
+                  .OnDelete(DeleteBehavior.Restrict);
         });
     }
 

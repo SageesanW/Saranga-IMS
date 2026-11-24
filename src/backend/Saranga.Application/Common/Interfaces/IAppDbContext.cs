@@ -15,5 +15,13 @@ public interface IAppDbContext
     DbSet<RefreshToken> RefreshTokens { get; }
     DbSet<AuditLog> AuditLogs { get; }
 
+    // Module 3: Attributes Master
+    DbSet<Material> Materials { get; }
+    DbSet<Category> Categories { get; }
+    DbSet<Purity> Purities { get; }
+    DbSet<Specification> Specifications { get; }
+    DbSet<SpecificationOption> SpecificationOptions { get; }
+    DbSet<StockLocation> StockLocations { get; }
+
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

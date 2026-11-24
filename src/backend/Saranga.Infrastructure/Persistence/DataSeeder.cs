@@ -179,20 +179,14 @@ public class DataSeeder : IDataSeeder
         };
         AssignPermissionsToRole(SystemRoles.Cashier, cashierPerms);
 
-        // Auditor permissions (Strictly Read-Only across all modules)
+        // Auditor permissions (Strictly compliance, audit logs, and security governance oversight, not internal operational screens)
         var auditorPerms = new[]
         {
+            Permissions.AuditView,
             Permissions.BranchView,
             Permissions.UserView,
             Permissions.RoleView,
-            Permissions.PermissionView,
-            Permissions.AttributeView,
-            Permissions.InventoryView,
-            Permissions.RateView,
-            Permissions.CustomerView,
-            Permissions.PosView,
-            Permissions.CashLedgerView,
-            Permissions.AuditView
+            Permissions.PermissionView
         };
         AssignPermissionsToRole(SystemRoles.Auditor, auditorPerms);
 

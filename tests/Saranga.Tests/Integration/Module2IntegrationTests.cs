@@ -20,7 +20,7 @@ using Xunit.Abstractions;
 
 namespace Saranga.Tests.Integration;
 
-public class Module2IntegrationTests : IClassFixture<WebApplicationFactory<Program>>
+public class Module2IntegrationTests : IClassFixture<WebApplicationFactory<Program>>, IAsyncLifetime
 {
     private readonly WebApplicationFactory<Program> _factory;
     private readonly ITestOutputHelper _output;
@@ -29,6 +29,32 @@ public class Module2IntegrationTests : IClassFixture<WebApplicationFactory<Progr
     {
         _factory = factory;
         _output = output;
+    }
+
+    public async Task InitializeAsync()
+    {
+        await CleanupTestDataAsync();
+    }
+
+    public async Task DisposeAsync()
+    {
+        await CleanupTestDataAsync();
+    }
+
+    private async Task CleanupTestDataAsync()
+    {
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        // Hard-delete test users, refresh tokens, user roles, user branches, and test branches
+        await db.Database.ExecuteSqlRawAsync(@"
+            DELETE FROM ""RefreshTokens"" WHERE ""UserId"" IN (SELECT ""Id"" FROM ""Users"" WHERE ""Username"" IN ('jaffna_manager', 'jaffna_cashier', 'compliance_auditor'));
+            DELETE FROM ""UserRoles"" WHERE ""UserId"" IN (SELECT ""Id"" FROM ""Users"" WHERE ""Username"" IN ('jaffna_manager', 'jaffna_cashier', 'compliance_auditor'));
+            DELETE FROM ""UserBranches"" WHERE ""UserId"" IN (SELECT ""Id"" FROM ""Users"" WHERE ""Username"" IN ('jaffna_manager', 'jaffna_cashier', 'compliance_auditor'));
+            DELETE FROM ""UserBranches"" WHERE ""BranchId"" IN (SELECT ""Id"" FROM ""Branches"" WHERE ""Code"" IN ('JAF-01', 'CAN-01', 'COL-01'));
+            DELETE FROM ""Users"" WHERE ""Username"" IN ('jaffna_manager', 'jaffna_cashier', 'compliance_auditor');
+            DELETE FROM ""Branches"" WHERE ""Code"" IN ('JAF-01', 'CAN-01', 'COL-01');
+        ");
     }
 
     private HttpClient CreateClientWithCookieHandler()

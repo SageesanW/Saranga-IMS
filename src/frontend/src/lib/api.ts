@@ -231,3 +231,156 @@ export const roleApi = {
 export const permissionApi = {
   getPermissions: () => apiRequest<Permission[]>('/permissions'),
 };
+
+// Module 3: Attributes Master Types
+export interface Material {
+  id: string;
+  name: string;
+  code: string;
+  description: string;
+  isActive: boolean;
+  sortOrder: number;
+  createdAt: string;
+}
+
+export interface Category {
+  id: string;
+  name: string;
+  code: string;
+  description: string;
+  isActive: boolean;
+  sortOrder: number;
+  createdAt: string;
+}
+
+export interface Purity {
+  id: string;
+  name: string;
+  karatValue: number;
+  purityPercentage: number;
+  code: string;
+  description: string;
+  isActive: boolean;
+  sortOrder: number;
+  createdAt: string;
+}
+
+export interface SpecificationOption {
+  id: string;
+  specificationId: string;
+  value: string;
+  code: string;
+  description: string;
+  isActive: boolean;
+  sortOrder: number;
+}
+
+export interface Specification {
+  id: string;
+  name: string;
+  code: string;
+  description: string;
+  isActive: boolean;
+  sortOrder: number;
+  options: SpecificationOption[];
+  createdAt: string;
+}
+
+export interface StockLocation {
+  id: string;
+  branchId: string;
+  branchCode: string;
+  branchName: string;
+  name: string;
+  code: string;
+  locationType: string;
+  description: string;
+  isActive: boolean;
+  sortOrder: number;
+  createdAt: string;
+}
+
+export interface MakingChargeMethod {
+  id: number;
+  name: string;
+  code: string;
+  description: string;
+  isDefault: boolean;
+}
+
+// Module 3 API Helpers
+export const materialApi = {
+  getMaterials: (isActive?: boolean) => {
+    const q = isActive !== undefined ? `?isActive=${isActive}` : '';
+    return apiRequest<Material[]>(`/materials${q}`);
+  },
+  getMaterialById: (id: string) => apiRequest<Material>(`/materials/${id}`),
+  createMaterial: (data: { name: string; code: string; description?: string; isActive?: boolean; sortOrder?: number }) =>
+    apiRequest<Material>('/materials', { method: 'POST', body: JSON.stringify(data) }),
+  updateMaterial: (id: string, data: { name: string; description?: string; isActive: boolean; sortOrder: number }) =>
+    apiRequest<Material>(`/materials/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  toggleStatus: (id: string) => apiRequest<Material>(`/materials/${id}/status`, { method: 'PATCH' }),
+};
+
+export const categoryApi = {
+  getCategories: (isActive?: boolean) => {
+    const q = isActive !== undefined ? `?isActive=${isActive}` : '';
+    return apiRequest<Category[]>(`/categories${q}`);
+  },
+  getCategoryById: (id: string) => apiRequest<Category>(`/categories/${id}`),
+  createCategory: (data: { name: string; code: string; description?: string; isActive?: boolean; sortOrder?: number }) =>
+    apiRequest<Category>('/categories', { method: 'POST', body: JSON.stringify(data) }),
+  updateCategory: (id: string, data: { name: string; description?: string; isActive: boolean; sortOrder: number }) =>
+    apiRequest<Category>(`/categories/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  toggleStatus: (id: string) => apiRequest<Category>(`/categories/${id}/status`, { method: 'PATCH' }),
+};
+
+export const purityApi = {
+  getPurities: (isActive?: boolean) => {
+    const q = isActive !== undefined ? `?isActive=${isActive}` : '';
+    return apiRequest<Purity[]>(`/purities${q}`);
+  },
+  getPurityById: (id: string) => apiRequest<Purity>(`/purities/${id}`),
+  createPurity: (data: { name: string; karatValue: number; purityPercentage: number; code: string; description?: string; isActive?: boolean; sortOrder?: number }) =>
+    apiRequest<Purity>('/purities', { method: 'POST', body: JSON.stringify(data) }),
+  updatePurity: (id: string, data: { name: string; karatValue: number; purityPercentage: number; description?: string; isActive: boolean; sortOrder: number }) =>
+    apiRequest<Purity>(`/purities/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  toggleStatus: (id: string) => apiRequest<Purity>(`/purities/${id}/status`, { method: 'PATCH' }),
+};
+
+export const specificationApi = {
+  getSpecifications: (isActive?: boolean) => {
+    const q = isActive !== undefined ? `?isActive=${isActive}` : '';
+    return apiRequest<Specification[]>(`/specifications${q}`);
+  },
+  getSpecificationById: (id: string) => apiRequest<Specification>(`/specifications/${id}`),
+  createSpecification: (data: { name: string; code: string; description?: string; isActive?: boolean; sortOrder?: number }) =>
+    apiRequest<Specification>('/specifications', { method: 'POST', body: JSON.stringify(data) }),
+  updateSpecification: (id: string, data: { name: string; description?: string; isActive: boolean; sortOrder: number }) =>
+    apiRequest<Specification>(`/specifications/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  toggleStatus: (id: string) => apiRequest<Specification>(`/specifications/${id}/status`, { method: 'PATCH' }),
+  addOption: (specificationId: string, data: { value: string; code: string; description?: string; isActive?: boolean; sortOrder?: number }) =>
+    apiRequest<SpecificationOption>(`/specifications/${specificationId}/options`, { method: 'POST', body: JSON.stringify(data) }),
+  toggleOptionStatus: (specificationId: string, optionId: string) =>
+    apiRequest<SpecificationOption>(`/specifications/${specificationId}/options/${optionId}/status`, { method: 'PATCH' }),
+};
+
+export const stockLocationApi = {
+  getStockLocations: (branchId?: string, isActive?: boolean) => {
+    const q = new URLSearchParams();
+    if (branchId) q.append('branchId', branchId);
+    if (isActive !== undefined) q.append('isActive', String(isActive));
+    const qs = q.toString();
+    return apiRequest<StockLocation[]>(`/stock-locations${qs ? `?${qs}` : ''}`);
+  },
+  getStockLocationById: (id: string) => apiRequest<StockLocation>(`/stock-locations/${id}`),
+  createStockLocation: (data: { branchId: string; name: string; code: string; locationType?: string; description?: string; isActive?: boolean; sortOrder?: number }) =>
+    apiRequest<StockLocation>('/stock-locations', { method: 'POST', body: JSON.stringify(data) }),
+  updateStockLocation: (id: string, data: { name: string; locationType?: string; description?: string; isActive: boolean; sortOrder: number }) =>
+    apiRequest<StockLocation>(`/stock-locations/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  toggleStatus: (id: string) => apiRequest<StockLocation>(`/stock-locations/${id}/status`, { method: 'PATCH' }),
+};
+
+export const makingChargeMethodApi = {
+  getMakingChargeMethods: () => apiRequest<MakingChargeMethod[]>('/making-charge-methods'),
+};

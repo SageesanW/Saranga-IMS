@@ -27,8 +27,12 @@ public static class Permissions
     public const string PermissionView = "PERMISSION_VIEW";
 
     // Module: Attributes Master
-    public const string AttributeView = "ATTRIBUTE_VIEW";
-    public const string AttributeManage = "ATTRIBUTE_MANAGE";
+    public const string AttributesView = "ATTRIBUTES_VIEW";
+    public const string AttributesCreate = "ATTRIBUTES_CREATE";
+    public const string AttributesEdit = "ATTRIBUTES_EDIT";
+    public const string AttributesActivateDeactivate = "ATTRIBUTES_ACTIVATE_DEACTIVATE";
+    public const string AttributeView = AttributesView;
+    public const string AttributeManage = AttributesEdit;
 
     // Module: Inventory
     public const string InventoryView = "INVENTORY_VIEW";
@@ -99,8 +103,10 @@ public static class Permissions
         new(PermissionView, "View system permission catalog", "Administration"),
 
         // Attributes Master
-        new(AttributeView, "View jewellery attribute metadata", "Attributes"),
-        new(AttributeManage, "Create, edit, and manage attributes", "Attributes"),
+        new(AttributesView, "View jewellery attribute metadata and lookup catalogs", "Attributes"),
+        new(AttributesCreate, "Create new materials, categories, purities, specifications, and locations", "Attributes"),
+        new(AttributesEdit, "Edit attribute details and definitions", "Attributes"),
+        new(AttributesActivateDeactivate, "Activate or deactivate jewellery attributes and locations", "Attributes"),
 
         // Inventory
         new(InventoryView, "View inventory items and stock levels", "Inventory"),

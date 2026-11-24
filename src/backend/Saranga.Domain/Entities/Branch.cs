@@ -14,4 +14,5 @@ public class Branch : BaseEntity
     // Navigation properties
     public ICollection<User> DefaultUsers { get; set; } = new List<User>();
     public ICollection<UserBranch> UserBranches { get; set; } = new List<UserBranch>();
+    public ICollection<StockLocation> StockLocations { get; set; } = new List<StockLocation>();
 }
