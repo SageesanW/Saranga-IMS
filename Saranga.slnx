@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/" />
+  <Folder Name="/src/backend/">
+    <Project Path="src/backend/Saranga.Api/Saranga.Api.csproj" />
+    <Project Path="src/backend/Saranga.Application/Saranga.Application.csproj" />
+    <Project Path="src/backend/Saranga.Domain/Saranga.Domain.csproj" />
+    <Project Path="src/backend/Saranga.Infrastructure/Saranga.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Saranga.Tests/Saranga.Tests.csproj" />
+  </Folder>
+</Solution>

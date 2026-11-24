@@ -1,0 +1,16 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --royal-green: #0D3826;
+  --royal-green-light: #1B6543;
+  --royal-gold: #D4AF37;
+  --royal-gold-light: #F5E7B5;
+}
+
+body {
+  color: #1a202c;
+  background: #f8faf9;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+}
