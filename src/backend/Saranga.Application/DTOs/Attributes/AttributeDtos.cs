@@ -96,6 +96,7 @@ public record SpecificationDto(
     string Name,
     string Code,
     string Description,
+    string InputType,
     bool IsActive,
     int SortOrder,
     List<SpecificationOptionDto> Options,
@@ -107,12 +108,14 @@ public record CreateSpecificationRequest(
     string Code,
     string Description,
     bool IsActive = true,
-    int SortOrder = 0
+    int SortOrder = 0,
+    string InputType = "PREDEFINED"
 );
 
 public record UpdateSpecificationRequest(
     string Name,
     string Description,
+    string? InputType,
     bool IsActive,
     int SortOrder
 );

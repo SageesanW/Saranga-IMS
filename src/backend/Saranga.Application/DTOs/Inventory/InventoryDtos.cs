@@ -110,6 +110,11 @@ public record UpdateInventoryItemRequest(
     List<CreateInventoryItemSpecificationRequest>? Specifications = null
 );
 
+public record AdminStatusCorrectionRequest(
+    int TargetStatus,
+    string Reason
+);
+
 public record InventoryLookupDto(
     Guid Id,
     Guid BranchId,

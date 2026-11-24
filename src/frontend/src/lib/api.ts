@@ -280,6 +280,7 @@ export interface Specification {
   name: string;
   code: string;
   description: string;
+  inputType: string;
   isActive: boolean;
   sortOrder: number;
   options: SpecificationOption[];
@@ -541,7 +542,13 @@ export const inventoryApi = {
     isActive: boolean;
     specifications?: { specificationId: string; specificationOptionId?: string | null; customValue?: string | null }[];
   }) => apiRequest<InventoryItem>(`/inventory/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-  toggleStatus: (id: string) => apiRequest<InventoryItem>(`/inventory/${id}/status`, { method: 'PATCH' }),
+  toggleActive: (id: string) => apiRequest<InventoryItem>(`/inventory/${id}/toggle-active`, { method: 'PATCH' }),
+  toggleStatus: (id: string) => apiRequest<InventoryItem>(`/inventory/${id}/toggle-active`, { method: 'PATCH' }),
+  adminStatusCorrection: (id: string, targetStatus: number, reason: string) =>
+    apiRequest<InventoryItem>(`/inventory/${id}/admin-status-correction`, {
+      method: 'POST',
+      body: JSON.stringify({ targetStatus, reason }),
+    }),
   lookupByBarcode: (barcode: string) => apiRequest<InventoryLookup>(`/inventory/lookup/barcode/${encodeURIComponent(barcode)}`),
   lookupByTag: (tagNumber: string) => apiRequest<InventoryLookup>(`/inventory/lookup/tag/${encodeURIComponent(tagNumber)}`),
 };

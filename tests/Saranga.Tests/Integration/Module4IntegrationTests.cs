@@ -348,7 +348,7 @@ public class Module4IntegrationTests : IClassFixture<WebApplicationFactory<Progr
         // =========================================================================
         // PART 6: PERMITTED EDITING, STATUS TOGGLE & AUDITING
         // =========================================================================
-        _output.WriteLine("=== PART 6: Permitted Editing & Status Toggle ===");
+        _output.WriteLine("=== PART 6: Permitted Editing, Tag Immutability & Status Management ===");
 
         var updateReq = new UpdateInventoryItemRequest(
             StockLocationId: loc1.Id,
@@ -373,8 +373,102 @@ public class Module4IntegrationTests : IClassFixture<WebApplicationFactory<Progr
         Assert.Equal("Test 22K Traditional Ring - Refined", updatedItem.Name);
         Assert.Equal(11.5000m, updatedItem.NetWeight);
 
+        // Verification 1: Tag and Barcode Immutability
+        Assert.Equal(createdItem.TagNumber, updatedItem.TagNumber);
+        Assert.Equal(createdItem.Barcode, updatedItem.Barcode);
+        _output.WriteLine("Verified: TagNumber and Barcode remain strictly immutable after updates.");
+
+        // Verification 2: Specification InputType Enforcement (PREDEFINED rejects CustomValue)
+        var invalidSpecReq = new CreateInventoryItemRequest(
+            BranchId: b1.Id,
+            StockLocationId: loc1.Id,
+            Name: "Invalid Spec Item",
+            ItemCode: "TEST_M4_INV_SPEC_ERR",
+            TagNumber: null,
+            Barcode: null,
+            MaterialId: mat.Id,
+            CategoryId: cat.Id,
+            PurityId: pur.Id,
+            GrossWeight: 5.0m,
+            StoneWeight: 0m,
+            Specifications: new List<CreateInventoryItemSpecificationRequest>
+            {
+                new(spec.Id, opt.Id, "Unallowed Custom Value on Predefined Spec")
+            }
+        );
+        var invalidSpecRes = await ownerClient.PostAsJsonAsync("/api/inventory", invalidSpecReq);
+        Assert.Equal(HttpStatusCode.BadRequest, invalidSpecRes.StatusCode);
+        _output.WriteLine("Verified: CustomValue rejected for PREDEFINED specification.");
+
+        // Verification 3: Administrative Status Correction Authorization & Validation
+        // Cashier without INVENTORY_STATUS_OVERRIDE must be rejected
+        var cashierCorrectionRes = await cashierClient.PostAsJsonAsync(
+            $"/api/inventory/{createdItem.Id}/admin-status-correction",
+            new AdminStatusCorrectionRequest(2, "Unauthorized attempt"));
+        Assert.Equal(HttpStatusCode.Forbidden, cashierCorrectionRes.StatusCode);
+
+        // Owner with empty reason must be rejected
+        var emptyReasonRes = await ownerClient.PostAsJsonAsync(
+            $"/api/inventory/{createdItem.Id}/admin-status-correction",
+            new AdminStatusCorrectionRequest(2, ""));
+        Assert.Equal(HttpStatusCode.BadRequest, emptyReasonRes.StatusCode);
+
+        // Marking SOLD via admin correction must be rejected (SOLD reserved strictly for POS finalization)
+        var soldCorrectionRes = await ownerClient.PostAsJsonAsync(
+            $"/api/inventory/{createdItem.Id}/admin-status-correction",
+            new AdminStatusCorrectionRequest(3, "Attempting to casually mark SOLD"));
+        Assert.Equal(HttpStatusCode.BadRequest, soldCorrectionRes.StatusCode);
+
+        // Valid administrative correction to RESERVED
+        var validCorrectionRes = await ownerClient.PostAsJsonAsync(
+            $"/api/inventory/{createdItem.Id}/admin-status-correction",
+            new AdminStatusCorrectionRequest(2, "Administrative VIP hold for customer visit"));
+        Assert.Equal(HttpStatusCode.OK, validCorrectionRes.StatusCode);
+        var reservedItem = await validCorrectionRes.Content.ReadFromJsonAsync<InventoryItemDto>();
+        Assert.Equal(2, reservedItem!.Status);
+
+        // Valid administrative correction back to AVAILABLE
+        var restoreCorrectionRes = await ownerClient.PostAsJsonAsync(
+            $"/api/inventory/{createdItem.Id}/admin-status-correction",
+            new AdminStatusCorrectionRequest(1, "Customer visit concluded, returned to open stock"));
+        Assert.Equal(HttpStatusCode.OK, restoreCorrectionRes.StatusCode);
+        var availableItem = await restoreCorrectionRes.Content.ReadFromJsonAsync<InventoryItemDto>();
+        Assert.Equal(1, availableItem!.Status);
+
+        // Verification 4: Sold Item Immutability
+        // Simulate item sold by POS in database
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            await db.Database.ExecuteSqlRawAsync(
+                @"UPDATE ""InventoryItems"" SET ""Status"" = 3 WHERE ""Id"" = {0}", createdItem.Id);
+        }
+
+        // Sold items cannot be edited
+        var soldEditRes = await ownerClient.PutAsJsonAsync($"/api/inventory/{createdItem.Id}", updateReq);
+        Assert.Equal(HttpStatusCode.BadRequest, soldEditRes.StatusCode);
+
+        // Sold items cannot have status overridden
+        var soldOverrideRes = await ownerClient.PostAsJsonAsync(
+            $"/api/inventory/{createdItem.Id}/admin-status-correction",
+            new AdminStatusCorrectionRequest(1, "Attempting to un-sell sold item"));
+        Assert.Equal(HttpStatusCode.BadRequest, soldOverrideRes.StatusCode);
+
+        // Sold items cannot be deactivated
+        var soldDeactivateRes = await ownerClient.PatchAsync($"/api/inventory/{createdItem.Id}/toggle-active", null);
+        Assert.Equal(HttpStatusCode.BadRequest, soldDeactivateRes.StatusCode);
+        _output.WriteLine("Verified: SOLD status immutability strictly enforced across edit, override, and active toggles.");
+
+        // Reset to Available for cleanup
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            await db.Database.ExecuteSqlRawAsync(
+                @"UPDATE ""InventoryItems"" SET ""Status"" = 1 WHERE ""Id"" = {0}", createdItem.Id);
+        }
+
         // Toggle active status
-        var toggleRes = await ownerClient.PatchAsync($"/api/inventory/{createdItem.Id}/status", null);
+        var toggleRes = await ownerClient.PatchAsync($"/api/inventory/{createdItem.Id}/toggle-active", null);
         Assert.Equal(HttpStatusCode.OK, toggleRes.StatusCode);
         var toggledItem = await toggleRes.Content.ReadFromJsonAsync<InventoryItemDto>();
         Assert.False(toggledItem!.IsActive);
@@ -393,9 +487,10 @@ public class Module4IntegrationTests : IClassFixture<WebApplicationFactory<Progr
                 .Where(a => a.EntityName == "InventoryItem" && a.EntityId == createdItem.Id.ToString())
                 .ToListAsync();
 
-            Assert.True(audits.Count >= 2); // CREATE and UPDATE/STATUS
+            Assert.True(audits.Count >= 3); // CREATE, UPDATE, ADMIN_STATUS_CORRECTION, ACTIVATED/DEACTIVATED
             Assert.Contains(audits, a => a.Action == "CREATE");
             Assert.Contains(audits, a => a.Action == "UPDATE");
+            Assert.Contains(audits, a => a.Action == "ADMIN_STATUS_CORRECTION");
             _output.WriteLine($"Verified: {audits.Count} audit records created for InventoryItem.");
         }
     }

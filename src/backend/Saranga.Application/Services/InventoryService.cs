@@ -16,7 +16,9 @@ public interface IInventoryService
     Task<InventoryItemDto> GetInventoryItemByIdAsync(Guid id, CancellationToken cancellationToken = default);
     Task<InventoryItemDto> CreateInventoryItemAsync(CreateInventoryItemRequest request, CancellationToken cancellationToken = default);
     Task<InventoryItemDto> UpdateInventoryItemAsync(Guid id, UpdateInventoryItemRequest request, CancellationToken cancellationToken = default);
+    Task<InventoryItemDto> ToggleInventoryItemActiveAsync(Guid id, CancellationToken cancellationToken = default);
     Task<InventoryItemDto> ToggleInventoryItemStatusAsync(Guid id, CancellationToken cancellationToken = default);
+    Task<InventoryItemDto> AdminStatusCorrectionAsync(Guid id, AdminStatusCorrectionRequest request, CancellationToken cancellationToken = default);
     Task<InventoryLookupDto> LookupByBarcodeAsync(string barcode, CancellationToken cancellationToken = default);
     Task<InventoryLookupDto> LookupByTagAsync(string tagNumber, CancellationToken cancellationToken = default);
 }
@@ -319,31 +321,8 @@ public class InventoryService : IInventoryService
         {
             foreach (var specReq in request.Specifications)
             {
-                var spec = await _context.Specifications.FirstOrDefaultAsync(s => s.Id == specReq.SpecificationId, cancellationToken);
-                if (spec == null || !spec.IsActive)
-                {
-                    throw new BusinessRuleException($"Specification with ID '{specReq.SpecificationId}' is invalid or inactive.");
-                }
-
-                if (specReq.SpecificationOptionId.HasValue)
-                {
-                    var opt = await _context.SpecificationOptions.FirstOrDefaultAsync(o =>
-                        o.Id == specReq.SpecificationOptionId.Value && o.SpecificationId == specReq.SpecificationId, cancellationToken);
-                    if (opt == null || !opt.IsActive)
-                    {
-                        throw new BusinessRuleException($"Specification option is invalid or inactive for specification '{spec.Name}'.");
-                    }
-                }
-
-                item.Specifications.Add(new InventoryItemSpecification
-                {
-                    InventoryItemId = item.Id,
-                    SpecificationId = specReq.SpecificationId,
-                    SpecificationOptionId = specReq.SpecificationOptionId,
-                    CustomValue = specReq.CustomValue?.Trim(),
-                    CreatedAt = DateTimeOffset.UtcNow,
-                    CreatedBy = _currentUserService.UserId
-                });
+                var itemSpec = await ValidateAndCreateItemSpecificationAsync(item.Id, specReq, cancellationToken);
+                item.Specifications.Add(itemSpec);
             }
         }
 
@@ -483,15 +462,8 @@ public class InventoryService : IInventoryService
 
             foreach (var specReq in request.Specifications)
             {
-                item.Specifications.Add(new InventoryItemSpecification
-                {
-                    InventoryItemId = item.Id,
-                    SpecificationId = specReq.SpecificationId,
-                    SpecificationOptionId = specReq.SpecificationOptionId,
-                    CustomValue = specReq.CustomValue?.Trim(),
-                    CreatedAt = DateTimeOffset.UtcNow,
-                    CreatedBy = _currentUserService.UserId
-                });
+                var itemSpec = await ValidateAndCreateItemSpecificationAsync(item.Id, specReq, cancellationToken);
+                item.Specifications.Add(itemSpec);
             }
         }
 
@@ -513,7 +485,7 @@ public class InventoryService : IInventoryService
         return await GetInventoryItemByIdAsync(item.Id, cancellationToken);
     }
 
-    public async Task<InventoryItemDto> ToggleInventoryItemStatusAsync(Guid id, CancellationToken cancellationToken = default)
+    public async Task<InventoryItemDto> ToggleInventoryItemActiveAsync(Guid id, CancellationToken cancellationToken = default)
     {
         var item = await _context.InventoryItems.FirstOrDefaultAsync(i => i.Id == id, cancellationToken);
         if (item == null)
@@ -534,6 +506,67 @@ public class InventoryService : IInventoryService
         item.UpdatedBy = _currentUserService.UserId;
 
         RecordAudit("InventoryItem", item.Id, item.IsActive ? "ACTIVATED" : "DEACTIVATED", new { IsActive = prev }, new { item.IsActive }, item.BranchId);
+
+        await _context.SaveChangesAsync(cancellationToken);
+
+        return await GetInventoryItemByIdAsync(item.Id, cancellationToken);
+    }
+
+    public Task<InventoryItemDto> ToggleInventoryItemStatusAsync(Guid id, CancellationToken cancellationToken = default)
+        => ToggleInventoryItemActiveAsync(id, cancellationToken);
+
+    public async Task<InventoryItemDto> AdminStatusCorrectionAsync(Guid id, AdminStatusCorrectionRequest request, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(request.Reason) || request.Reason.Trim().Length < 5)
+        {
+            throw new BusinessRuleException("A mandatory audit reason (minimum 5 characters) is required for administrative status corrections.");
+        }
+
+        var item = await _context.InventoryItems.FirstOrDefaultAsync(i => i.Id == id, cancellationToken);
+        if (item == null)
+        {
+            throw new NotFoundException("InventoryItem", id);
+        }
+
+        await _branchAuthService.EnsureBranchAccessAsync(item.BranchId, cancellationToken);
+
+        // Immutable SOLD guard
+        if (item.Status == InventoryStatus.Sold)
+        {
+            throw new BusinessRuleException("Sold inventory items are locked and immutable. Reversals must be processed through authorized POS invoice reversal workflows.");
+        }
+
+        // Disallow setting SOLD directly via admin correction
+        if (request.TargetStatus == (int)InventoryStatus.Sold)
+        {
+            throw new BusinessRuleException("Inventory items cannot be marked SOLD through administrative correction. Sold status is strictly controlled by POS and invoice finalization.");
+        }
+
+        if (!Enum.IsDefined(typeof(InventoryStatus), request.TargetStatus))
+        {
+            throw new BusinessRuleException("Invalid target inventory status.");
+        }
+
+        var targetStatusEnum = (InventoryStatus)request.TargetStatus;
+        if (targetStatusEnum != InventoryStatus.Available && targetStatusEnum != InventoryStatus.Reserved)
+        {
+            throw new BusinessRuleException("Administrative status correction can only transition between Available and Reserved.");
+        }
+
+        if (item.Status == targetStatusEnum)
+        {
+            throw new BusinessRuleException($"Item is already in status '{targetStatusEnum}'.");
+        }
+
+        var prevStatus = item.Status;
+        item.Status = targetStatusEnum;
+        item.UpdatedAt = DateTimeOffset.UtcNow;
+        item.UpdatedBy = _currentUserService.UserId;
+
+        RecordAudit("InventoryItem", item.Id, "ADMIN_STATUS_CORRECTION",
+            new { Status = prevStatus.ToString() },
+            new { Status = item.Status.ToString(), Reason = request.Reason.Trim() },
+            item.BranchId);
 
         await _context.SaveChangesAsync(cancellationToken);
 
@@ -701,5 +734,75 @@ public class InventoryService : IInventoryService
             (int)i.MakingChargeMethod,
             i.MakingChargeValue
         );
+    }
+
+    private async Task<InventoryItemSpecification> ValidateAndCreateItemSpecificationAsync(
+        Guid inventoryItemId,
+        CreateInventoryItemSpecificationRequest specReq,
+        CancellationToken cancellationToken)
+    {
+        var spec = await _context.Specifications
+            .Include(s => s.Options)
+            .FirstOrDefaultAsync(s => s.Id == specReq.SpecificationId, cancellationToken);
+
+        if (spec == null || !spec.IsActive)
+        {
+            throw new BusinessRuleException($"Specification with ID '{specReq.SpecificationId}' is invalid or inactive.");
+        }
+
+        var inputType = string.IsNullOrWhiteSpace(spec.InputType) ? SpecificationInputTypes.Predefined : spec.InputType.Trim().ToUpperInvariant();
+
+        if (inputType == SpecificationInputTypes.Predefined)
+        {
+            if (!specReq.SpecificationOptionId.HasValue)
+            {
+                throw new BusinessRuleException($"Specification '{spec.Name}' requires a predefined option to be selected.");
+            }
+            if (!string.IsNullOrWhiteSpace(specReq.CustomValue))
+            {
+                throw new BusinessRuleException($"Specification '{spec.Name}' uses predefined options only; CustomValue is disallowed.");
+            }
+            var opt = spec.Options.FirstOrDefault(o => o.Id == specReq.SpecificationOptionId.Value);
+            if (opt == null || !opt.IsActive)
+            {
+                throw new BusinessRuleException($"Specification option is invalid or inactive for specification '{spec.Name}'.");
+            }
+        }
+        else if (inputType == SpecificationInputTypes.FreeText)
+        {
+            if (specReq.SpecificationOptionId.HasValue)
+            {
+                throw new BusinessRuleException($"Specification '{spec.Name}' is configured for free-text only; selecting a predefined option is disallowed.");
+            }
+            if (string.IsNullOrWhiteSpace(specReq.CustomValue))
+            {
+                throw new BusinessRuleException($"Specification '{spec.Name}' requires a custom value.");
+            }
+        }
+        else if (inputType == SpecificationInputTypes.Hybrid)
+        {
+            if (!specReq.SpecificationOptionId.HasValue && string.IsNullOrWhiteSpace(specReq.CustomValue))
+            {
+                throw new BusinessRuleException($"Specification '{spec.Name}' requires either a predefined option or a custom value.");
+            }
+            if (specReq.SpecificationOptionId.HasValue)
+            {
+                var opt = spec.Options.FirstOrDefault(o => o.Id == specReq.SpecificationOptionId.Value);
+                if (opt == null || !opt.IsActive)
+                {
+                    throw new BusinessRuleException($"Specification option is invalid or inactive for specification '{spec.Name}'.");
+                }
+            }
+        }
+
+        return new InventoryItemSpecification
+        {
+            InventoryItemId = inventoryItemId,
+            SpecificationId = specReq.SpecificationId,
+            SpecificationOptionId = specReq.SpecificationOptionId,
+            CustomValue = specReq.CustomValue?.Trim(),
+            CreatedAt = DateTimeOffset.UtcNow,
+            CreatedBy = _currentUserService.UserId
+        };
     }
 }

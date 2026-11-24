@@ -258,6 +258,7 @@ public class AppDbContext : DbContext, IAppDbContext
             entity.Property(s => s.Name).HasMaxLength(100).IsRequired();
             entity.Property(s => s.Code).HasMaxLength(50).IsRequired();
             entity.Property(s => s.Description).HasMaxLength(500);
+            entity.Property(s => s.InputType).HasMaxLength(30).IsRequired().HasDefaultValue("PREDEFINED");
             entity.Property(s => s.IsActive).HasDefaultValue(true);
             entity.Property(s => s.SortOrder).HasDefaultValue(0);
 

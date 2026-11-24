@@ -59,11 +59,30 @@ public class InventoryController : ControllerBase
         return Ok(item);
     }
 
+    [HttpPatch("{id:guid}/toggle-active")]
+    [RequirePermission(Permissions.InventoryEdit)]
+    public async Task<ActionResult<InventoryItemDto>> ToggleInventoryItemActive(Guid id, CancellationToken cancellationToken)
+    {
+        var item = await _inventoryService.ToggleInventoryItemActiveAsync(id, cancellationToken);
+        return Ok(item);
+    }
+
     [HttpPatch("{id:guid}/status")]
     [RequirePermission(Permissions.InventoryEdit)]
     public async Task<ActionResult<InventoryItemDto>> ToggleInventoryItemStatus(Guid id, CancellationToken cancellationToken)
     {
-        var item = await _inventoryService.ToggleInventoryItemStatusAsync(id, cancellationToken);
+        var item = await _inventoryService.ToggleInventoryItemActiveAsync(id, cancellationToken);
+        return Ok(item);
+    }
+
+    [HttpPost("{id:guid}/admin-status-correction")]
+    [RequirePermission(Permissions.InventoryStatusOverride)]
+    public async Task<ActionResult<InventoryItemDto>> AdminStatusCorrection(
+        Guid id,
+        [FromBody] AdminStatusCorrectionRequest request,
+        CancellationToken cancellationToken)
+    {
+        var item = await _inventoryService.AdminStatusCorrectionAsync(id, request, cancellationToken);
         return Ok(item);
     }
 

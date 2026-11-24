@@ -38,6 +38,7 @@ public static class Permissions
     public const string InventoryView = "INVENTORY_VIEW";
     public const string InventoryCreate = "INVENTORY_CREATE";
     public const string InventoryEdit = "INVENTORY_EDIT";
+    public const string InventoryStatusOverride = "INVENTORY_STATUS_OVERRIDE";
     public const string InventoryDelete = "INVENTORY_DELETE";
     public const string InventoryBulkImport = "INVENTORY_BULK_IMPORT";
     public const string InventoryCountManage = "INVENTORY_COUNT_MANAGE";
@@ -112,6 +113,7 @@ public static class Permissions
         new(InventoryView, "View inventory items and stock levels", "Inventory"),
         new(InventoryCreate, "Add single items to inventory", "Inventory"),
         new(InventoryEdit, "Edit item specifications and pricing", "Inventory"),
+        new(InventoryStatusOverride, "Administrative status correction between Available and Reserved with mandatory audit reason", "Inventory"),
         new(InventoryDelete, "Delete or archive inventory records", "Inventory"),
         new(InventoryBulkImport, "Import inventory via CSV/Excel", "Inventory"),
         new(InventoryCountManage, "Initiate and manage inventory stock counts", "Inventory"),

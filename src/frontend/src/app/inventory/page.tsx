@@ -93,7 +93,7 @@ export default function InventoryPage() {
   const [formMakingChargeValue, setFormMakingChargeValue] = useState('0.00');
   const [formDescription, setFormDescription] = useState('');
   const [formIsActive, setFormIsActive] = useState(true);
-  const [formSelectedSpecs, setFormSelectedSpecs] = useState<{ specificationId: string; specificationOptionId: string; customValue?: string }[]>([]);
+  const [formSelectedSpecs, setFormSelectedSpecs] = useState<{ specificationId: string; specificationOptionId?: string; customValue?: string }[]>([]);
 
   // Computed net weight
   const computedNetWeight = (
@@ -277,10 +277,10 @@ export default function InventoryPage() {
       if (isNaN(pieces) || pieces <= 0) throw new Error('Piece count must be at least 1.');
       if (isNaN(mcValue) || mcValue < 0) throw new Error('Making charge value must be non-negative.');
 
-      const specsPayload = formSelectedSpecs.filter(s => s.specificationOptionId).map(s => ({
+      const specsPayload = formSelectedSpecs.filter(s => s.specificationOptionId || s.customValue).map(s => ({
         specificationId: s.specificationId,
-        specificationOptionId: s.specificationOptionId,
-        customValue: s.customValue,
+        specificationOptionId: s.specificationOptionId || undefined,
+        customValue: s.customValue || undefined,
       }));
 
       if (editingItem) {
@@ -334,11 +334,11 @@ export default function InventoryPage() {
   // Toggle active/inactive
   const handleToggleStatus = async (item: InventoryItem) => {
     try {
-      await inventoryApi.toggleStatus(item.id);
-      setSuccess(`Status changed for ${item.name} (${item.tagNumber})`);
+      await inventoryApi.toggleActive(item.id);
+      setSuccess(`Active visibility updated for ${item.name} (${item.tagNumber})`);
       loadInventory(currentPage);
     } catch (err: any) {
-      setError(err?.message || 'Failed to toggle item status');
+      setError(err?.message || 'Failed to toggle active status');
     }
   };
 
@@ -1056,28 +1056,82 @@ export default function InventoryPage() {
                     <div className="grid grid-cols-2 gap-3">
                       {specifications.map((spec) => {
                         const currentSelection = formSelectedSpecs.find((s) => s.specificationId === spec.id);
+                        const isFreeText = spec.inputType === 'FREE_TEXT';
+                        const isHybrid = spec.inputType === 'HYBRID';
+
                         return (
-                          <div key={spec.id} className="p-2 border rounded-lg bg-gray-50">
-                            <label className="block font-semibold text-gray-800 text-[11px] mb-1">{spec.name}</label>
-                            <select
-                              value={currentSelection?.specificationOptionId || ''}
-                              onChange={(e) => {
-                                const val = e.target.value;
-                                setFormSelectedSpecs((prev) => {
-                                  const filtered = prev.filter((s) => s.specificationId !== spec.id);
-                                  if (val) {
-                                    return [...filtered, { specificationId: spec.id, specificationOptionId: val }];
-                                  }
-                                  return filtered;
-                                });
-                              }}
-                              className="w-full px-2 py-1 text-xs border border-gray-300 rounded bg-white"
-                            >
-                              <option value="">Not Specified</option>
-                              {spec.options.map((opt) => (
-                                <option key={opt.id} value={opt.id}>{opt.value} ({opt.code})</option>
-                              ))}
-                            </select>
+                          <div key={spec.id} className="p-2 border rounded-lg bg-gray-50 space-y-1">
+                            <div className="flex justify-between items-center">
+                              <label className="block font-semibold text-gray-800 text-[11px]">{spec.name}</label>
+                              <span className="text-[9px] uppercase px-1 rounded bg-gray-200 text-gray-600 font-mono">
+                                {spec.inputType || 'PREDEFINED'}
+                              </span>
+                            </div>
+
+                            {/* Option Dropdown if PREDEFINED or HYBRID */}
+                            {!isFreeText && (
+                              <select
+                                value={currentSelection?.specificationOptionId || ''}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setFormSelectedSpecs((prev) => {
+                                    const filtered = prev.filter((s) => s.specificationId !== spec.id);
+                                    if (val) {
+                                      return [...filtered, {
+                                        specificationId: spec.id,
+                                        specificationOptionId: val,
+                                        customValue: isHybrid ? currentSelection?.customValue : undefined,
+                                      }];
+                                    }
+                                    if (isHybrid && currentSelection?.customValue) {
+                                      return [...filtered, {
+                                        specificationId: spec.id,
+                                        specificationOptionId: undefined,
+                                        customValue: currentSelection.customValue,
+                                      }];
+                                    }
+                                    return filtered;
+                                  });
+                                }}
+                                className="w-full px-2 py-1 text-xs border border-gray-300 rounded bg-white"
+                              >
+                                <option value="">Not Specified</option>
+                                {spec.options.map((opt) => (
+                                  <option key={opt.id} value={opt.id}>{opt.value} ({opt.code})</option>
+                                ))}
+                              </select>
+                            )}
+
+                            {/* Free text custom value input if FREE_TEXT or HYBRID */}
+                            {(isFreeText || isHybrid) && (
+                              <input
+                                type="text"
+                                placeholder={isFreeText ? "Enter custom value..." : "Or custom detail..."}
+                                value={currentSelection?.customValue || ''}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setFormSelectedSpecs((prev) => {
+                                    const filtered = prev.filter((s) => s.specificationId !== spec.id);
+                                    if (val) {
+                                      return [...filtered, {
+                                        specificationId: spec.id,
+                                        specificationOptionId: isFreeText ? undefined : currentSelection?.specificationOptionId,
+                                        customValue: val,
+                                      }];
+                                    }
+                                    if (currentSelection?.specificationOptionId) {
+                                      return [...filtered, {
+                                        specificationId: spec.id,
+                                        specificationOptionId: currentSelection.specificationOptionId,
+                                        customValue: undefined,
+                                      }];
+                                    }
+                                    return filtered;
+                                  });
+                                }}
+                                className="w-full px-2 py-1 text-xs border border-gray-300 rounded bg-white"
+                              />
+                            )}
                           </div>
                         );
                       })}

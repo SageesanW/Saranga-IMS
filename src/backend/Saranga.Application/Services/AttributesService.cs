@@ -354,6 +354,7 @@ public class AttributesService : IAttributesService
             s.Name,
             s.Code,
             s.Description,
+            s.InputType,
             s.IsActive,
             s.SortOrder,
             s.Options
@@ -380,6 +381,7 @@ public class AttributesService : IAttributesService
             s.Name,
             s.Code,
             s.Description,
+            s.InputType,
             s.IsActive,
             s.SortOrder,
             s.Options.OrderBy(o => o.SortOrder).ThenBy(o => o.Value).Select(o => new SpecificationOptionDto(o.Id, o.SpecificationId, o.Value, o.Code, o.Description, o.IsActive, o.SortOrder)).ToList(),
@@ -396,11 +398,18 @@ public class AttributesService : IAttributesService
         var exists = await _context.Specifications.AnyAsync(s => s.Code.ToUpper() == normalizedCode, cancellationToken);
         if (exists) throw new BusinessRuleException($"A specification with code '{request.Code}' already exists.");
 
+        var inputType = string.IsNullOrWhiteSpace(request.InputType) ? SpecificationInputTypes.Predefined : request.InputType.Trim().ToUpperInvariant();
+        if (!SpecificationInputTypes.IsValid(inputType))
+        {
+            throw new BusinessRuleException($"Invalid specification input type '{request.InputType}'. Supported values are PREDEFINED, FREE_TEXT, HYBRID.");
+        }
+
         var spec = new Specification
         {
             Name = request.Name.Trim(),
             Code = normalizedCode,
             Description = request.Description?.Trim() ?? string.Empty,
+            InputType = inputType,
             IsActive = request.IsActive,
             SortOrder = request.SortOrder,
             CreatedAt = DateTimeOffset.UtcNow,
@@ -408,10 +417,10 @@ public class AttributesService : IAttributesService
         };
 
         _context.Specifications.Add(spec);
-        RecordAudit("Specification", spec.Id, "CREATE", null, new { spec.Name, spec.Code, spec.Description, spec.IsActive, spec.SortOrder });
+        RecordAudit("Specification", spec.Id, "CREATE", null, new { spec.Name, spec.Code, spec.Description, spec.InputType, spec.IsActive, spec.SortOrder });
         await _context.SaveChangesAsync(cancellationToken);
 
-        return new SpecificationDto(spec.Id, spec.Name, spec.Code, spec.Description, spec.IsActive, spec.SortOrder, new List<SpecificationOptionDto>(), spec.CreatedAt);
+        return new SpecificationDto(spec.Id, spec.Name, spec.Code, spec.Description, spec.InputType, spec.IsActive, spec.SortOrder, new List<SpecificationOptionDto>(), spec.CreatedAt);
     }
 
     public async Task<SpecificationDto> UpdateSpecificationAsync(Guid id, UpdateSpecificationRequest request, CancellationToken cancellationToken = default)
@@ -421,16 +430,25 @@ public class AttributesService : IAttributesService
         var s = await _context.Specifications.Include(x => x.Options).FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
         if (s == null) throw new NotFoundException("Specification", id);
 
-        var oldValues = new { s.Name, s.Description, s.IsActive, s.SortOrder };
+        var oldValues = new { s.Name, s.Description, s.InputType, s.IsActive, s.SortOrder };
 
         s.Name = request.Name.Trim();
         s.Description = request.Description?.Trim() ?? string.Empty;
+        if (!string.IsNullOrWhiteSpace(request.InputType))
+        {
+            var inputType = request.InputType.Trim().ToUpperInvariant();
+            if (!SpecificationInputTypes.IsValid(inputType))
+            {
+                throw new BusinessRuleException($"Invalid specification input type '{request.InputType}'. Supported values are PREDEFINED, FREE_TEXT, HYBRID.");
+            }
+            s.InputType = inputType;
+        }
         s.IsActive = request.IsActive;
         s.SortOrder = request.SortOrder;
         s.UpdatedAt = DateTimeOffset.UtcNow;
         s.UpdatedBy = _currentUserService.UserId;
 
-        RecordAudit("Specification", s.Id, "UPDATE", oldValues, new { s.Name, s.Description, s.IsActive, s.SortOrder });
+        RecordAudit("Specification", s.Id, "UPDATE", oldValues, new { s.Name, s.Description, s.InputType, s.IsActive, s.SortOrder });
         await _context.SaveChangesAsync(cancellationToken);
 
         return new SpecificationDto(
@@ -438,6 +456,7 @@ public class AttributesService : IAttributesService
             s.Name,
             s.Code,
             s.Description,
+            s.InputType,
             s.IsActive,
             s.SortOrder,
             s.Options.OrderBy(o => o.SortOrder).Select(o => new SpecificationOptionDto(o.Id, o.SpecificationId, o.Value, o.Code, o.Description, o.IsActive, o.SortOrder)).ToList(),
@@ -463,6 +482,7 @@ public class AttributesService : IAttributesService
             s.Name,
             s.Code,
             s.Description,
+            s.InputType,
             s.IsActive,
             s.SortOrder,
             s.Options.OrderBy(o => o.SortOrder).Select(o => new SpecificationOptionDto(o.Id, o.SpecificationId, o.Value, o.Code, o.Description, o.IsActive, o.SortOrder)).ToList(),
