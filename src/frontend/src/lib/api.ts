@@ -56,7 +56,7 @@ export interface AuthResponse {
   user: User;
 }
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5062/api';
 
 // Strictly in-memory access token storage (no localStorage or sessionStorage)
 let inMemoryAccessToken: string | null = null;
