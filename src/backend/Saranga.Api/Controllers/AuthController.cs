@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Saranga.Application.DTOs.Auth;
+using Saranga.Application.DTOs.Users;
 using Saranga.Application.Services;
 
 namespace Saranga.Api.Controllers;

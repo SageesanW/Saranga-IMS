@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Saranga.Application.Common.Interfaces;
 using Saranga.Application.DTOs.Auth;
+using Saranga.Application.DTOs.Users;
 using Saranga.Domain.Entities;
 
 namespace Saranga.Application.Services;
@@ -102,7 +103,9 @@ public class AuthService : IAuthService
             branchIds,
             user.DefaultBranchId,
             user.IsGlobalAdmin,
-            user.IsActive
+            user.IsActive,
+            user.LastLoginAt,
+            user.CreatedAt
         );
 
         var response = new AuthResponse(
@@ -175,7 +178,9 @@ public class AuthService : IAuthService
             branchIds,
             user.DefaultBranchId,
             user.IsGlobalAdmin,
-            user.IsActive
+            user.IsActive,
+            user.LastLoginAt,
+            user.CreatedAt
         );
 
         var response = new AuthResponse(
@@ -258,12 +263,14 @@ public class AuthService : IAuthService
             user.Username,
             user.Email,
             user.FullName,
-            new[] { ownerRole.Name },
-            Array.Empty<string>(),
-            Array.Empty<Guid>(),
+            new List<string> { ownerRole.Name },
+            new List<string>(),
+            new List<Guid>(),
             null,
             true,
-            true
+            true,
+            user.LastLoginAt,
+            user.CreatedAt
         );
     }
 
@@ -314,7 +321,9 @@ public class AuthService : IAuthService
             branchIds,
             user.DefaultBranchId,
             user.IsGlobalAdmin,
-            user.IsActive
+            user.IsActive,
+            user.LastLoginAt,
+            user.CreatedAt
         );
     }
 }

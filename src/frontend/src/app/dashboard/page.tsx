@@ -1,170 +1,124 @@
 'use client';
 
-import React, { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import React from 'react';
+import Link from 'next/link';
+import AppLayout from '@/components/AppLayout';
 import { useAuth } from '@/lib/auth-context';
-import { Gem, LogOut, CheckCircle2, Shield, Database, FileText, KeyRound } from 'lucide-react';
+import { useBranch } from '@/lib/branch-context';
+import { KeyRound, Shield, Building2, Users2, Landmark } from 'lucide-react';
 
 export default function DashboardPage() {
-  const { user, isAuthenticated, isLoading, logout } = useAuth();
-  const router = useRouter();
+  const { user } = useAuth();
+  const { activeBranch, branches } = useBranch();
 
-  useEffect(() => {
-    if (!isLoading && !isAuthenticated) {
-      router.replace('/login');
-    }
-  }, [isAuthenticated, isLoading, router]);
-
-  if (isLoading || !user) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <div className="w-8 h-8 border-4 border-saranga-green-700 border-t-transparent rounded-full animate-spin"></div>
-      </div>
-    );
-  }
+  if (!user) return null;
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-800">
-      {/* Top Navbar */}
-      <header className="bg-saranga-green-950 border-b border-saranga-gold-500/40 text-white shadow-md">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-saranga-gold-500/20 border border-saranga-gold-500/50 flex items-center justify-center text-saranga-gold-400">
-              <Gem className="w-6 h-6" />
-            </div>
+    <AppLayout>
+      <div className="space-y-6">
+        {/* Welcome Banner */}
+        <div className="bg-gradient-to-r from-[#0D3826] to-[#1B6543] rounded-2xl p-6 text-white shadow-md border border-[#D4AF37]/30">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div>
-              <span className="text-xl font-black tracking-wider text-saranga-gold-400 uppercase">
-                SARANGA
+              <span className="text-[11px] font-bold uppercase tracking-wider text-[#D4AF37]">
+                Enterprise Operations Portal
               </span>
-              <span className="hidden sm:inline-block ml-3 px-2 py-0.5 text-xs font-semibold rounded bg-saranga-gold-500/20 text-saranga-gold-300 border border-saranga-gold-500/30">
-                LKR / Rs.
-              </span>
+              <h1 className="text-2xl font-bold mt-1">Welcome, {user.fullName}</h1>
+              <p className="text-sm text-gray-200 mt-1">
+                Active Branch: <strong className="text-[#D4AF37]">{activeBranch ? `${activeBranch.code} - ${activeBranch.name}` : 'All Branches (Global Admin)'}</strong>
+                {' '}• Currency: <strong className="text-white">{activeBranch?.currencyCode || 'LKR (Rs.)'}</strong>
+              </p>
             </div>
-          </div>
-
-          <div className="flex items-center gap-4">
-            <div className="text-right">
-              <div className="text-sm font-semibold text-white">{user.fullName}</div>
-              <div className="text-xs text-saranga-gold-300/90 font-medium">
-                Roles: {user.roles?.length ? user.roles.join(', ') : 'User'} • {user.isGlobalAdmin ? 'Global Admin' : (user.defaultBranchId ? `Branch ${user.defaultBranchId.slice(0, 8)}...` : 'Assigned Branch')}
-              </div>
-            </div>
-
-            <button
-              onClick={() => {
-                logout();
-                router.push('/login');
-              }}
-              className="p-2 rounded-lg bg-saranga-green-800/80 hover:bg-saranga-green-700 text-saranga-gold-300 border border-saranga-gold-500/30 transition-colors"
-              title="Sign Out"
-            >
-              <LogOut className="w-5 h-5" />
-            </button>
-          </div>
-        </div>
-      </header>
-
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-8">
-          <h1 className="text-2xl font-bold text-saranga-green-950">
-            Module 1: Foundation & Authentication Active
-          </h1>
-          <p className="text-sm text-gray-500 mt-1">
-            Modular monolith backend (.NET 10 LTS + PostgreSQL) & frontend (Next.js 16 + Tailwind CSS) verified.
-          </p>
-        </div>
-
-        {/* Verification Status Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
-            <div className="flex items-center gap-3 text-saranga-green-700 mb-2">
-              <KeyRound className="w-5 h-5" />
-              <h3 className="font-semibold text-gray-900">Secure Tokens</h3>
-            </div>
-            <p className="text-xs text-gray-500 mb-3">
-              HttpOnly SameSite cookies with SHA-256 hashed refresh tokens & in-memory access tokens.
-            </p>
-            <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full">
-              <CheckCircle2 className="w-3.5 h-3.5" /> Hardened
-            </div>
-          </div>
-
-          <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
-            <div className="flex items-center gap-3 text-saranga-green-700 mb-2">
-              <Shield className="w-5 h-5" />
-              <h3 className="font-semibold text-gray-900">RBAC Architecture</h3>
-            </div>
-            <p className="text-xs text-gray-500 mb-3">
-              User ↔ Role ↔ Permission & multi-branch scoping ready for Module 2.
-            </p>
-            <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full">
-              <CheckCircle2 className="w-3.5 h-3.5" /> Prepared
-            </div>
-          </div>
-
-          <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
-            <div className="flex items-center gap-3 text-saranga-green-700 mb-2">
-              <Database className="w-5 h-5" />
-              <h3 className="font-semibold text-gray-900">PostgreSQL Precision</h3>
-            </div>
-            <p className="text-xs text-gray-500 mb-3">
-              Explicit domain precision: money (18,2), gold weights/rates (18,4), taxes (5,2).
-            </p>
-            <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full">
-              <CheckCircle2 className="w-3.5 h-3.5" /> Configured
-            </div>
-          </div>
-
-          <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
-            <div className="flex items-center gap-3 text-saranga-green-700 mb-2">
-              <FileText className="w-5 h-5" />
-              <h3 className="font-semibold text-gray-900">Immutable Audit</h3>
-            </div>
-            <p className="text-xs text-gray-500 mb-3">
-              Protected audit trail: immutable logs, password/token hash sanitization.
-            </p>
-            <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full">
-              <CheckCircle2 className="w-3.5 h-3.5" /> Immutable
+            <div className="flex gap-2">
+              <Link
+                href="/branches"
+                className="px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs font-semibold border border-white/20 transition"
+              >
+                Manage Branches
+              </Link>
+              <Link
+                href="/users"
+                className="px-4 py-2 bg-[#D4AF37] hover:bg-[#BA9225] text-[#0D3826] rounded-lg text-xs font-bold transition shadow-sm"
+              >
+                Manage Staff
+              </Link>
             </div>
           </div>
         </div>
 
-        {/* User Session Details */}
-        <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
-          <h2 className="text-base font-bold text-saranga-green-950 mb-4">
-            Active User & Security Context
+        {/* Quick Stats Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
+            <div>
+              <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Total Branches</p>
+              <p className="text-2xl font-black text-[#0D3826] mt-1">{branches.length}</p>
+              <p className="text-[11px] text-gray-400 mt-0.5">Active across Sri Lanka & International</p>
+            </div>
+            <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-800 flex items-center justify-center">
+              <Building2 className="w-6 h-6" />
+            </div>
+          </div>
+
+          <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
+            <div>
+              <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Your Assigned Scope</p>
+              <p className="text-2xl font-black text-[#0D3826] mt-1">
+                {user.isGlobalAdmin ? 'Full Business' : `${user.branchIds.length} Branch(es)`}
+              </p>
+              <p className="text-[11px] text-gray-400 mt-0.5">
+                {user.isGlobalAdmin ? 'Unrestricted Global Oversight' : 'Branch-scoped operational access'}
+              </p>
+            </div>
+            <div className="w-12 h-12 rounded-xl bg-amber-50 text-amber-800 flex items-center justify-center">
+              <Shield className="w-6 h-6" />
+            </div>
+          </div>
+
+          <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
+            <div>
+              <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Default Currency</p>
+              <p className="text-2xl font-black text-[#0D3826] mt-1">
+                {activeBranch?.currencyCode || 'LKR'}
+              </p>
+              <p className="text-[11px] text-gray-400 mt-0.5">
+                Sri Lankan Rupees (Rs.) • Precision 18,2
+              </p>
+            </div>
+            <div className="w-12 h-12 rounded-xl bg-yellow-50 text-yellow-800 flex items-center justify-center">
+              <Landmark className="w-6 h-6" />
+            </div>
+          </div>
+        </div>
+
+        {/* Module Status & Architecture Overview */}
+        <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+          <h2 className="text-base font-bold text-gray-900 mb-4">
+            Module 2 Architecture & Status Summary
           </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 text-sm">
-            <div className="p-3 rounded-xl bg-gray-50">
-              <span className="text-xs text-gray-500 uppercase font-semibold block">User ID</span>
-              <span className="font-mono text-xs text-gray-800">{user.id}</span>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="border border-gray-100 p-4 rounded-xl bg-gray-50/50">
+              <div className="flex items-center space-x-2 text-sm font-bold text-[#0D3826] mb-1">
+                <Building2 className="w-4 h-4" />
+                <span>Multi-Branch Isolation & Global Admin</span>
+              </div>
+              <p className="text-xs text-gray-600 leading-relaxed">
+                Branch CRUD with unique code constraint, active/inactive enforcement, and multi-country readiness (Sri Lanka LKR / Canada CAD). Regular users are restricted strictly to their assigned branches via <code className="text-xs bg-gray-200 px-1 py-0.5 rounded">UserBranches</code>, while Global Admins have business-wide oversight.
+              </p>
             </div>
-            <div className="p-3 rounded-xl bg-gray-50">
-              <span className="text-xs text-gray-500 uppercase font-semibold block">Username</span>
-              <span className="font-medium text-gray-900">{user.username}</span>
-            </div>
-            <div className="p-3 rounded-xl bg-gray-50">
-              <span className="text-xs text-gray-500 uppercase font-semibold block">Assigned Roles</span>
-              <span className="font-medium text-saranga-green-800">{user.roles?.join(', ') || 'None'}</span>
-            </div>
-            <div className="p-3 rounded-xl bg-gray-50">
-              <span className="text-xs text-gray-500 uppercase font-semibold block">Email</span>
-              <span className="text-gray-800">{user.email}</span>
-            </div>
-            <div className="p-3 rounded-xl bg-gray-50">
-              <span className="text-xs text-gray-500 uppercase font-semibold block">Branch Scope</span>
-              <span className="text-gray-800">
-                {user.isGlobalAdmin ? 'All Branches (Owner / Super Admin)' : (user.branchIds?.length ? `${user.branchIds.length} Assigned Branch(es)` : 'Default Branch')}
-              </span>
-            </div>
-            <div className="p-3 rounded-xl bg-gray-50">
-              <span className="text-xs text-gray-500 uppercase font-semibold block">Status</span>
-              <span className="text-emerald-700 font-semibold">{user.isActive ? 'Active' : 'Inactive'}</span>
+
+            <div className="border border-gray-100 p-4 rounded-xl bg-gray-50/50">
+              <div className="flex items-center space-x-2 text-sm font-bold text-[#0D3826] mb-1">
+                <Shield className="w-4 h-4" />
+                <span>Granular RBAC & Security</span>
+              </div>
+              <p className="text-xs text-gray-600 leading-relaxed">
+                Fine-grained permissions mapped across 9 system modules. System roles (<code className="text-xs bg-gray-200 px-1 py-0.5 rounded">Owner / Super Admin</code>, <code className="text-xs bg-gray-200 px-1 py-0.5 rounded">Manager</code>, <code className="text-xs bg-gray-200 px-1 py-0.5 rounded">Cashier</code>, <code className="text-xs bg-gray-200 px-1 py-0.5 rounded">Auditor</code>) protected against deletion. Instant token revocation on user deactivation.
+              </p>
             </div>
           </div>
         </div>
-      </main>
-    </div>
+      </div>
+    </AppLayout>
   );
 }

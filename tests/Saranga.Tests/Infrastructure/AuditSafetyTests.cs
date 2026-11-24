@@ -14,6 +14,10 @@ public class AuditSafetyTests
         public string? Username { get; set; } = "auditor_test";
         public Guid? BranchId { get; set; } = Guid.NewGuid();
         public string? Role { get; set; } = "Auditor";
+        public bool IsGlobalAdmin => false;
+        public IReadOnlyList<Guid> AccessibleBranchIds => BranchId.HasValue ? new[] { BranchId.Value } : Array.Empty<Guid>();
+        public IReadOnlyList<string> Roles => Role != null ? new[] { Role } : Array.Empty<string>();
+        public IReadOnlyList<string> Permissions => Array.Empty<string>();
         public string? IpAddress { get; set; } = "127.0.0.1";
         public string? UserAgent { get; set; } = "xUnit Test Runner";
     }

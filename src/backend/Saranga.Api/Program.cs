@@ -3,7 +3,10 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Scalar.AspNetCore;
 using Serilog;
+using Saranga.Api.Middleware;
+using Saranga.Application.Common.Interfaces;
 using Saranga.Infrastructure;
+using Saranga.Infrastructure.Middleware;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -21,7 +24,7 @@ builder.Services.AddControllers();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddOpenApi();
 
-// Register Infrastructure & Persistence
+// Register Infrastructure & Persistence (includes auth handlers, policy provider, and application services)
 builder.Services.AddInfrastructure(builder.Configuration);
 
 // Configure JWT Authentication
@@ -70,6 +73,9 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
+// Global exception handling (RFC 7807 / unified JSON)
+app.UseMiddleware<GlobalExceptionMiddleware>();
+
 // Configure the HTTP request pipeline
 if (app.Environment.IsDevelopment() || app.Environment.IsStaging())
 {
@@ -87,6 +93,7 @@ app.UseSerilogRequestLogging();
 app.UseCors("AllowFrontend");
 
 app.UseAuthentication();
+app.UseMiddleware<BranchContextMiddleware>();
 app.UseAuthorization();
 
 app.MapControllers();
@@ -98,6 +105,18 @@ app.MapGet("/health", () => Results.Ok(new
     Version = "1.0.0",
     Timestamp = DateTimeOffset.UtcNow
 })).AllowAnonymous();
+
+// Run idempotent data seeding on startup (Permissions, System Roles, System Mappings)
+try
+{
+    using var scope = app.Services.CreateScope();
+    var seeder = scope.ServiceProvider.GetRequiredService<IDataSeeder>();
+    await seeder.SeedAsync();
+}
+catch (Exception ex)
+{
+    Log.Error(ex, "An error occurred during startup data seeding.");
+}
 
 try
 {

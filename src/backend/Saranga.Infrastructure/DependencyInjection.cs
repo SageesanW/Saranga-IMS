@@ -1,8 +1,10 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Saranga.Application.Common.Interfaces;
 using Saranga.Application.Services;
+using Saranga.Infrastructure.Authorization;
 using Saranga.Infrastructure.Persistence;
 using Saranga.Infrastructure.Services;
 
@@ -30,7 +32,19 @@ public static class DependencyInjection
         services.AddScoped<IPasswordHasher, PasswordHasher>();
         services.AddScoped<IJwtTokenService, JwtTokenService>();
         services.AddScoped<ICurrentUserService, CurrentUserService>();
+        services.AddScoped<IBranchAuthorizationService, BranchAuthorizationService>();
+        services.AddScoped<IDataSeeder, DataSeeder>();
+
+        // Application Services
         services.AddScoped<IAuthService, AuthService>();
+        services.AddScoped<IBranchService, BranchService>();
+        services.AddScoped<IUserService, UserService>();
+        services.AddScoped<IRoleService, RoleService>();
+        services.AddScoped<IPermissionService, PermissionService>();
+
+        // Authorization Handler & Policy Provider
+        services.AddSingleton<IAuthorizationPolicyProvider, PermissionPolicyProvider>();
+        services.AddScoped<IAuthorizationHandler, PermissionAuthorizationHandler>();
 
         return services;
     }

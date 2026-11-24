@@ -125,6 +125,10 @@ public class DatabaseSchemaVerificationTests
         public string? Username => null;
         public Guid? BranchId => null;
         public string? Role => null;
+        public bool IsGlobalAdmin => false;
+        public IReadOnlyList<Guid> AccessibleBranchIds => Array.Empty<Guid>();
+        public IReadOnlyList<string> Roles => Array.Empty<string>();
+        public IReadOnlyList<string> Permissions => Array.Empty<string>();
         public string? IpAddress => null;
         public string? UserAgent => null;
     }

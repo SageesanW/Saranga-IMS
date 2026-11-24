@@ -9,6 +9,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Saranga.Api;
 using Saranga.Application.DTOs.Auth;
+using Saranga.Application.DTOs.Users;
 using Saranga.Infrastructure.Persistence;
 using Xunit;
 using Xunit.Abstractions;
