@@ -257,6 +257,10 @@ namespace Saranga.Infrastructure.Persistence.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
 
+                    b.Property<string>("NormalizedEmail")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
                     b.Property<string>("NormalizedPrimaryPhone")
                         .IsRequired()
                         .HasMaxLength(50)
@@ -304,13 +308,16 @@ namespace Saranga.Infrastructure.Persistence.Migrations
                     b.HasIndex("CustomerCode")
                         .IsUnique();
 
-                    b.HasIndex("Email");
-
                     b.HasIndex("FullName");
 
                     b.HasIndex("IsActive");
 
-                    b.HasIndex("NormalizedPrimaryPhone");
+                    b.HasIndex("NormalizedEmail")
+                        .IsUnique()
+                        .HasFilter("\"NormalizedEmail\" IS NOT NULL");
+
+                    b.HasIndex("NormalizedPrimaryPhone")
+                        .IsUnique();
 
                     b.HasIndex("NormalizedSecondaryPhone");
 

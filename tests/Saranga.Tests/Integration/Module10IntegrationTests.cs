@@ -50,7 +50,7 @@ public class Module10IntegrationTests : IClassFixture<WebApplicationFactory<Prog
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
         await db.Database.ExecuteSqlRawAsync(@"
-            DELETE FROM ""Customers"" WHERE ""FullName"" LIKE 'Test M10 %' OR ""PrimaryPhone"" LIKE '077999%';
+            DELETE FROM ""Customers"" WHERE ""FullName"" LIKE 'Test M10 %' OR ""PrimaryPhone"" LIKE '077999%' OR ""PrimaryPhone"" LIKE '077 999%' OR ""NormalizedPrimaryPhone"" LIKE '+9477999%';
             DELETE FROM ""UserBranches"" WHERE ""BranchId"" IN (SELECT ""Id"" FROM ""Branches"" WHERE ""Code"" = 'T10B1')
                 OR ""UserId"" IN (SELECT ""Id"" FROM ""Users"" WHERE ""Username"" LIKE 'test_m10_%');
             DELETE FROM ""UserRoles"" WHERE ""UserId"" IN (SELECT ""Id"" FROM ""Users"" WHERE ""Username"" LIKE 'test_m10_%');
@@ -153,8 +153,8 @@ public class Module10IntegrationTests : IClassFixture<WebApplicationFactory<Prog
         Assert.StartsWith("CUS-", customer1.CustomerCode);
         Assert.Equal("Test M10 Perera Kamal", customer1.FullName);
         Assert.Equal("077 999 1111", customer1.PrimaryPhone);
-        Assert.Equal("0779991111", customer1.NormalizedPrimaryPhone);
-        Assert.Equal("0112345678", customer1.NormalizedSecondaryPhone);
+        Assert.Equal("+94779991111", customer1.NormalizedPrimaryPhone);
+        Assert.Equal("+94112345678", customer1.NormalizedSecondaryPhone);
         Assert.Equal("perera.kamal@example.lk", customer1.Email);
         Assert.True(customer1.IsActive);
         Assert.True(customer1.Version > 0);
@@ -313,7 +313,7 @@ public class Module10IntegrationTests : IClassFixture<WebApplicationFactory<Prog
         var updatedCustomer1 = (await validUpdateRes.Content.ReadFromJsonAsync<CustomerDto>())!;
 
         Assert.Equal("Test M10 Perera Kamal Updated", updatedCustomer1.FullName);
-        Assert.Equal("0112349999", updatedCustomer1.NormalizedSecondaryPhone);
+        Assert.Equal("+94112349999", updatedCustomer1.NormalizedSecondaryPhone);
         Assert.Equal("perera.kamal.new@example.lk", updatedCustomer1.Email);
         Assert.NotEqual(customer1.Version, updatedCustomer1.Version);
 
@@ -392,5 +392,110 @@ public class Module10IntegrationTests : IClassFixture<WebApplicationFactory<Prog
         Assert.Equal(HttpStatusCode.NotFound, getByNonExistentRes.StatusCode);
 
         _output.WriteLine("=== MODULE 10 INTEGRATION TESTS COMPLETED SUCCESSFULLY ===");
+    }
+
+    [Fact]
+    public void CanonicalPhoneNormalization_ResolvesLocalAndInternationalEquivalents()
+    {
+        // 1. Equivalent Sri Lankan local formats resolve to exact same E.164
+        var raw1 = "077 999 1111";
+        var raw2 = "+94 77 999 1111";
+        var raw3 = "0779991111";
+        var raw4 = "+94779991111";
+        var raw5 = "077-999-1111";
+
+        var norm1 = Saranga.Domain.Common.PhoneNormalizer.Normalize(raw1);
+        var norm2 = Saranga.Domain.Common.PhoneNormalizer.Normalize(raw2);
+        var norm3 = Saranga.Domain.Common.PhoneNormalizer.Normalize(raw3);
+        var norm4 = Saranga.Domain.Common.PhoneNormalizer.Normalize(raw4);
+        var norm5 = Saranga.Domain.Common.PhoneNormalizer.Normalize(raw5);
+
+        Assert.Equal("+94779991111", norm1);
+        Assert.Equal("+94779991111", norm2);
+        Assert.Equal("+94779991111", norm3);
+        Assert.Equal("+94779991111", norm4);
+        Assert.Equal("+94779991111", norm5);
+
+        // 2. Landline local formats
+        var landline1 = "011 234 5678";
+        var landline2 = "+94 11 234 5678";
+        Assert.Equal("+94112345678", Saranga.Domain.Common.PhoneNormalizer.Normalize(landline1));
+        Assert.Equal("+94112345678", Saranga.Domain.Common.PhoneNormalizer.Normalize(landline2));
+
+        // 3. International formats must preserve foreign country codes and NEVER be forced to +94
+        var canadaUS = "+1 (416) 999-3333";
+        var uk = "+44 20 7946 0991";
+        var australia = "+61 491 570 156";
+        var uae = "+971 50 123 4567";
+
+        Assert.Equal("+14169993333", Saranga.Domain.Common.PhoneNormalizer.Normalize(canadaUS));
+        Assert.Equal("+442079460991", Saranga.Domain.Common.PhoneNormalizer.Normalize(uk));
+        Assert.Equal("+61491570156", Saranga.Domain.Common.PhoneNormalizer.Normalize(australia));
+        Assert.Equal("+971501234567", Saranga.Domain.Common.PhoneNormalizer.Normalize(uae));
+
+        // 4. Null and whitespace
+        Assert.Null(Saranga.Domain.Common.PhoneNormalizer.Normalize(null));
+        Assert.Null(Saranga.Domain.Common.PhoneNormalizer.Normalize("   "));
+    }
+
+    [Fact]
+    public async Task ConcurrentCustomerCreation_WithSameNormalizedPhone_DatabaseConstraintEnsuresExactlyOneSucceeds()
+    {
+        var client = _factory.CreateClient();
+
+        // Login as Owner
+        var loginRes = await client.PostAsJsonAsync("/api/auth/login", new LoginRequest(
+            Username: "saranga_owner",
+            Password: "OwnerSuperAdmin@2026#Secure"
+        ));
+        Assert.Equal(HttpStatusCode.OK, loginRes.StatusCode);
+        var loginData = await loginRes.Content.ReadFromJsonAsync<AuthResponse>();
+        Assert.NotNull(loginData);
+
+        var authClient1 = _factory.CreateClient();
+        authClient1.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", loginData.AccessToken);
+
+        var authClient2 = _factory.CreateClient();
+        authClient2.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", loginData.AccessToken);
+
+        // Prepare 2 creation requests with differing formatted strings that resolve to the same E.164 phone: +94779997777
+        var req1 = new CreateCustomerRequest(
+            FullName: "Test M10 Concurrent Customer A",
+            PrimaryPhone: "077 999 7777",
+            SecondaryPhone: null,
+            Email: "concurrent.a@saranga.lk"
+        );
+
+        var req2 = new CreateCustomerRequest(
+            FullName: "Test M10 Concurrent Customer B",
+            PrimaryPhone: "+94 77 999 7777", // Equivalent normalized phone
+            SecondaryPhone: null,
+            Email: "concurrent.b@saranga.lk"
+        );
+
+        // Dispatch simultaneously to test database unique constraint protection against race conditions
+        var task1 = authClient1.PostAsJsonAsync("/api/customers", req1);
+        var task2 = authClient2.PostAsJsonAsync("/api/customers", req2);
+
+        var responses = await Task.WhenAll(task1, task2);
+
+        var res1 = responses[0];
+        var res2 = responses[1];
+
+        _output.WriteLine($"Concurrent Response 1: {res1.StatusCode}");
+        _output.WriteLine($"Concurrent Response 2: {res2.StatusCode}");
+
+        // Exactly one request must succeed with 201 Created
+        // The other must be rejected with 400 Bad Request (BusinessRuleException from unique constraint), NEVER 500!
+        var successCount = responses.Count(r => r.StatusCode == HttpStatusCode.Created);
+        var duplicateCount = responses.Count(r => r.StatusCode == HttpStatusCode.BadRequest);
+
+        Assert.Equal(1, successCount);
+        Assert.Equal(1, duplicateCount);
+
+        // Verify the failed response does not expose a 500 error and has a clean message
+        var failedRes = responses.First(r => r.StatusCode == HttpStatusCode.BadRequest);
+        var errBody = await failedRes.Content.ReadAsStringAsync();
+        Assert.Contains("already exists", errBody, StringComparison.OrdinalIgnoreCase);
     }
 }

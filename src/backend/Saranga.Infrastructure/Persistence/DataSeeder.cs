@@ -124,6 +124,22 @@ public class DataSeeder : IDataSeeder
         // Owner / Super Admin gets ALL permissions
         AssignPermissionsToRole(SystemRoles.OwnerSuperAdmin, permLookup.Keys);
 
+        // Remove obsolete CUSTOMER_MANAGE permission if present
+        var obsoleteCustomerManage = existingPermissions.FirstOrDefault(p => p.Name.Equals("CUSTOMER_MANAGE", StringComparison.OrdinalIgnoreCase));
+        if (obsoleteCustomerManage != null)
+        {
+            var obsoleteRolePerms = await _context.RolePermissions.Where(rp => rp.PermissionId == obsoleteCustomerManage.Id).ToListAsync(cancellationToken);
+            if (obsoleteRolePerms.Count > 0)
+            {
+                _context.RolePermissions.RemoveRange(obsoleteRolePerms);
+            }
+            _context.Permissions.Remove(obsoleteCustomerManage);
+            await _context.SaveChangesAsync(cancellationToken);
+            existingPermissions.Remove(obsoleteCustomerManage);
+            permLookup.Remove("CUSTOMER_MANAGE");
+            _logger.LogInformation("Removed obsolete CUSTOMER_MANAGE permission and associated role mappings.");
+        }
+
         // Manager permissions
         var managerPerms = new[]
         {
@@ -147,7 +163,6 @@ public class DataSeeder : IDataSeeder
             Permissions.InventoryCompositionDissolve,
             Permissions.RateView,
             Permissions.CustomerView,
-            Permissions.CustomerManage,
             Permissions.CustomerCreate,
             Permissions.CustomerEdit,
             Permissions.CustomerActivateDeactivate,
@@ -174,7 +189,6 @@ public class DataSeeder : IDataSeeder
             Permissions.InventoryView,
             Permissions.RateView,
             Permissions.CustomerView,
-            Permissions.CustomerManage,
             Permissions.CustomerCreate,
             Permissions.CustomerEdit,
             Permissions.CustomerActivateDeactivate,

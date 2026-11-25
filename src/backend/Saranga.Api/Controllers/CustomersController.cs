@@ -81,7 +81,7 @@ public class CustomersController : ControllerBase
     }
 
     [HttpPost]
-    [RequirePermission(Permissions.CustomerCreate, Permissions.CustomerManage)]
+    [RequirePermission(Permissions.CustomerCreate)]
     [ProducesResponseType(typeof(CustomerDto), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<CustomerDto>> CreateCustomer(
@@ -93,7 +93,7 @@ public class CustomersController : ControllerBase
     }
 
     [HttpPut("{id:guid}")]
-    [RequirePermission(Permissions.CustomerEdit, Permissions.CustomerManage)]
+    [RequirePermission(Permissions.CustomerEdit)]
     [ProducesResponseType(typeof(CustomerDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -108,7 +108,7 @@ public class CustomersController : ControllerBase
     }
 
     [HttpPatch("{id:guid}/status")]
-    [RequirePermission(Permissions.CustomerActivateDeactivate, Permissions.CustomerManage)]
+    [RequirePermission(Permissions.CustomerActivateDeactivate)]
     [ProducesResponseType(typeof(CustomerDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<CustomerDto>> UpdateCustomerStatus(

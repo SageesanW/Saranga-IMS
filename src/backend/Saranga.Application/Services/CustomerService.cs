@@ -50,16 +50,19 @@ public class CustomerService : ICustomerService
         if (!string.IsNullOrWhiteSpace(queryParams.Search))
         {
             var term = queryParams.Search.Trim();
-            var normalizedTerm = PhoneNormalizer.Normalize(term);
+            var digitsOnly = new string(term.Where(char.IsDigit).ToArray());
+            var normalizedFull = PhoneNormalizer.Normalize(term);
             var termLower = term.ToLower();
 
             query = query.Where(c =>
                 c.CustomerCode.ToLower().Contains(termLower) ||
                 c.FullName.ToLower().Contains(termLower) ||
-                (c.Email != null && c.Email.ToLower().Contains(termLower)) ||
+                (c.NormalizedEmail != null && c.NormalizedEmail.Contains(termLower)) ||
                 c.PrimaryPhone.Contains(term) ||
-                (normalizedTerm.Length >= 3 && c.NormalizedPrimaryPhone.Contains(normalizedTerm)) ||
-                (c.NormalizedSecondaryPhone != null && normalizedTerm.Length >= 3 && c.NormalizedSecondaryPhone.Contains(normalizedTerm)));
+                (digitsOnly.Length >= 3 && c.NormalizedPrimaryPhone.Contains(digitsOnly)) ||
+                (normalizedFull != null && c.NormalizedPrimaryPhone.Contains(normalizedFull)) ||
+                (c.NormalizedSecondaryPhone != null && digitsOnly.Length >= 3 && c.NormalizedSecondaryPhone.Contains(digitsOnly)) ||
+                (c.NormalizedSecondaryPhone != null && normalizedFull != null && c.NormalizedSecondaryPhone.Contains(normalizedFull)));
         }
 
         var totalCount = await query.CountAsync(cancellationToken);
@@ -84,7 +87,8 @@ public class CustomerService : ICustomerService
         }
 
         var term = query.Trim();
-        var normalizedTerm = PhoneNormalizer.Normalize(term);
+        var digitsOnly = new string(term.Where(char.IsDigit).ToArray());
+        var normalizedFull = PhoneNormalizer.Normalize(term);
         var termLower = term.ToLower();
 
         var customers = await _context.Customers
@@ -92,9 +96,10 @@ public class CustomerService : ICustomerService
             .Where(c => c.IsActive && (
                 c.CustomerCode.ToLower().Contains(termLower) ||
                 c.FullName.ToLower().Contains(termLower) ||
-                (c.Email != null && c.Email.ToLower().Contains(termLower)) ||
+                (c.NormalizedEmail != null && c.NormalizedEmail.Contains(termLower)) ||
                 c.PrimaryPhone.Contains(term) ||
-                (normalizedTerm.Length >= 3 && c.NormalizedPrimaryPhone.Contains(normalizedTerm))))
+                (digitsOnly.Length >= 3 && c.NormalizedPrimaryPhone.Contains(digitsOnly)) ||
+                (normalizedFull != null && c.NormalizedPrimaryPhone.Contains(normalizedFull))))
             .OrderBy(c => c.FullName)
             .Take(maxResults is < 1 or > 50 ? 20 : maxResults)
             .Select(c => new CustomerLookupDto(
@@ -161,7 +166,7 @@ public class CustomerService : ICustomerService
             var cleanEmail = email.Trim().ToLowerInvariant();
             var emailMatch = await _context.Customers
                 .AsNoTracking()
-                .Where(c => c.Email != null && c.Email.ToLower() == cleanEmail && (!excludeCustomerId.HasValue || c.Id != excludeCustomerId.Value))
+                .Where(c => c.NormalizedEmail == cleanEmail && (!excludeCustomerId.HasValue || c.Id != excludeCustomerId.Value))
                 .FirstOrDefaultAsync(cancellationToken);
 
             if (emailMatch != null)
@@ -190,7 +195,7 @@ public class CustomerService : ICustomerService
         }
 
         var normalizedPhone = PhoneNormalizer.Normalize(request.PrimaryPhone);
-        if (normalizedPhone.Length < 7)
+        if (string.IsNullOrEmpty(normalizedPhone) || normalizedPhone.Length < 7)
         {
             throw new BusinessRuleException("Primary phone number must contain at least 7 digits.");
         }
@@ -231,6 +236,7 @@ public class CustomerService : ICustomerService
             SecondaryPhone = string.IsNullOrWhiteSpace(request.SecondaryPhone) ? null : request.SecondaryPhone.Trim(),
             NormalizedSecondaryPhone = string.IsNullOrEmpty(normalizedSecPhone) ? null : normalizedSecPhone,
             Email = cleanEmail,
+            NormalizedEmail = cleanEmail,
             AddressLine1 = string.IsNullOrWhiteSpace(request.AddressLine1) ? null : request.AddressLine1.Trim(),
             AddressLine2 = string.IsNullOrWhiteSpace(request.AddressLine2) ? null : request.AddressLine2.Trim(),
             City = string.IsNullOrWhiteSpace(request.City) ? null : request.City.Trim(),
@@ -254,7 +260,7 @@ public class CustomerService : ICustomerService
             customer.Email
         });
 
-        await _context.SaveChangesAsync(cancellationToken);
+        await SaveChangesWithDuplicateHandlingAsync(cancellationToken);
 
         return await GetCustomerByIdAsync(customer.Id, cancellationToken);
     }
@@ -282,7 +288,7 @@ public class CustomerService : ICustomerService
         }
 
         var normalizedPhone = PhoneNormalizer.Normalize(request.PrimaryPhone);
-        if (normalizedPhone.Length < 7)
+        if (string.IsNullOrEmpty(normalizedPhone) || normalizedPhone.Length < 7)
         {
             throw new BusinessRuleException("Primary phone number must contain at least 7 digits.");
         }
@@ -325,6 +331,7 @@ public class CustomerService : ICustomerService
         customer.SecondaryPhone = string.IsNullOrWhiteSpace(request.SecondaryPhone) ? null : request.SecondaryPhone.Trim();
         customer.NormalizedSecondaryPhone = string.IsNullOrEmpty(normalizedSecPhone) ? null : normalizedSecPhone;
         customer.Email = cleanEmail;
+        customer.NormalizedEmail = cleanEmail;
         customer.AddressLine1 = string.IsNullOrWhiteSpace(request.AddressLine1) ? null : request.AddressLine1.Trim();
         customer.AddressLine2 = string.IsNullOrWhiteSpace(request.AddressLine2) ? null : request.AddressLine2.Trim();
         customer.City = string.IsNullOrWhiteSpace(request.City) ? null : request.City.Trim();
@@ -344,7 +351,7 @@ public class CustomerService : ICustomerService
             customer.City
         });
 
-        await _context.SaveChangesAsync(cancellationToken);
+        await SaveChangesWithDuplicateHandlingAsync(cancellationToken);
 
         return await GetCustomerByIdAsync(customer.Id, cancellationToken);
     }
@@ -364,9 +371,36 @@ public class CustomerService : ICustomerService
             new { IsActive = oldStatus },
             new { IsActive = customer.IsActive, Reason = request.Reason });
 
-        await _context.SaveChangesAsync(cancellationToken);
+        await SaveChangesWithDuplicateHandlingAsync(cancellationToken);
 
         return await GetCustomerByIdAsync(customer.Id, cancellationToken);
+    }
+
+    private async Task SaveChangesWithDuplicateHandlingAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _context.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex)
+        {
+            var msg = ex.InnerException?.Message ?? ex.Message;
+            if (msg.Contains("NormalizedPrimaryPhone", StringComparison.OrdinalIgnoreCase) ||
+                msg.Contains("IX_Customers_NormalizedPrimaryPhone", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new BusinessRuleException("A customer record already exists with this phone number.");
+            }
+            if (msg.Contains("NormalizedEmail", StringComparison.OrdinalIgnoreCase) ||
+                msg.Contains("IX_Customers_NormalizedEmail", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new BusinessRuleException("A customer record already exists with this email address.");
+            }
+            if (msg.Contains("23505") || msg.Contains("unique constraint", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new BusinessRuleException("A customer record already exists with matching unique details.");
+            }
+            throw;
+        }
     }
 
     private static CustomerDto MapToDto(Customer c)

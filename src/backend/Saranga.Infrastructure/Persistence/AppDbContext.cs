@@ -757,14 +757,15 @@ public class AppDbContext : DbContext, IAppDbContext
 
             entity.Property(c => c.PrimaryPhone).HasMaxLength(50).IsRequired();
             entity.Property(c => c.NormalizedPrimaryPhone).HasMaxLength(50).IsRequired();
-            entity.HasIndex(c => c.NormalizedPrimaryPhone);
+            entity.HasIndex(c => c.NormalizedPrimaryPhone).IsUnique();
 
             entity.Property(c => c.SecondaryPhone).HasMaxLength(50);
             entity.Property(c => c.NormalizedSecondaryPhone).HasMaxLength(50);
             entity.HasIndex(c => c.NormalizedSecondaryPhone);
 
             entity.Property(c => c.Email).HasMaxLength(200);
-            entity.HasIndex(c => c.Email);
+            entity.Property(c => c.NormalizedEmail).HasMaxLength(200);
+            entity.HasIndex(c => c.NormalizedEmail).IsUnique().HasFilter("\"NormalizedEmail\" IS NOT NULL");
 
             entity.Property(c => c.AddressLine1).HasMaxLength(200);
             entity.Property(c => c.AddressLine2).HasMaxLength(200);

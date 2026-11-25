@@ -18,6 +18,8 @@ public class Customer : BaseEntity
 
     public string? Email { get; set; }
 
+    public string? NormalizedEmail { get; set; }
+
     public string? AddressLine1 { get; set; }
 
     public string? AddressLine2 { get; set; }
