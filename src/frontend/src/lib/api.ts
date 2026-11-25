@@ -1613,38 +1613,34 @@ export const cashLedgerApi = {
   },
   getTransactionById: (id: string) => apiRequest<CashLedgerTransaction>(`/cash-ledger/transactions/${id}`),
   postCashIn: (data: PostCashInRequest, idempotencyKey?: string) => {
-    const headers: Record<string, string> = {};
-    if (idempotencyKey) headers['Idempotency-Key'] = idempotencyKey;
+    const key = idempotencyKey || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `CL-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`);
     return apiRequest<CashLedgerTransaction>('/cash-ledger/cash-in', {
       method: 'POST',
-      headers,
+      headers: { 'Idempotency-Key': key },
       body: JSON.stringify(data)
     });
   },
   postCashOut: (data: PostCashOutRequest, idempotencyKey?: string) => {
-    const headers: Record<string, string> = {};
-    if (idempotencyKey) headers['Idempotency-Key'] = idempotencyKey;
+    const key = idempotencyKey || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `CL-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`);
     return apiRequest<CashLedgerTransaction>('/cash-ledger/cash-out', {
       method: 'POST',
-      headers,
+      headers: { 'Idempotency-Key': key },
       body: JSON.stringify(data)
     });
   },
   postTransfer: (data: PostTransferRequest, idempotencyKey?: string) => {
-    const headers: Record<string, string> = {};
-    if (idempotencyKey) headers['Idempotency-Key'] = idempotencyKey;
+    const key = idempotencyKey || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `CL-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`);
     return apiRequest<CashLedgerTransaction>('/cash-ledger/transfer', {
       method: 'POST',
-      headers,
+      headers: { 'Idempotency-Key': key },
       body: JSON.stringify(data)
     });
   },
   reverseTransaction: (id: string, data: ReverseTransactionRequest, idempotencyKey?: string) => {
-    const headers: Record<string, string> = {};
-    if (idempotencyKey) headers['Idempotency-Key'] = idempotencyKey;
+    const key = idempotencyKey || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `CL-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`);
     return apiRequest<CashLedgerTransaction>(`/cash-ledger/transactions/${id}/reverse`, {
       method: 'POST',
-      headers,
+      headers: { 'Idempotency-Key': key },
       body: JSON.stringify(data)
     });
   },

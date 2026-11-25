@@ -12,6 +12,7 @@ using Saranga.Application.DTOs.CashLedger;
 using Saranga.Application.DTOs.Common;
 using Saranga.Application.DTOs.Shifts;
 using Saranga.Application.DTOs.Users;
+using Saranga.Application.Common.Interfaces;
 using Saranga.Domain.Constants;
 using Saranga.Domain.Enums;
 using Saranga.Infrastructure.Persistence;
@@ -29,6 +30,17 @@ public class Module12IntegrationTests : IClassFixture<WebApplicationFactory<Prog
     {
         PropertyNameCaseInsensitive = true
     };
+
+    private static async Task<HttpResponseMessage> SendWithIdempotencyAsync<T>(HttpClient client, HttpMethod method, string uri, T payload, string? idempotencyKey = null)
+    {
+        var msg = new HttpRequestMessage(method, uri)
+        {
+            Content = JsonContent.Create(payload)
+        };
+        var key = idempotencyKey ?? $"IDEMP-M12-{Guid.NewGuid():N}";
+        msg.Headers.Add("Idempotency-Key", key);
+        return await client.SendAsync(msg);
+    }
 
     public Module12IntegrationTests(WebApplicationFactory<Program> factory, ITestOutputHelper output)
     {
@@ -52,6 +64,7 @@ public class Module12IntegrationTests : IClassFixture<WebApplicationFactory<Prog
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
         await db.Database.ExecuteSqlRawAsync(@"
+            SET LOCAL saranga.bypass_immutability_for_test = 'true';
             DELETE FROM ""CashLedgerEntries"" WHERE ""BranchId"" IN (SELECT ""Id"" FROM ""Branches"" WHERE ""Code"" LIKE 'T12B%');
             DELETE FROM ""CashLedgerTransactions"" WHERE ""BranchId"" IN (SELECT ""Id"" FROM ""Branches"" WHERE ""Code"" LIKE 'T12B%');
             DELETE FROM ""CashMovementCategories"" WHERE ""Code"" LIKE 'TEST_%';
@@ -62,7 +75,7 @@ public class Module12IntegrationTests : IClassFixture<WebApplicationFactory<Prog
             DELETE FROM ""UserRoles"" WHERE ""UserId"" IN (SELECT ""Id"" FROM ""Users"" WHERE ""Username"" LIKE 'test_m12_%');
             DELETE FROM ""Users"" WHERE ""Username"" LIKE 'test_m12_%';
             DELETE FROM ""Branches"" WHERE ""Code"" LIKE 'T12B%';
-            DELETE FROM ""IdempotencyRecords"" WHERE ""Key"" LIKE 'IDEMP-M12-%' OR ""Key"" LIKE 'CL-%';
+            DELETE FROM ""IdempotencyRecords"" WHERE ""Key"" LIKE 'IDEMP-%' OR ""Key"" LIKE 'CL-%';
         ");
     }
 
@@ -271,7 +284,7 @@ public class Module12IntegrationTests : IClassFixture<WebApplicationFactory<Prog
         // =========================================================================
         _output.WriteLine("=== 5. Cash In Workflow & Validations ===");
         // Invalid amount <= 0
-        var negCashIn = await c1Client.PostAsJsonAsync("/api/cash-ledger/cash-in", new PostCashInRequest(
+        var negCashIn = await SendWithIdempotencyAsync(c1Client, HttpMethod.Post, "/api/cash-ledger/cash-in", new PostCashInRequest(
             ShiftId: shift1.Id,
             Amount: -500m,
             CategoryId: null,
@@ -282,7 +295,7 @@ public class Module12IntegrationTests : IClassFixture<WebApplicationFactory<Prog
         Assert.Equal(HttpStatusCode.BadRequest, negCashIn.StatusCode);
 
         // Invalid precision > 2 decimals
-        var precCashIn = await c1Client.PostAsJsonAsync("/api/cash-ledger/cash-in", new PostCashInRequest(
+        var precCashIn = await SendWithIdempotencyAsync(c1Client, HttpMethod.Post, "/api/cash-ledger/cash-in", new PostCashInRequest(
             ShiftId: shift1.Id,
             Amount: 100.555m,
             CategoryId: null,
@@ -351,7 +364,7 @@ public class Module12IntegrationTests : IClassFixture<WebApplicationFactory<Prog
         // =========================================================================
         _output.WriteLine("=== 6. Cash Out Workflow & Insufficient Balance Rejection ===");
         // Insufficient balance check: Shift 1 currently has Rs. 25,000. Try to take out Rs. 30,000
-        var overspendRes = await c1Client.PostAsJsonAsync("/api/cash-ledger/cash-out", new PostCashOutRequest(
+        var overspendRes = await SendWithIdempotencyAsync(c1Client, HttpMethod.Post, "/api/cash-ledger/cash-out", new PostCashOutRequest(
             ShiftId: shift1.Id,
             Amount: 30000.00m,
             CategoryId: null,
@@ -363,7 +376,7 @@ public class Module12IntegrationTests : IClassFixture<WebApplicationFactory<Prog
 
         // Valid Cash Out: Rs. 3,000 from Shift 1
         var pettyCat = catsRes.First(c => c.Code == "PETTY_EXPENSE");
-        var validCashOutRes = await c1Client.PostAsJsonAsync("/api/cash-ledger/cash-out", new PostCashOutRequest(
+        var validCashOutRes = await SendWithIdempotencyAsync(c1Client, HttpMethod.Post, "/api/cash-ledger/cash-out", new PostCashOutRequest(
             ShiftId: shift1.Id,
             Amount: 3000.00m,
             CategoryId: pettyCat.Id,
@@ -389,7 +402,7 @@ public class Module12IntegrationTests : IClassFixture<WebApplicationFactory<Prog
         // =========================================================================
         _output.WriteLine("=== 7. Cash Drawer Transfer & Validation ===");
         // Same drawer transfer rejected
-        var sameDrawerTransfer = await mgrClient.PostAsJsonAsync("/api/cash-ledger/transfer", new PostTransferRequest(
+        var sameDrawerTransfer = await SendWithIdempotencyAsync(mgrClient, HttpMethod.Post, "/api/cash-ledger/transfer", new PostTransferRequest(
             SourceShiftId: shift1.Id,
             DestinationShiftId: shift1.Id,
             Amount: 1000m,
@@ -399,7 +412,7 @@ public class Module12IntegrationTests : IClassFixture<WebApplicationFactory<Prog
         Assert.Equal(HttpStatusCode.BadRequest, sameDrawerTransfer.StatusCode);
 
         // Transfer exceeding source balance (try transfer 25,000 when source has 22,000)
-        var overTransfer = await mgrClient.PostAsJsonAsync("/api/cash-ledger/transfer", new PostTransferRequest(
+        var overTransfer = await SendWithIdempotencyAsync(mgrClient, HttpMethod.Post, "/api/cash-ledger/transfer", new PostTransferRequest(
             SourceShiftId: shift1.Id,
             DestinationShiftId: shift2.Id,
             Amount: 25000m,
@@ -409,7 +422,7 @@ public class Module12IntegrationTests : IClassFixture<WebApplicationFactory<Prog
         Assert.Equal(HttpStatusCode.BadRequest, overTransfer.StatusCode);
 
         // Valid Transfer: Rs. 7,000 from Drawer 1 (Shift 1) to Drawer 2 (Shift 2)
-        var validTransferRes = await mgrClient.PostAsJsonAsync("/api/cash-ledger/transfer", new PostTransferRequest(
+        var validTransferRes = await SendWithIdempotencyAsync(mgrClient, HttpMethod.Post, "/api/cash-ledger/transfer", new PostTransferRequest(
             SourceShiftId: shift1.Id,
             DestinationShiftId: shift2.Id,
             Amount: 7000.00m,
@@ -440,7 +453,7 @@ public class Module12IntegrationTests : IClassFixture<WebApplicationFactory<Prog
         // =========================================================================
         _output.WriteLine("=== 8. Reversal Workflow ===");
         // Post separate Cash In of Rs. 1,000 to Shift 1 to test reversal
-        var tempInRes = await c1Client.PostAsJsonAsync("/api/cash-ledger/cash-in", new PostCashInRequest(
+        var tempInRes = await SendWithIdempotencyAsync(c1Client, HttpMethod.Post, "/api/cash-ledger/cash-in", new PostCashInRequest(
             ShiftId: shift1.Id,
             Amount: 1000.00m,
             CategoryId: null,
@@ -456,7 +469,7 @@ public class Module12IntegrationTests : IClassFixture<WebApplicationFactory<Prog
         Assert.Equal(16000.00m, s1SummaryTemp!.CurrentExpectedBalance);
 
         // Reverse the Rs. 1,000 Cash In
-        var revRes = await mgrClient.PostAsJsonAsync($"/api/cash-ledger/transactions/{tempInTx.Id}/reverse", new ReverseTransactionRequest(
+        var revRes = await SendWithIdempotencyAsync(mgrClient, HttpMethod.Post, $"/api/cash-ledger/transactions/{tempInTx.Id}/reverse", new ReverseTransactionRequest(
             ReversalReason: "Recorded against wrong drawer"
         ));
         Assert.Equal(HttpStatusCode.OK, revRes.StatusCode);
@@ -471,19 +484,19 @@ public class Module12IntegrationTests : IClassFixture<WebApplicationFactory<Prog
         Assert.Equal(15000.00m, s1SummaryAfterRev!.CurrentExpectedBalance);
 
         // Duplicate reversal attempt on same transaction is rejected
-        var dupRevRes = await mgrClient.PostAsJsonAsync($"/api/cash-ledger/transactions/{tempInTx.Id}/reverse", new ReverseTransactionRequest(
+        var dupRevRes = await SendWithIdempotencyAsync(mgrClient, HttpMethod.Post, $"/api/cash-ledger/transactions/{tempInTx.Id}/reverse", new ReverseTransactionRequest(
             ReversalReason: "Second reversal attempt"
         ));
         Assert.Equal(HttpStatusCode.BadRequest, dupRevRes.StatusCode);
 
         // Attempting to reverse a reversal transaction itself is rejected
-        var revOnRevRes = await mgrClient.PostAsJsonAsync($"/api/cash-ledger/transactions/{revTx.Id}/reverse", new ReverseTransactionRequest(
+        var revOnRevRes = await SendWithIdempotencyAsync(mgrClient, HttpMethod.Post, $"/api/cash-ledger/transactions/{revTx.Id}/reverse", new ReverseTransactionRequest(
             ReversalReason: "Recursive reversal attempt"
         ));
         Assert.Equal(HttpStatusCode.BadRequest, revOnRevRes.StatusCode);
 
         // Reverse Transfer
-        var revTransferRes = await mgrClient.PostAsJsonAsync($"/api/cash-ledger/transactions/{transferTx.Id}/reverse", new ReverseTransactionRequest(
+        var revTransferRes = await SendWithIdempotencyAsync(mgrClient, HttpMethod.Post, $"/api/cash-ledger/transactions/{transferTx.Id}/reverse", new ReverseTransactionRequest(
             ReversalReason: "Transfer error correction"
         ));
         Assert.Equal(HttpStatusCode.OK, revTransferRes.StatusCode);
@@ -511,7 +524,7 @@ public class Module12IntegrationTests : IClassFixture<WebApplicationFactory<Prog
         Assert.Equal(HttpStatusCode.OK, closeShift2Res.StatusCode);
 
         // Attempt Cash In on closed shift -> rejected
-        var postOnClosedRes = await c2Client.PostAsJsonAsync("/api/cash-ledger/cash-in", new PostCashInRequest(
+        var postOnClosedRes = await SendWithIdempotencyAsync(c2Client, HttpMethod.Post, "/api/cash-ledger/cash-in", new PostCashInRequest(
             ShiftId: shift2.Id,
             Amount: 500m,
             CategoryId: null,
@@ -522,7 +535,7 @@ public class Module12IntegrationTests : IClassFixture<WebApplicationFactory<Prog
         Assert.Equal(HttpStatusCode.BadRequest, postOnClosedRes.StatusCode);
 
         // Attempt Reversal of an earlier transaction involving closed shift -> rejected
-        var revClosedShiftTx = await mgrClient.PostAsJsonAsync($"/api/cash-ledger/transactions/{transferTx.Id}/reverse", new ReverseTransactionRequest(
+        var revClosedShiftTx = await SendWithIdempotencyAsync(mgrClient, HttpMethod.Post, $"/api/cash-ledger/transactions/{transferTx.Id}/reverse", new ReverseTransactionRequest(
             ReversalReason: "Closed shift reversal test"
         ));
         Assert.Equal(HttpStatusCode.BadRequest, revClosedShiftTx.StatusCode);
@@ -618,8 +631,8 @@ public class Module12IntegrationTests : IClassFixture<WebApplicationFactory<Prog
         var clientB = _factory.CreateClient();
         clientB.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", ownerToken);
 
-        var taskA = clientA.PostAsJsonAsync("/api/cash-ledger/cash-out", new PostCashOutRequest(shift.Id, 3500.00m, null, "A", "Concurrent Out A", null));
-        var taskB = clientB.PostAsJsonAsync("/api/cash-ledger/cash-out", new PostCashOutRequest(shift.Id, 3500.00m, null, "B", "Concurrent Out B", null));
+        var taskA = SendWithIdempotencyAsync(clientA, HttpMethod.Post, "/api/cash-ledger/cash-out", new PostCashOutRequest(shift.Id, 3500.00m, null, "A", "Concurrent Out A", null), $"IDEMP-M12-CONC-A-{Guid.NewGuid():N}");
+        var taskB = SendWithIdempotencyAsync(clientB, HttpMethod.Post, "/api/cash-ledger/cash-out", new PostCashOutRequest(shift.Id, 3500.00m, null, "B", "Concurrent Out B", null), $"IDEMP-M12-CONC-B-{Guid.NewGuid():N}");
 
         var responses = await Task.WhenAll(taskA, taskB);
 
@@ -661,7 +674,7 @@ public class Module12IntegrationTests : IClassFixture<WebApplicationFactory<Prog
 
         // Race: Close shift with Rs. 10,000 actual cash vs Post Cash In Rs. 2,000
         var taskClose = clientClose.PostAsJsonAsync($"/api/shifts/{shift.Id}/close", new CloseShiftRequest(10000.00m, null, "Close race", null, shift.Version));
-        var taskCashIn = clientCashIn.PostAsJsonAsync("/api/cash-ledger/cash-in", new PostCashInRequest(shift.Id, 2000.00m, null, "Race Cash In", "Race", null));
+        var taskCashIn = SendWithIdempotencyAsync(clientCashIn, HttpMethod.Post, "/api/cash-ledger/cash-in", new PostCashInRequest(shift.Id, 2000.00m, null, "Race Cash In", "Race", null), $"IDEMP-M12-RACE-IN-{Guid.NewGuid():N}");
 
         var responses = await Task.WhenAll(taskClose, taskCashIn);
         var closeRes = responses[0];
@@ -675,5 +688,485 @@ public class Module12IntegrationTests : IClassFixture<WebApplicationFactory<Prog
         Assert.True(cashInRes.StatusCode == HttpStatusCode.Created || cashInRes.StatusCode == HttpStatusCode.BadRequest);
         Assert.NotEqual(HttpStatusCode.InternalServerError, closeRes.StatusCode);
         Assert.NotEqual(HttpStatusCode.InternalServerError, cashInRes.StatusCode);
+    }
+
+    [Fact]
+    public async Task Hardening_01_MandatoryIdempotency_MissingKey_IsRejected()
+    {
+        var client = _factory.CreateClient();
+        var loginRes = await client.PostAsJsonAsync("/api/auth/login", new LoginRequest("saranga_owner", "OwnerSuperAdmin@2026#Secure"));
+        var ownerToken = (await loginRes.Content.ReadFromJsonAsync<AuthResponse>())!.AccessToken;
+        var ownerClient = _factory.CreateClient();
+        ownerClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", ownerToken);
+
+        var branchRes = await ownerClient.PostAsJsonAsync("/api/branches", new CreateBranchRequest("Test M12 H1 Branch", "T12BH1", "LK", "LKR", "Asia/Colombo", true));
+        var branch = (await branchRes.Content.ReadFromJsonAsync<BranchDto>())!;
+
+        var drwRes = await ownerClient.PostAsJsonAsync("/api/shifts/drawers", new CreateCashDrawerRequest(branch.Id, "T12DRWH1", "Drawer H1", null));
+        var drawer = (await drwRes.Content.ReadFromJsonAsync<CashDrawerDto>())!;
+
+        var openShiftRes = await ownerClient.PostAsJsonAsync("/api/shifts/open", new OpenShiftRequest(branch.Id, drawer.Id, 10000.00m, "Initial float", "H1 Test"));
+        var shift = (await openShiftRes.Content.ReadFromJsonAsync<ShiftDto>())!;
+
+        // 1. Cash In without Idempotency-Key header -> rejected 400
+        var cinRes = await ownerClient.PostAsJsonAsync("/api/cash-ledger/cash-in", new PostCashInRequest(shift.Id, 1000m, null, null, "No key", null));
+        Assert.Equal(HttpStatusCode.BadRequest, cinRes.StatusCode);
+        var cinErr = await cinRes.Content.ReadAsStringAsync();
+        Assert.Contains("Idempotency-Key", cinErr, StringComparison.OrdinalIgnoreCase);
+
+        // 2. Cash Out without Idempotency-Key header -> rejected 400
+        var coutRes = await ownerClient.PostAsJsonAsync("/api/cash-ledger/cash-out", new PostCashOutRequest(shift.Id, 500m, null, null, "No key", null));
+        Assert.Equal(HttpStatusCode.BadRequest, coutRes.StatusCode);
+        var coutErr = await coutRes.Content.ReadAsStringAsync();
+        Assert.Contains("Idempotency-Key", coutErr, StringComparison.OrdinalIgnoreCase);
+
+        // 3. Transfer without Idempotency-Key header -> rejected 400
+        var drwRes2 = await ownerClient.PostAsJsonAsync("/api/shifts/drawers", new CreateCashDrawerRequest(branch.Id, "T12DRWH1B", "Drawer H1B", null));
+        var drawer2 = (await drwRes2.Content.ReadFromJsonAsync<CashDrawerDto>())!;
+        var openShift2Res = await ownerClient.PostAsJsonAsync("/api/shifts/open", new OpenShiftRequest(branch.Id, drawer2.Id, 5000.00m, "Initial float", "H1B Test"));
+        var shift2 = (await openShift2Res.Content.ReadFromJsonAsync<ShiftDto>())!;
+
+        var trfRes = await ownerClient.PostAsJsonAsync("/api/cash-ledger/transfer", new PostTransferRequest(shift.Id, shift2.Id, 500m, "No key transfer", null));
+        Assert.Equal(HttpStatusCode.BadRequest, trfRes.StatusCode);
+        var trfErr = await trfRes.Content.ReadAsStringAsync();
+        Assert.Contains("Idempotency-Key", trfErr, StringComparison.OrdinalIgnoreCase);
+
+        // 4. Reversal without Idempotency-Key header -> rejected 400
+        var validInRes = await SendWithIdempotencyAsync(ownerClient, HttpMethod.Post, "/api/cash-ledger/cash-in", new PostCashInRequest(shift.Id, 1000m, null, null, "Valid In", null));
+        Assert.Equal(HttpStatusCode.Created, validInRes.StatusCode);
+        var validTx = (await validInRes.Content.ReadFromJsonAsync<CashLedgerTransactionDto>())!;
+
+        var revRes = await ownerClient.PostAsJsonAsync($"/api/cash-ledger/transactions/{validTx.Id}/reverse", new ReverseTransactionRequest("No key rev"));
+        Assert.Equal(HttpStatusCode.BadRequest, revRes.StatusCode);
+        var revErr = await revRes.Content.ReadAsStringAsync();
+        Assert.Contains("Idempotency-Key", revErr, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Hardening_02_ConcurrentIdenticalRequests_WithSameIdempotencyKey_CreatesExactlyOneTransaction()
+    {
+        var client = _factory.CreateClient();
+        var loginRes = await client.PostAsJsonAsync("/api/auth/login", new LoginRequest("saranga_owner", "OwnerSuperAdmin@2026#Secure"));
+        var ownerToken = (await loginRes.Content.ReadFromJsonAsync<AuthResponse>())!.AccessToken;
+        var ownerClient = _factory.CreateClient();
+        ownerClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", ownerToken);
+
+        var branchRes = await ownerClient.PostAsJsonAsync("/api/branches", new CreateBranchRequest("Test M12 H2 Branch", "T12BH2", "LK", "LKR", "Asia/Colombo", true));
+        var branch = (await branchRes.Content.ReadFromJsonAsync<BranchDto>())!;
+
+        var drwRes = await ownerClient.PostAsJsonAsync("/api/shifts/drawers", new CreateCashDrawerRequest(branch.Id, "T12DRWH2", "Drawer H2", null));
+        var drawer = (await drwRes.Content.ReadFromJsonAsync<CashDrawerDto>())!;
+
+        var openShiftRes = await ownerClient.PostAsJsonAsync("/api/shifts/open", new OpenShiftRequest(branch.Id, drawer.Id, 10000.00m, "Initial float", "H2 Test"));
+        var shift = (await openShiftRes.Content.ReadFromJsonAsync<ShiftDto>())!;
+
+        var sharedKey = $"IDEMP-M12-DUP-{Guid.NewGuid():N}";
+        var payload = new PostCashInRequest(shift.Id, 2500.00m, null, "Concurrent Identical", "Testing duplicate safety", null);
+
+        // Fire 10 simultaneous duplicate requests with the exact same Idempotency-Key
+        var tasks = Enumerable.Range(0, 10).Select(_ =>
+        {
+            var taskClient = _factory.CreateClient();
+            taskClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", ownerToken);
+            return SendWithIdempotencyAsync(taskClient, HttpMethod.Post, "/api/cash-ledger/cash-in", payload, sharedKey);
+        }).ToArray();
+
+        var responses = await Task.WhenAll(tasks);
+
+        // Every single response must be 201 Created (or 200 OK) without ANY 500 error!
+        Assert.All(responses, r => Assert.True(r.StatusCode == HttpStatusCode.Created || r.StatusCode == HttpStatusCode.OK));
+
+        // Every response returned the exact same Transaction ID
+        var txIds = new List<Guid>();
+        foreach (var r in responses)
+        {
+            var dto = await r.Content.ReadFromJsonAsync<CashLedgerTransactionDto>();
+            Assert.NotNull(dto);
+            txIds.Add(dto.Id);
+        }
+        Assert.Single(txIds.Distinct());
+
+        // In database: exactly ONE transaction, ONE entry, and ONE idempotency record were created!
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var txCount = await db.CashLedgerTransactions.CountAsync(t => t.Id == txIds[0]);
+            var entryCount = await db.CashLedgerEntries.CountAsync(e => e.CashLedgerTransactionId == txIds[0]);
+            var idempCount = await db.IdempotencyRecords.CountAsync(r => r.Key == sharedKey);
+
+            Assert.Equal(1, txCount);
+            Assert.Equal(1, entryCount);
+            Assert.Equal(1, idempCount);
+        }
+
+        // Expected balance increased by Rs. 2,500 exactly once (10,000 + 2,500 = 12,500)
+        var summary = await ownerClient.GetFromJsonAsync<ShiftCashLedgerSummaryDto>($"/api/cash-ledger/shifts/{shift.Id}/summary");
+        Assert.Equal(12500.00m, summary!.CurrentExpectedBalance);
+    }
+
+    [Fact]
+    public async Task Hardening_03_ReusingIdempotencyKey_WithModifiedPayload_IsRejected()
+    {
+        var client = _factory.CreateClient();
+        var loginRes = await client.PostAsJsonAsync("/api/auth/login", new LoginRequest("saranga_owner", "OwnerSuperAdmin@2026#Secure"));
+        var ownerToken = (await loginRes.Content.ReadFromJsonAsync<AuthResponse>())!.AccessToken;
+        var ownerClient = _factory.CreateClient();
+        ownerClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", ownerToken);
+
+        var branchRes = await ownerClient.PostAsJsonAsync("/api/branches", new CreateBranchRequest("Test M12 H3 Branch", "T12BH3", "LK", "LKR", "Asia/Colombo", true));
+        var branch = (await branchRes.Content.ReadFromJsonAsync<BranchDto>())!;
+
+        var drwRes = await ownerClient.PostAsJsonAsync("/api/shifts/drawers", new CreateCashDrawerRequest(branch.Id, "T12DRWH3", "Drawer H3", null));
+        var drawer = (await drwRes.Content.ReadFromJsonAsync<CashDrawerDto>())!;
+
+        var openShiftRes = await ownerClient.PostAsJsonAsync("/api/shifts/open", new OpenShiftRequest(branch.Id, drawer.Id, 10000.00m, "Initial float", "H3 Test"));
+        var shift = (await openShiftRes.Content.ReadFromJsonAsync<ShiftDto>())!;
+
+        var key = $"IDEMP-M12-MOD-{Guid.NewGuid():N}";
+        var firstRes = await SendWithIdempotencyAsync(ownerClient, HttpMethod.Post, "/api/cash-ledger/cash-in",
+            new PostCashInRequest(shift.Id, 1000.00m, null, "Payload 1", "Reason 1", null), key);
+        Assert.Equal(HttpStatusCode.Created, firstRes.StatusCode);
+
+        // Reusing same key with a different amount
+        var secondRes = await SendWithIdempotencyAsync(ownerClient, HttpMethod.Post, "/api/cash-ledger/cash-in",
+            new PostCashInRequest(shift.Id, 2000.00m, null, "Payload 1", "Reason 1", null), key);
+        Assert.Equal(HttpStatusCode.BadRequest, secondRes.StatusCode);
+        var err = await secondRes.Content.ReadAsStringAsync();
+        Assert.Contains("different request payload", err, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Hardening_04_Transfer_ConcurrentThatWouldOverspend_SerializesAndRejectsExcess()
+    {
+        var client = _factory.CreateClient();
+        var loginRes = await client.PostAsJsonAsync("/api/auth/login", new LoginRequest("saranga_owner", "OwnerSuperAdmin@2026#Secure"));
+        var ownerToken = (await loginRes.Content.ReadFromJsonAsync<AuthResponse>())!.AccessToken;
+        var ownerClient = _factory.CreateClient();
+        ownerClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", ownerToken);
+
+        var branchRes = await ownerClient.PostAsJsonAsync("/api/branches", new CreateBranchRequest("Test M12 H4 Branch", "T12BH4", "LK", "LKR", "Asia/Colombo", true));
+        var branch = (await branchRes.Content.ReadFromJsonAsync<BranchDto>())!;
+
+        var drw1Res = await ownerClient.PostAsJsonAsync("/api/shifts/drawers", new CreateCashDrawerRequest(branch.Id, "T12DRWH4A", "Drawer H4A", null));
+        var drawer1 = (await drw1Res.Content.ReadFromJsonAsync<CashDrawerDto>())!;
+        var drw2Res = await ownerClient.PostAsJsonAsync("/api/shifts/drawers", new CreateCashDrawerRequest(branch.Id, "T12DRWH4B", "Drawer H4B", null));
+        var drawer2 = (await drw2Res.Content.ReadFromJsonAsync<CashDrawerDto>())!;
+
+        var rolesRes = await ownerClient.GetFromJsonAsync<List<Saranga.Application.DTOs.Roles.RoleDto>>("/api/roles");
+        var cashierRoleId = rolesRes!.First(r => r.Name == SystemRoles.Cashier).Id;
+
+        // Cashier 1 opens shift on drawer 1
+        var c1UserRes = await ownerClient.PostAsJsonAsync("/api/users", new CreateUserRequest("test_m12_h4_c1", "test_m12_h4_c1@saranga.lk", "Cashier4A@Saranga2026!", "Cashier 4A", new List<Guid> { cashierRoleId }, new List<Guid> { branch.Id }, branch.Id));
+        Assert.Equal(HttpStatusCode.Created, c1UserRes.StatusCode);
+        var c1Login = await client.PostAsJsonAsync("/api/auth/login", new LoginRequest("test_m12_h4_c1", "Cashier4A@Saranga2026!"));
+        var c1Token = (await c1Login.Content.ReadFromJsonAsync<AuthResponse>())!.AccessToken;
+        var c1Client = _factory.CreateClient();
+        c1Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", c1Token);
+
+        var s1Res = await c1Client.PostAsJsonAsync("/api/shifts/open", new OpenShiftRequest(branch.Id, drawer1.Id, 5000.00m, "Initial float", "H4 Test 1"));
+        Assert.Equal(HttpStatusCode.Created, s1Res.StatusCode);
+        var shift1 = (await s1Res.Content.ReadFromJsonAsync<ShiftDto>())!;
+
+        // Cashier 2 opens shift on drawer 2
+        var c2UserRes = await ownerClient.PostAsJsonAsync("/api/users", new CreateUserRequest("test_m12_h4_c2", "test_m12_h4_c2@saranga.lk", "Cashier4B@Saranga2026!", "Cashier 4B", new List<Guid> { cashierRoleId }, new List<Guid> { branch.Id }, branch.Id));
+        Assert.Equal(HttpStatusCode.Created, c2UserRes.StatusCode);
+        var c2Login = await client.PostAsJsonAsync("/api/auth/login", new LoginRequest("test_m12_h4_c2", "Cashier4B@Saranga2026!"));
+        var c2Token = (await c2Login.Content.ReadFromJsonAsync<AuthResponse>())!.AccessToken;
+        var c2Client = _factory.CreateClient();
+        c2Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", c2Token);
+
+        var s2Res = await c2Client.PostAsJsonAsync("/api/shifts/open", new OpenShiftRequest(branch.Id, drawer2.Id, 1000.00m, "Initial float", "H4 Test 2"));
+        Assert.Equal(HttpStatusCode.Created, s2Res.StatusCode);
+        var shift2 = (await s2Res.Content.ReadFromJsonAsync<ShiftDto>())!;
+
+        // Two concurrent transfers each requesting Rs. 3,500 from Source to Dest (total 7,000 > available 5,000)
+        var clientA = _factory.CreateClient();
+        clientA.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", ownerToken);
+        var clientB = _factory.CreateClient();
+        clientB.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", ownerToken);
+
+        var keyA = $"IDEMP-M12-TRF-A-{Guid.NewGuid():N}";
+        var keyB = $"IDEMP-M12-TRF-B-{Guid.NewGuid():N}";
+        var taskA = SendWithIdempotencyAsync(clientA, HttpMethod.Post, "/api/cash-ledger/transfer",
+            new PostTransferRequest(shift1.Id, shift2.Id, 3500.00m, "Concurrent Transfer A", null), keyA);
+        var taskB = SendWithIdempotencyAsync(clientB, HttpMethod.Post, "/api/cash-ledger/transfer",
+            new PostTransferRequest(shift1.Id, shift2.Id, 3500.00m, "Concurrent Transfer B", null), keyB);
+
+        var results = await Task.WhenAll(taskA, taskB);
+
+        Assert.Equal(1, results.Count(r => r.StatusCode == HttpStatusCode.Created));
+        Assert.Equal(1, results.Count(r => r.StatusCode == HttpStatusCode.BadRequest));
+
+        // Source drawer remaining balance: 5,000 - 3,500 = 1,500
+        var s1Summary = await ownerClient.GetFromJsonAsync<ShiftCashLedgerSummaryDto>($"/api/cash-ledger/shifts/{shift1.Id}/summary");
+        Assert.Equal(1500.00m, s1Summary!.CurrentExpectedBalance);
+
+        // Destination drawer balance: 1,000 + 3,500 = 4,500
+        var s2Summary = await ownerClient.GetFromJsonAsync<ShiftCashLedgerSummaryDto>($"/api/cash-ledger/shifts/{shift2.Id}/summary");
+        Assert.Equal(4500.00m, s2Summary!.CurrentExpectedBalance);
+    }
+
+    [Fact]
+    public async Task Hardening_05_Reversal_AgainstClosedOriginalShift_EvenIfReplacementShiftOpen_IsRejected()
+    {
+        var client = _factory.CreateClient();
+        var loginRes = await client.PostAsJsonAsync("/api/auth/login", new LoginRequest("saranga_owner", "OwnerSuperAdmin@2026#Secure"));
+        var ownerToken = (await loginRes.Content.ReadFromJsonAsync<AuthResponse>())!.AccessToken;
+        var ownerClient = _factory.CreateClient();
+        ownerClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", ownerToken);
+
+        var branchRes = await ownerClient.PostAsJsonAsync("/api/branches", new CreateBranchRequest("Test M12 H5 Branch", "T12BH5", "LK", "LKR", "Asia/Colombo", true));
+        var branch = (await branchRes.Content.ReadFromJsonAsync<BranchDto>())!;
+
+        var drwRes = await ownerClient.PostAsJsonAsync("/api/shifts/drawers", new CreateCashDrawerRequest(branch.Id, "T12DRWH5", "Drawer H5", null));
+        var drawer = (await drwRes.Content.ReadFromJsonAsync<CashDrawerDto>())!;
+
+        // 1. Open Shift 1 with Rs. 5,000
+        var s1Res = await ownerClient.PostAsJsonAsync("/api/shifts/open", new OpenShiftRequest(branch.Id, drawer.Id, 5000.00m, "Initial float", "Shift 1"));
+        var shift1 = (await s1Res.Content.ReadFromJsonAsync<ShiftDto>())!;
+
+        // 2. Post Cash In of Rs. 2,000 on Shift 1
+        var inRes = await SendWithIdempotencyAsync(ownerClient, HttpMethod.Post, "/api/cash-ledger/cash-in",
+            new PostCashInRequest(shift1.Id, 2000.00m, null, "In on Shift 1", "Reason", null));
+        Assert.Equal(HttpStatusCode.Created, inRes.StatusCode);
+        var inTx = (await inRes.Content.ReadFromJsonAsync<CashLedgerTransactionDto>())!;
+
+        // 3. Close Shift 1 with exact expected Rs. 7,000
+        var closeRes = await ownerClient.PostAsJsonAsync($"/api/shifts/{shift1.Id}/close",
+            new CloseShiftRequest(7000.00m, null, "Closing Shift 1", null, shift1.Version));
+        Assert.Equal(HttpStatusCode.OK, closeRes.StatusCode);
+
+        // 4. Open Shift 2 (replacement shift) on the exact same drawer with Rs. 7,000
+        var s2Res = await ownerClient.PostAsJsonAsync("/api/shifts/open", new OpenShiftRequest(branch.Id, drawer.Id, 7000.00m, null, "Shift 2"));
+        Assert.Equal(HttpStatusCode.Created, s2Res.StatusCode);
+
+        // 5. Attempt to reverse the Cash In from Shift 1 while Shift 2 is currently OPEN on the drawer
+        var revRes = await SendWithIdempotencyAsync(ownerClient, HttpMethod.Post, $"/api/cash-ledger/transactions/{inTx.Id}/reverse",
+            new ReverseTransactionRequest("Attempting reversal on drawer with replacement shift open"));
+
+        // Must be rejected because the ORIGINAL shift is closed!
+        Assert.Equal(HttpStatusCode.BadRequest, revRes.StatusCode);
+        var err = await revRes.Content.ReadAsStringAsync();
+        Assert.Contains("closed", err, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Hardening_06_Reversal_WithInsufficientExpectedCash_IsRejected()
+    {
+        var client = _factory.CreateClient();
+        var loginRes = await client.PostAsJsonAsync("/api/auth/login", new LoginRequest("saranga_owner", "OwnerSuperAdmin@2026#Secure"));
+        var ownerToken = (await loginRes.Content.ReadFromJsonAsync<AuthResponse>())!.AccessToken;
+        var ownerClient = _factory.CreateClient();
+        ownerClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", ownerToken);
+
+        var branchRes = await ownerClient.PostAsJsonAsync("/api/branches", new CreateBranchRequest("Test M12 H6 Branch", "T12BH6", "LK", "LKR", "Asia/Colombo", true));
+        var branch = (await branchRes.Content.ReadFromJsonAsync<BranchDto>())!;
+
+        var drwRes = await ownerClient.PostAsJsonAsync("/api/shifts/drawers", new CreateCashDrawerRequest(branch.Id, "T12DRWH6", "Drawer H6", null));
+        var drawer = (await drwRes.Content.ReadFromJsonAsync<CashDrawerDto>())!;
+
+        // Shift with Rs. 5,000 float
+        var sRes = await ownerClient.PostAsJsonAsync("/api/shifts/open", new OpenShiftRequest(branch.Id, drawer.Id, 5000.00m, "Initial float", "H6 Test"));
+        var shift = (await sRes.Content.ReadFromJsonAsync<ShiftDto>())!;
+
+        // Cash In of Rs. 10,000 (drawer balance becomes 15,000)
+        var inRes = await SendWithIdempotencyAsync(ownerClient, HttpMethod.Post, "/api/cash-ledger/cash-in",
+            new PostCashInRequest(shift.Id, 10000.00m, null, "Large In", "Float addition", null));
+        var inTx = (await inRes.Content.ReadFromJsonAsync<CashLedgerTransactionDto>())!;
+
+        // Cash Out of Rs. 13,000 (drawer balance becomes 2,000)
+        var outRes = await SendWithIdempotencyAsync(ownerClient, HttpMethod.Post, "/api/cash-ledger/cash-out",
+            new PostCashOutRequest(shift.Id, 13000.00m, null, "Bank deposit", "Cash deposit", null));
+        Assert.Equal(HttpStatusCode.Created, outRes.StatusCode);
+
+        // Attempt to reverse the Rs. 10,000 Cash In -> requires compensating OUT of 10,000, but drawer only has 2,000!
+        var revRes = await SendWithIdempotencyAsync(ownerClient, HttpMethod.Post, $"/api/cash-ledger/transactions/{inTx.Id}/reverse",
+            new ReverseTransactionRequest("Reversal that would overdraw"));
+
+        Assert.Equal(HttpStatusCode.BadRequest, revRes.StatusCode);
+        var err = await revRes.Content.ReadAsStringAsync();
+        Assert.Contains("Insufficient cash", err, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Hardening_07_SystemGeneratedPosting_ParticipatesInCallerTransaction_RollsBackOnFailure()
+    {
+        var client = _factory.CreateClient();
+        var loginRes = await client.PostAsJsonAsync("/api/auth/login", new LoginRequest("saranga_owner", "OwnerSuperAdmin@2026#Secure"));
+        var ownerToken = (await loginRes.Content.ReadFromJsonAsync<AuthResponse>())!.AccessToken;
+        var ownerClient = _factory.CreateClient();
+        ownerClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", ownerToken);
+
+        var branchRes = await ownerClient.PostAsJsonAsync("/api/branches", new CreateBranchRequest("Test M12 H7 Branch", "T12BH7", "LK", "LKR", "Asia/Colombo", true));
+        var branch = (await branchRes.Content.ReadFromJsonAsync<BranchDto>())!;
+
+        var drwRes = await ownerClient.PostAsJsonAsync("/api/shifts/drawers", new CreateCashDrawerRequest(branch.Id, "T12DRWH7", "Drawer H7", null));
+        var drawer = (await drwRes.Content.ReadFromJsonAsync<CashDrawerDto>())!;
+
+        var sRes = await ownerClient.PostAsJsonAsync("/api/shifts/open", new OpenShiftRequest(branch.Id, drawer.Id, 5000.00m, "Initial float", "H7 Test"));
+        var shift = (await sRes.Content.ReadFromJsonAsync<ShiftDto>())!;
+
+        var testPosRef = $"POS-FAIL-{Guid.NewGuid():N}";
+
+        // Enclosing transaction in application layer
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var ledgerService = scope.ServiceProvider.GetRequiredService<ICashLedgerService>();
+
+            await using var outerTx = await db.Database.BeginTransactionAsync();
+
+            // System-generated POS payment posting inside the transaction
+            var result = await ledgerService.PostCashPaymentAsync(
+                CashLedgerSourceType.PosSale,
+                testPosRef,
+                shift.Id,
+                4500.00m,
+                "LKR",
+                "POS Invoice Mock Payment",
+                autoSave: true
+            );
+            Assert.NotNull(result);
+
+            // Simulate downstream failure in POS workflow (e.g. inventory allocation failure)
+            await outerTx.RollbackAsync();
+        }
+
+        // Verify with a fresh context: the cash movement transaction and entries were completely rolled back!
+        using (var verifyScope = _factory.Services.CreateScope())
+        {
+            var verifyDb = verifyScope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var tx = await verifyDb.CashLedgerTransactions
+                .FirstOrDefaultAsync(t => t.SourceReferenceId == testPosRef);
+            Assert.Null(tx);
+
+            var entry = await verifyDb.CashLedgerEntries
+                .FirstOrDefaultAsync(e => e.ShiftId == shift.Id && e.Amount == 4500.00m);
+            Assert.Null(entry);
+        }
+    }
+
+    [Fact]
+    public async Task Hardening_08_DatabaseLevel_PostgreSqlTriggers_EnforceImmutabilityDirectly()
+    {
+        var client = _factory.CreateClient();
+        var loginRes = await client.PostAsJsonAsync("/api/auth/login", new LoginRequest("saranga_owner", "OwnerSuperAdmin@2026#Secure"));
+        var ownerToken = (await loginRes.Content.ReadFromJsonAsync<AuthResponse>())!.AccessToken;
+        var ownerClient = _factory.CreateClient();
+        ownerClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", ownerToken);
+
+        var branchRes = await ownerClient.PostAsJsonAsync("/api/branches", new CreateBranchRequest("Test M12 H8 Branch", "T12BH8", "LK", "LKR", "Asia/Colombo", true));
+        var branch = (await branchRes.Content.ReadFromJsonAsync<BranchDto>())!;
+
+        var drwRes = await ownerClient.PostAsJsonAsync("/api/shifts/drawers", new CreateCashDrawerRequest(branch.Id, "T12DRWH8", "Drawer H8", null));
+        var drawer = (await drwRes.Content.ReadFromJsonAsync<CashDrawerDto>())!;
+
+        var sRes = await ownerClient.PostAsJsonAsync("/api/shifts/open", new OpenShiftRequest(branch.Id, drawer.Id, 5000.00m, "Initial float", "H8 Test"));
+        var shift = (await sRes.Content.ReadFromJsonAsync<ShiftDto>())!;
+
+        var inRes = await SendWithIdempotencyAsync(ownerClient, HttpMethod.Post, "/api/cash-ledger/cash-in",
+            new PostCashInRequest(shift.Id, 1500.00m, null, "H8 In", "Trigger test", null));
+        var inTx = (await inRes.Content.ReadFromJsonAsync<CashLedgerTransactionDto>())!;
+
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        // 1. Direct raw SQL UPDATE on CashLedgerEntries must be blocked by trg_cash_ledger_entries_no_mutation
+        var exEntryUpdate = await Assert.ThrowsAsync<Npgsql.PostgresException>(() =>
+            db.Database.ExecuteSqlRawAsync($"UPDATE \"CashLedgerEntries\" SET \"Amount\" = 99999.00 WHERE \"CashLedgerTransactionId\" = '{inTx.Id}'")
+        );
+        Assert.Contains("immutable", exEntryUpdate.MessageText, StringComparison.OrdinalIgnoreCase);
+
+        // 2. Direct raw SQL DELETE on CashLedgerTransactions must be blocked by trg_cash_ledger_transactions_no_mutation
+        var exTxDelete = await Assert.ThrowsAsync<Npgsql.PostgresException>(() =>
+            db.Database.ExecuteSqlRawAsync($"DELETE FROM \"CashLedgerTransactions\" WHERE \"Id\" = '{inTx.Id}'")
+        );
+        Assert.Contains("immutable", exTxDelete.MessageText, StringComparison.OrdinalIgnoreCase);
+
+        // 3. Direct raw SQL UPDATE altering Amount on CashLedgerTransactions must be blocked
+        var exTxAmountUpdate = await Assert.ThrowsAsync<Npgsql.PostgresException>(() =>
+            db.Database.ExecuteSqlRawAsync($"UPDATE \"CashLedgerTransactions\" SET \"Amount\" = 99999.00 WHERE \"Id\" = '{inTx.Id}'")
+        );
+        Assert.Contains("immutable", exTxAmountUpdate.MessageText, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Hardening_09_CaseInsensitive_CashDrawerCode_UniquenessEnforced()
+    {
+        var client = _factory.CreateClient();
+        var loginRes = await client.PostAsJsonAsync("/api/auth/login", new LoginRequest("saranga_owner", "OwnerSuperAdmin@2026#Secure"));
+        var ownerToken = (await loginRes.Content.ReadFromJsonAsync<AuthResponse>())!.AccessToken;
+        var ownerClient = _factory.CreateClient();
+        ownerClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", ownerToken);
+
+        var branchRes = await ownerClient.PostAsJsonAsync("/api/branches", new CreateBranchRequest("Test M12 H9 Branch", "T12BH9", "LK", "LKR", "Asia/Colombo", true));
+        var branch = (await branchRes.Content.ReadFromJsonAsync<BranchDto>())!;
+
+        // Create initial drawer with code 'T12DRWH9-MAIN'
+        var drw1Res = await ownerClient.PostAsJsonAsync("/api/shifts/drawers", new CreateCashDrawerRequest(branch.Id, "T12DRWH9-MAIN", "Main Drawer", null));
+        Assert.Equal(HttpStatusCode.Created, drw1Res.StatusCode);
+
+        // Attempt to create duplicate with lowercase 't12drwh9-main'
+        var drw2Res = await ownerClient.PostAsJsonAsync("/api/shifts/drawers", new CreateCashDrawerRequest(branch.Id, "t12drwh9-main", "Main Drawer Dup", null));
+        Assert.Equal(HttpStatusCode.BadRequest, drw2Res.StatusCode);
+        var err = await drw2Res.Content.ReadAsStringAsync();
+        Assert.Contains("already exists", err, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Hardening_10_PermissionsAndOwnership_UnauthorizedCashierCannotPostToAnotherCashiersShift()
+    {
+        var client = _factory.CreateClient();
+        var loginRes = await client.PostAsJsonAsync("/api/auth/login", new LoginRequest("saranga_owner", "OwnerSuperAdmin@2026#Secure"));
+        var ownerToken = (await loginRes.Content.ReadFromJsonAsync<AuthResponse>())!.AccessToken;
+        var ownerClient = _factory.CreateClient();
+        ownerClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", ownerToken);
+
+        var branchRes = await ownerClient.PostAsJsonAsync("/api/branches", new CreateBranchRequest("Test M12 H10 Branch", "T12BH10", "LK", "LKR", "Asia/Colombo", true));
+        var branch = (await branchRes.Content.ReadFromJsonAsync<BranchDto>())!;
+
+        var drw1Res = await ownerClient.PostAsJsonAsync("/api/shifts/drawers", new CreateCashDrawerRequest(branch.Id, "T12DRWH10A", "Drawer 1", null));
+        var drawer1 = (await drw1Res.Content.ReadFromJsonAsync<CashDrawerDto>())!;
+        var drw2Res = await ownerClient.PostAsJsonAsync("/api/shifts/drawers", new CreateCashDrawerRequest(branch.Id, "T12DRWH10B", "Drawer 2", null));
+        var drawer2 = (await drw2Res.Content.ReadFromJsonAsync<CashDrawerDto>())!;
+
+        var rolesRes = await ownerClient.GetFromJsonAsync<List<Saranga.Application.DTOs.Roles.RoleDto>>("/api/roles");
+        var cashierRoleId = rolesRes!.First(r => r.Name == SystemRoles.Cashier).Id;
+
+        // Setup Cashier 1
+        var c1UserRes = await ownerClient.PostAsJsonAsync("/api/users", new CreateUserRequest("test_m12_h10_c1", "test_m12_h10_c1@saranga.lk", "Cashier10A@Saranga2026!", "Cashier 10A", new List<Guid> { cashierRoleId }, new List<Guid> { branch.Id }, branch.Id));
+        Assert.Equal(HttpStatusCode.Created, c1UserRes.StatusCode);
+
+        // Setup Cashier 2
+        var c2UserRes = await ownerClient.PostAsJsonAsync("/api/users", new CreateUserRequest("test_m12_h10_c2", "test_m12_h10_c2@saranga.lk", "Cashier10B@Saranga2026!", "Cashier 10B", new List<Guid> { cashierRoleId }, new List<Guid> { branch.Id }, branch.Id));
+        Assert.Equal(HttpStatusCode.Created, c2UserRes.StatusCode);
+
+        // Cashier 1 opens Shift 1
+        var c1Login = await client.PostAsJsonAsync("/api/auth/login", new LoginRequest("test_m12_h10_c1", "Cashier10A@Saranga2026!"));
+        var c1Token = (await c1Login.Content.ReadFromJsonAsync<AuthResponse>())!.AccessToken;
+        var c1Client = _factory.CreateClient();
+        c1Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", c1Token);
+        var s1Res = await c1Client.PostAsJsonAsync("/api/shifts/open", new OpenShiftRequest(branch.Id, drawer1.Id, 5000.00m, "Float", "C1 Shift"));
+        var shift1 = (await s1Res.Content.ReadFromJsonAsync<ShiftDto>())!;
+
+        // Cashier 2 opens Shift 2
+        var c2Login = await client.PostAsJsonAsync("/api/auth/login", new LoginRequest("test_m12_h10_c2", "Cashier10B@Saranga2026!"));
+        var c2Token = (await c2Login.Content.ReadFromJsonAsync<AuthResponse>())!.AccessToken;
+        var c2Client = _factory.CreateClient();
+        c2Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", c2Token);
+        var s2Res = await c2Client.PostAsJsonAsync("/api/shifts/open", new OpenShiftRequest(branch.Id, drawer2.Id, 5000.00m, "Float", "C2 Shift"));
+        var shift2 = (await s2Res.Content.ReadFromJsonAsync<ShiftDto>())!;
+
+        // Cashier 1 attempts to post Cash In to Cashier 2's shift -> rejected with 400
+        var crossPostRes = await SendWithIdempotencyAsync(c1Client, HttpMethod.Post, "/api/cash-ledger/cash-in",
+            new PostCashInRequest(shift2.Id, 1000.00m, null, "Unauthorized cross-shift", "Hacking attempt", null));
+        Assert.Equal(HttpStatusCode.BadRequest, crossPostRes.StatusCode);
+        var err = await crossPostRes.Content.ReadAsStringAsync();
+        Assert.Contains("own active open shift", err, StringComparison.OrdinalIgnoreCase);
+
+        // Cashier 1 attempts to post a transfer (requires CASH_LEDGER_TRANSFER) -> rejected with 403 Forbidden
+        var transferAttempt = await SendWithIdempotencyAsync(c1Client, HttpMethod.Post, "/api/cash-ledger/transfer",
+            new PostTransferRequest(shift1.Id, shift2.Id, 1000.00m, "Unauthorized transfer", null));
+        Assert.Equal(HttpStatusCode.Forbidden, transferAttempt.StatusCode);
     }
 }

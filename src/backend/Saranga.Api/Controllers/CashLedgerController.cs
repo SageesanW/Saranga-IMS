@@ -42,6 +42,10 @@ public class CashLedgerController : ControllerBase
         [FromHeader(Name = "Idempotency-Key")] string? idempotencyKey,
         CancellationToken cancellationToken)
     {
+        if (string.IsNullOrWhiteSpace(idempotencyKey))
+        {
+            throw new Saranga.Application.Common.Exceptions.BusinessRuleException("An 'Idempotency-Key' request header is required for this financial posting operation.");
+        }
         var result = await _cashLedgerService.PostCashInAsync(request, idempotencyKey, cancellationToken);
         return CreatedAtAction(nameof(GetTransactionById), new { id = result.Id }, result);
     }
@@ -53,6 +57,10 @@ public class CashLedgerController : ControllerBase
         [FromHeader(Name = "Idempotency-Key")] string? idempotencyKey,
         CancellationToken cancellationToken)
     {
+        if (string.IsNullOrWhiteSpace(idempotencyKey))
+        {
+            throw new Saranga.Application.Common.Exceptions.BusinessRuleException("An 'Idempotency-Key' request header is required for this financial posting operation.");
+        }
         var result = await _cashLedgerService.PostCashOutAsync(request, idempotencyKey, cancellationToken);
         return CreatedAtAction(nameof(GetTransactionById), new { id = result.Id }, result);
     }
@@ -64,6 +72,10 @@ public class CashLedgerController : ControllerBase
         [FromHeader(Name = "Idempotency-Key")] string? idempotencyKey,
         CancellationToken cancellationToken)
     {
+        if (string.IsNullOrWhiteSpace(idempotencyKey))
+        {
+            throw new Saranga.Application.Common.Exceptions.BusinessRuleException("An 'Idempotency-Key' request header is required for this financial posting operation.");
+        }
         var result = await _cashLedgerService.PostTransferAsync(request, idempotencyKey, cancellationToken);
         return CreatedAtAction(nameof(GetTransactionById), new { id = result.Id }, result);
     }
@@ -76,6 +88,10 @@ public class CashLedgerController : ControllerBase
         [FromHeader(Name = "Idempotency-Key")] string? idempotencyKey,
         CancellationToken cancellationToken)
     {
+        if (string.IsNullOrWhiteSpace(idempotencyKey))
+        {
+            throw new Saranga.Application.Common.Exceptions.BusinessRuleException("An 'Idempotency-Key' request header is required for this financial posting operation.");
+        }
         var result = await _cashLedgerService.ReverseTransactionAsync(id, request, idempotencyKey, cancellationToken);
         return Ok(result);
     }

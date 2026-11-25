@@ -22,6 +22,6 @@ public interface ICashLedgerService
     Task<CashMovementCategoryDto> UpdateCategoryStatusAsync(Guid id, bool isActive, CancellationToken cancellationToken = default);
 
     // Reusable Application-layer operations for future POS sales and refunds (Section 33)
-    Task<CashLedgerTransactionDto> PostCashPaymentAsync(CashLedgerSourceType sourceType, string sourceReferenceId, Guid shiftId, decimal amount, string currencyCode, string? notes, CancellationToken cancellationToken = default);
-    Task<CashLedgerTransactionDto> PostCashRefundAsync(CashLedgerSourceType sourceType, string sourceReferenceId, Guid shiftId, decimal amount, string currencyCode, string? notes, CancellationToken cancellationToken = default);
+    Task<CashLedgerTransactionDto> PostCashPaymentAsync(CashLedgerSourceType sourceType, string sourceReferenceId, Guid shiftId, decimal amount, string currencyCode, string? notes, bool autoSave = true, CancellationToken cancellationToken = default);
+    Task<CashLedgerTransactionDto> PostCashRefundAsync(CashLedgerSourceType sourceType, string sourceReferenceId, Guid shiftId, decimal amount, string currencyCode, string? notes, bool autoSave = true, CancellationToken cancellationToken = default);
 }

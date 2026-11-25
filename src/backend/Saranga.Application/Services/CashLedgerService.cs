@@ -147,30 +147,33 @@ public class CashLedgerService : ICashLedgerService
     {
         ValidateMonetaryAmount(request.Amount);
 
-        var userId = _currentUserService.UserId ?? Guid.Empty;
-        var normalizedKey = string.IsNullOrWhiteSpace(idempotencyKey) ? null : idempotencyKey.Trim();
-
-        // 1. Idempotency Check
-        if (!string.IsNullOrEmpty(normalizedKey))
+        if (string.IsNullOrWhiteSpace(idempotencyKey))
         {
-            var payloadJson = JsonSerializer.Serialize(request);
-            var requestHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(payloadJson)));
+            throw new BusinessRuleException("An 'Idempotency-Key' request header is required for this financial posting operation.");
+        }
 
-            var existingRecord = await _context.IdempotencyRecords
-                .FirstOrDefaultAsync(r => r.UserId == userId && r.Key == normalizedKey, cancellationToken);
+        var userId = _currentUserService.UserId ?? Guid.Empty;
+        var normalizedKey = idempotencyKey.Trim();
 
-            if (existingRecord != null)
+        // 1. Idempotency Check (Fast path)
+        var payloadJson = JsonSerializer.Serialize(request);
+        var requestHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(payloadJson)));
+
+        var existingRecord = await _context.IdempotencyRecords
+            .AsNoTracking()
+            .FirstOrDefaultAsync(r => r.UserId == userId && r.Key == normalizedKey, cancellationToken);
+
+        if (existingRecord != null)
+        {
+            if (existingRecord.RequestHash != requestHash)
             {
-                if (existingRecord.RequestHash != requestHash)
-                {
-                    throw new BusinessRuleException("Idempotency key has already been used with a different request payload.");
-                }
+                throw new BusinessRuleException("Idempotency key has already been used with a different request payload.");
+            }
 
-                var cachedDto = JsonSerializer.Deserialize<CashLedgerTransactionDto>(existingRecord.ResponseBody);
-                if (cachedDto != null)
-                {
-                    return cachedDto;
-                }
+            var cachedDto = JsonSerializer.Deserialize<CashLedgerTransactionDto>(existingRecord.ResponseBody);
+            if (cachedDto != null)
+            {
+                return cachedDto;
             }
         }
 
@@ -178,6 +181,25 @@ public class CashLedgerService : ICashLedgerService
         await using var dbTransaction = await _context.Database.BeginTransactionAsync(cancellationToken);
 
         await _context.Database.ExecuteSqlInterpolatedAsync($"SELECT 1 FROM \"Shifts\" WHERE \"Id\" = {request.ShiftId} FOR UPDATE", cancellationToken);
+
+        // Under-lock idempotency re-check
+        var recordUnderLock = await _context.IdempotencyRecords
+            .AsNoTracking()
+            .FirstOrDefaultAsync(r => r.UserId == userId && r.Key == normalizedKey, cancellationToken);
+
+        if (recordUnderLock != null)
+        {
+            if (recordUnderLock.RequestHash != requestHash)
+            {
+                throw new BusinessRuleException("Idempotency key has already been used with a different request payload.");
+            }
+
+            var cachedDto = JsonSerializer.Deserialize<CashLedgerTransactionDto>(recordUnderLock.ResponseBody);
+            if (cachedDto != null)
+            {
+                return cachedDto;
+            }
+        }
 
         var shift = await _context.Shifts
             .Include(s => s.CashDrawer)
@@ -317,22 +339,47 @@ public class CashLedgerService : ICashLedgerService
             }
         );
 
-        if (!string.IsNullOrEmpty(normalizedKey))
+        _context.IdempotencyRecords.Add(new IdempotencyRecord
         {
-            var payloadJson = JsonSerializer.Serialize(request);
-            var requestHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(payloadJson)));
-            _context.IdempotencyRecords.Add(new IdempotencyRecord
-            {
-                UserId = userId,
-                Key = normalizedKey,
-                RequestHash = requestHash,
-                ResponseBody = JsonSerializer.Serialize(resultDto),
-                ExpiresAt = now.AddHours(24)
-            });
-        }
+            Id = Guid.NewGuid(),
+            UserId = userId,
+            Key = normalizedKey,
+            Endpoint = "/api/cash-ledger/cash-in",
+            RequestHash = requestHash,
+            ResponseBody = JsonSerializer.Serialize(resultDto),
+            CreatedAt = now,
+            ExpiresAt = now.AddDays(7)
+        });
 
-        await _context.SaveChangesAsync(cancellationToken);
-        await dbTransaction.CommitAsync(cancellationToken);
+        try
+        {
+            await _context.SaveChangesAsync(cancellationToken);
+            await dbTransaction.CommitAsync(cancellationToken);
+        }
+        catch (DbUpdateException)
+        {
+            await dbTransaction.RollbackAsync(cancellationToken);
+
+            var committedRecord = await _context.IdempotencyRecords
+                .AsNoTracking()
+                .FirstOrDefaultAsync(r => r.UserId == userId && r.Key == normalizedKey, cancellationToken);
+
+            if (committedRecord != null)
+            {
+                if (committedRecord.RequestHash != requestHash)
+                {
+                    throw new BusinessRuleException("Idempotency key has already been used with a different request payload.");
+                }
+
+                var cachedDto = JsonSerializer.Deserialize<CashLedgerTransactionDto>(committedRecord.ResponseBody);
+                if (cachedDto != null)
+                {
+                    return cachedDto;
+                }
+            }
+
+            throw;
+        }
 
         _logger.LogInformation("Posted Cash In {TxRef} of {Amount:N2} {Currency} to Shift {ShiftNumber} (Drawer: {DrawerName}) by User {UserId}",
             tx.TransactionReference, tx.Amount, tx.CurrencyCode, shift.ShiftNumber, shift.CashDrawer?.Name, userId);
@@ -344,30 +391,33 @@ public class CashLedgerService : ICashLedgerService
     {
         ValidateMonetaryAmount(request.Amount);
 
-        var userId = _currentUserService.UserId ?? Guid.Empty;
-        var normalizedKey = string.IsNullOrWhiteSpace(idempotencyKey) ? null : idempotencyKey.Trim();
-
-        // 1. Idempotency Check
-        if (!string.IsNullOrEmpty(normalizedKey))
+        if (string.IsNullOrWhiteSpace(idempotencyKey))
         {
-            var payloadJson = JsonSerializer.Serialize(request);
-            var requestHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(payloadJson)));
+            throw new BusinessRuleException("An 'Idempotency-Key' request header is required for this financial posting operation.");
+        }
 
-            var existingRecord = await _context.IdempotencyRecords
-                .FirstOrDefaultAsync(r => r.UserId == userId && r.Key == normalizedKey, cancellationToken);
+        var userId = _currentUserService.UserId ?? Guid.Empty;
+        var normalizedKey = idempotencyKey.Trim();
 
-            if (existingRecord != null)
+        // 1. Idempotency Check (Fast path)
+        var payloadJson = JsonSerializer.Serialize(request);
+        var requestHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(payloadJson)));
+
+        var existingRecord = await _context.IdempotencyRecords
+            .AsNoTracking()
+            .FirstOrDefaultAsync(r => r.UserId == userId && r.Key == normalizedKey, cancellationToken);
+
+        if (existingRecord != null)
+        {
+            if (existingRecord.RequestHash != requestHash)
             {
-                if (existingRecord.RequestHash != requestHash)
-                {
-                    throw new BusinessRuleException("Idempotency key has already been used with a different request payload.");
-                }
+                throw new BusinessRuleException("Idempotency key has already been used with a different request payload.");
+            }
 
-                var cachedDto = JsonSerializer.Deserialize<CashLedgerTransactionDto>(existingRecord.ResponseBody);
-                if (cachedDto != null)
-                {
-                    return cachedDto;
-                }
+            var cachedDto = JsonSerializer.Deserialize<CashLedgerTransactionDto>(existingRecord.ResponseBody);
+            if (cachedDto != null)
+            {
+                return cachedDto;
             }
         }
 
@@ -375,6 +425,25 @@ public class CashLedgerService : ICashLedgerService
         await using var dbTransaction = await _context.Database.BeginTransactionAsync(cancellationToken);
 
         await _context.Database.ExecuteSqlInterpolatedAsync($"SELECT 1 FROM \"Shifts\" WHERE \"Id\" = {request.ShiftId} FOR UPDATE", cancellationToken);
+
+        // Under-lock idempotency re-check
+        var recordUnderLock = await _context.IdempotencyRecords
+            .AsNoTracking()
+            .FirstOrDefaultAsync(r => r.UserId == userId && r.Key == normalizedKey, cancellationToken);
+
+        if (recordUnderLock != null)
+        {
+            if (recordUnderLock.RequestHash != requestHash)
+            {
+                throw new BusinessRuleException("Idempotency key has already been used with a different request payload.");
+            }
+
+            var cachedDto = JsonSerializer.Deserialize<CashLedgerTransactionDto>(recordUnderLock.ResponseBody);
+            if (cachedDto != null)
+            {
+                return cachedDto;
+            }
+        }
 
         var shift = await _context.Shifts
             .Include(s => s.CashDrawer)
@@ -523,22 +592,47 @@ public class CashLedgerService : ICashLedgerService
             }
         );
 
-        if (!string.IsNullOrEmpty(normalizedKey))
+        _context.IdempotencyRecords.Add(new IdempotencyRecord
         {
-            var payloadJson = JsonSerializer.Serialize(request);
-            var requestHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(payloadJson)));
-            _context.IdempotencyRecords.Add(new IdempotencyRecord
-            {
-                UserId = userId,
-                Key = normalizedKey,
-                RequestHash = requestHash,
-                ResponseBody = JsonSerializer.Serialize(resultDto),
-                ExpiresAt = now.AddHours(24)
-            });
-        }
+            Id = Guid.NewGuid(),
+            UserId = userId,
+            Key = normalizedKey,
+            Endpoint = "/api/cash-ledger/cash-out",
+            RequestHash = requestHash,
+            ResponseBody = JsonSerializer.Serialize(resultDto),
+            CreatedAt = now,
+            ExpiresAt = now.AddDays(7)
+        });
 
-        await _context.SaveChangesAsync(cancellationToken);
-        await dbTransaction.CommitAsync(cancellationToken);
+        try
+        {
+            await _context.SaveChangesAsync(cancellationToken);
+            await dbTransaction.CommitAsync(cancellationToken);
+        }
+        catch (DbUpdateException)
+        {
+            await dbTransaction.RollbackAsync(cancellationToken);
+
+            var committedRecord = await _context.IdempotencyRecords
+                .AsNoTracking()
+                .FirstOrDefaultAsync(r => r.UserId == userId && r.Key == normalizedKey, cancellationToken);
+
+            if (committedRecord != null)
+            {
+                if (committedRecord.RequestHash != requestHash)
+                {
+                    throw new BusinessRuleException("Idempotency key has already been used with a different request payload.");
+                }
+
+                var cachedDto = JsonSerializer.Deserialize<CashLedgerTransactionDto>(committedRecord.ResponseBody);
+                if (cachedDto != null)
+                {
+                    return cachedDto;
+                }
+            }
+
+            throw;
+        }
 
         _logger.LogInformation("Posted Cash Out {TxRef} of {Amount:N2} {Currency} from Shift {ShiftNumber} (Drawer: {DrawerName}) by User {UserId}. Expected Remaining: {Remaining:N2}",
             tx.TransactionReference, tx.Amount, tx.CurrencyCode, shift.ShiftNumber, shift.CashDrawer?.Name, userId, currentExpected - request.Amount);
@@ -549,6 +643,11 @@ public class CashLedgerService : ICashLedgerService
     public async Task<CashLedgerTransactionDto> PostTransferAsync(PostTransferRequest request, string? idempotencyKey = null, CancellationToken cancellationToken = default)
     {
         ValidateMonetaryAmount(request.Amount);
+
+        if (string.IsNullOrWhiteSpace(idempotencyKey))
+        {
+            throw new BusinessRuleException("An 'Idempotency-Key' request header is required for this financial posting operation.");
+        }
 
         if (request.SourceShiftId == request.DestinationShiftId)
         {
@@ -561,34 +660,51 @@ public class CashLedgerService : ICashLedgerService
         }
 
         var userId = _currentUserService.UserId ?? Guid.Empty;
-        var normalizedKey = string.IsNullOrWhiteSpace(idempotencyKey) ? null : idempotencyKey.Trim();
+        var normalizedKey = idempotencyKey.Trim();
 
-        // 1. Idempotency Check
-        if (!string.IsNullOrEmpty(normalizedKey))
+        // 1. Idempotency Check (Fast path)
+        var payloadJson = JsonSerializer.Serialize(request);
+        var requestHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(payloadJson)));
+
+        var existingRecord = await _context.IdempotencyRecords
+            .AsNoTracking()
+            .FirstOrDefaultAsync(r => r.UserId == userId && r.Key == normalizedKey, cancellationToken);
+
+        if (existingRecord != null)
         {
-            var payloadJson = JsonSerializer.Serialize(request);
-            var requestHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(payloadJson)));
-
-            var existingRecord = await _context.IdempotencyRecords
-                .FirstOrDefaultAsync(r => r.UserId == userId && r.Key == normalizedKey, cancellationToken);
-
-            if (existingRecord != null)
+            if (existingRecord.RequestHash != requestHash)
             {
-                if (existingRecord.RequestHash != requestHash)
-                {
-                    throw new BusinessRuleException("Idempotency key has already been used with a different request payload.");
-                }
+                throw new BusinessRuleException("Idempotency key has already been used with a different request payload.");
+            }
 
-                var cachedDto = JsonSerializer.Deserialize<CashLedgerTransactionDto>(existingRecord.ResponseBody);
-                if (cachedDto != null)
-                {
-                    return cachedDto;
-                }
+            var cachedDto = JsonSerializer.Deserialize<CashLedgerTransactionDto>(existingRecord.ResponseBody);
+            if (cachedDto != null)
+            {
+                return cachedDto;
             }
         }
 
         // 2. Atomic Database Transaction with Deterministic Locking (Section 14)
         await using var dbTransaction = await _context.Database.BeginTransactionAsync(cancellationToken);
+
+        // Under-lock idempotency re-check
+        var recordUnderLock = await _context.IdempotencyRecords
+            .AsNoTracking()
+            .FirstOrDefaultAsync(r => r.UserId == userId && r.Key == normalizedKey, cancellationToken);
+
+        if (recordUnderLock != null)
+        {
+            if (recordUnderLock.RequestHash != requestHash)
+            {
+                throw new BusinessRuleException("Idempotency key has already been used with a different request payload.");
+            }
+
+            var cachedDto = JsonSerializer.Deserialize<CashLedgerTransactionDto>(recordUnderLock.ResponseBody);
+            if (cachedDto != null)
+            {
+                return cachedDto;
+            }
+        }
 
         var (firstId, secondId) = request.SourceShiftId.CompareTo(request.DestinationShiftId) < 0
             ? (request.SourceShiftId, request.DestinationShiftId)
@@ -781,22 +897,47 @@ public class CashLedgerService : ICashLedgerService
             }
         );
 
-        if (!string.IsNullOrEmpty(normalizedKey))
+        _context.IdempotencyRecords.Add(new IdempotencyRecord
         {
-            var payloadJson = JsonSerializer.Serialize(request);
-            var requestHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(payloadJson)));
-            _context.IdempotencyRecords.Add(new IdempotencyRecord
-            {
-                UserId = userId,
-                Key = normalizedKey,
-                RequestHash = requestHash,
-                ResponseBody = JsonSerializer.Serialize(resultDto),
-                ExpiresAt = now.AddHours(24)
-            });
-        }
+            Id = Guid.NewGuid(),
+            UserId = userId,
+            Key = normalizedKey,
+            Endpoint = "/api/cash-ledger/transfer",
+            RequestHash = requestHash,
+            ResponseBody = JsonSerializer.Serialize(resultDto),
+            CreatedAt = now,
+            ExpiresAt = now.AddDays(7)
+        });
 
-        await _context.SaveChangesAsync(cancellationToken);
-        await dbTransaction.CommitAsync(cancellationToken);
+        try
+        {
+            await _context.SaveChangesAsync(cancellationToken);
+            await dbTransaction.CommitAsync(cancellationToken);
+        }
+        catch (DbUpdateException)
+        {
+            await dbTransaction.RollbackAsync(cancellationToken);
+
+            var committedRecord = await _context.IdempotencyRecords
+                .AsNoTracking()
+                .FirstOrDefaultAsync(r => r.UserId == userId && r.Key == normalizedKey, cancellationToken);
+
+            if (committedRecord != null)
+            {
+                if (committedRecord.RequestHash != requestHash)
+                {
+                    throw new BusinessRuleException("Idempotency key has already been used with a different request payload.");
+                }
+
+                var cachedDto = JsonSerializer.Deserialize<CashLedgerTransactionDto>(committedRecord.ResponseBody);
+                if (cachedDto != null)
+                {
+                    return cachedDto;
+                }
+            }
+
+            throw;
+        }
 
         _logger.LogInformation("Posted Cash Transfer {TxRef} of {Amount:N2} {Currency} from Drawer {SourceDrawer} to Drawer {DestDrawer} by User {UserId}",
             tx.TransactionReference, tx.Amount, tx.CurrencyCode, sourceShift.CashDrawer?.Name, destShift.CashDrawer?.Name, userId);
@@ -806,40 +947,62 @@ public class CashLedgerService : ICashLedgerService
 
     public async Task<CashLedgerTransactionDto> ReverseTransactionAsync(Guid transactionId, ReverseTransactionRequest request, string? idempotencyKey = null, CancellationToken cancellationToken = default)
     {
+        if (string.IsNullOrWhiteSpace(idempotencyKey))
+        {
+            throw new BusinessRuleException("An 'Idempotency-Key' request header is required for this financial posting operation.");
+        }
+
         if (string.IsNullOrWhiteSpace(request.ReversalReason))
         {
             throw new BusinessRuleException("A reversal reason is mandatory.");
         }
 
         var userId = _currentUserService.UserId ?? Guid.Empty;
-        var normalizedKey = string.IsNullOrWhiteSpace(idempotencyKey) ? null : idempotencyKey.Trim();
+        var normalizedKey = idempotencyKey.Trim();
 
-        // 1. Idempotency Check
-        if (!string.IsNullOrEmpty(normalizedKey))
+        // 1. Idempotency Check (Fast path)
+        var payloadJson = JsonSerializer.Serialize(request);
+        var requestHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(payloadJson)));
+
+        var existingRecord = await _context.IdempotencyRecords
+            .AsNoTracking()
+            .FirstOrDefaultAsync(r => r.UserId == userId && r.Key == normalizedKey, cancellationToken);
+
+        if (existingRecord != null)
         {
-            var payloadJson = JsonSerializer.Serialize(request);
-            var requestHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(payloadJson)));
-
-            var existingRecord = await _context.IdempotencyRecords
-                .FirstOrDefaultAsync(r => r.UserId == userId && r.Key == normalizedKey, cancellationToken);
-
-            if (existingRecord != null)
+            if (existingRecord.RequestHash != requestHash)
             {
-                if (existingRecord.RequestHash != requestHash)
-                {
-                    throw new BusinessRuleException("Idempotency key has already been used with a different request payload.");
-                }
+                throw new BusinessRuleException("Idempotency key has already been used with a different request payload.");
+            }
 
-                var cachedDto = JsonSerializer.Deserialize<CashLedgerTransactionDto>(existingRecord.ResponseBody);
-                if (cachedDto != null)
-                {
-                    return cachedDto;
-                }
+            var cachedDto = JsonSerializer.Deserialize<CashLedgerTransactionDto>(existingRecord.ResponseBody);
+            if (cachedDto != null)
+            {
+                return cachedDto;
             }
         }
 
         // 2. Atomic Database Transaction with Locking
         await using var dbTransaction = await _context.Database.BeginTransactionAsync(cancellationToken);
+
+        // Under-lock idempotency re-check
+        var recordUnderLock = await _context.IdempotencyRecords
+            .AsNoTracking()
+            .FirstOrDefaultAsync(r => r.UserId == userId && r.Key == normalizedKey, cancellationToken);
+
+        if (recordUnderLock != null)
+        {
+            if (recordUnderLock.RequestHash != requestHash)
+            {
+                throw new BusinessRuleException("Idempotency key has already been used with a different request payload.");
+            }
+
+            var cachedDto = JsonSerializer.Deserialize<CashLedgerTransactionDto>(recordUnderLock.ResponseBody);
+            if (cachedDto != null)
+            {
+                return cachedDto;
+            }
+        }
 
         var orig = await _context.CashLedgerTransactions
             .Include(t => t.Entries)
@@ -849,6 +1012,12 @@ public class CashLedgerService : ICashLedgerService
             .Include(t => t.Branch)
             .FirstOrDefaultAsync(t => t.Id == transactionId && !t.IsDeleted, cancellationToken)
             ?? throw new NotFoundException("CashLedgerTransaction", transactionId);
+
+        // Branch check
+        if (!_currentUserService.IsGlobalAdmin && !_currentUserService.AccessibleBranchIds.Contains(orig.BranchId))
+        {
+            throw new ForbiddenException("You are not authorized to reverse transactions for this branch.");
+        }
 
         // Verification (Sections 18-21)
         if (orig.Status == CashLedgerStatus.Reversed)
@@ -1038,22 +1207,47 @@ public class CashLedgerService : ICashLedgerService
             entryDtos
         );
 
-        if (!string.IsNullOrEmpty(normalizedKey))
+        _context.IdempotencyRecords.Add(new IdempotencyRecord
         {
-            var payloadJson = JsonSerializer.Serialize(request);
-            var requestHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(payloadJson)));
-            _context.IdempotencyRecords.Add(new IdempotencyRecord
-            {
-                UserId = userId,
-                Key = normalizedKey,
-                RequestHash = requestHash,
-                ResponseBody = JsonSerializer.Serialize(resultDto),
-                ExpiresAt = now.AddHours(24)
-            });
-        }
+            Id = Guid.NewGuid(),
+            UserId = userId,
+            Key = normalizedKey,
+            Endpoint = "/api/cash-ledger/transactions/reverse",
+            RequestHash = requestHash,
+            ResponseBody = JsonSerializer.Serialize(resultDto),
+            CreatedAt = now,
+            ExpiresAt = now.AddDays(7)
+        });
 
-        await _context.SaveChangesAsync(cancellationToken);
-        await dbTransaction.CommitAsync(cancellationToken);
+        try
+        {
+            await _context.SaveChangesAsync(cancellationToken);
+            await dbTransaction.CommitAsync(cancellationToken);
+        }
+        catch (DbUpdateException)
+        {
+            await dbTransaction.RollbackAsync(cancellationToken);
+
+            var committedRecord = await _context.IdempotencyRecords
+                .AsNoTracking()
+                .FirstOrDefaultAsync(r => r.UserId == userId && r.Key == normalizedKey, cancellationToken);
+
+            if (committedRecord != null)
+            {
+                if (committedRecord.RequestHash != requestHash)
+                {
+                    throw new BusinessRuleException("Idempotency key has already been used with a different request payload.");
+                }
+
+                var cachedDto = JsonSerializer.Deserialize<CashLedgerTransactionDto>(committedRecord.ResponseBody);
+                if (cachedDto != null)
+                {
+                    return cachedDto;
+                }
+            }
+
+            throw;
+        }
 
         _logger.LogInformation("Reversed Cash Ledger Transaction {OrigRef} via Compensating Transaction {RevRef} by User {UserId}. Reason: {Reason}",
             orig.TransactionReference, revTx.TransactionReference, userId, request.ReversalReason);
@@ -1250,7 +1444,7 @@ public class CashLedgerService : ICashLedgerService
         );
     }
 
-    public async Task<CashLedgerTransactionDto> PostCashPaymentAsync(CashLedgerSourceType sourceType, string sourceReferenceId, Guid shiftId, decimal amount, string currencyCode, string? notes, CancellationToken cancellationToken = default)
+    public async Task<CashLedgerTransactionDto> PostCashPaymentAsync(CashLedgerSourceType sourceType, string sourceReferenceId, Guid shiftId, decimal amount, string currencyCode, string? notes, bool autoSave = true, CancellationToken cancellationToken = default)
     {
         ValidateMonetaryAmount(amount);
 
@@ -1274,11 +1468,11 @@ public class CashLedgerService : ICashLedgerService
             .FirstOrDefaultAsync(s => s.Id == shiftId, cancellationToken)
             ?? throw new NotFoundException("Shift", shiftId);
 
-        ValidateShiftForPosting(shift);
+        ValidateShiftForPosting(shift, isSystem: true);
 
         var txRef = await _tagGenerator.GenerateCashLedgerReferenceAsync(shift.Branch?.Code ?? "BR", cancellationToken);
         var now = DateTimeOffset.UtcNow;
-        var userId = _currentUserService.UserId ?? Guid.Empty;
+        var userId = _currentUserService.UserId ?? shift.CashierId;
 
         var tx = new CashLedgerTransaction
         {
@@ -1314,12 +1508,15 @@ public class CashLedgerService : ICashLedgerService
         _context.CashLedgerTransactions.Add(tx);
         _context.CashLedgerEntries.Add(entry);
 
-        await _context.SaveChangesAsync(cancellationToken);
+        if (autoSave)
+        {
+            await _context.SaveChangesAsync(cancellationToken);
+        }
 
         return MapToTransactionDto(tx);
     }
 
-    public async Task<CashLedgerTransactionDto> PostCashRefundAsync(CashLedgerSourceType sourceType, string sourceReferenceId, Guid shiftId, decimal amount, string currencyCode, string? notes, CancellationToken cancellationToken = default)
+    public async Task<CashLedgerTransactionDto> PostCashRefundAsync(CashLedgerSourceType sourceType, string sourceReferenceId, Guid shiftId, decimal amount, string currencyCode, string? notes, bool autoSave = true, CancellationToken cancellationToken = default)
     {
         ValidateMonetaryAmount(amount);
 
@@ -1342,7 +1539,7 @@ public class CashLedgerService : ICashLedgerService
             .FirstOrDefaultAsync(s => s.Id == shiftId, cancellationToken)
             ?? throw new NotFoundException("Shift", shiftId);
 
-        ValidateShiftForPosting(shift);
+        ValidateShiftForPosting(shift, isSystem: true);
 
         var currentExpected = await _expectedBalanceService.CalculateExpectedClosingBalanceAsync(shift.Id, shift.OpeningBalance, cancellationToken);
         if (currentExpected < amount)
@@ -1352,7 +1549,7 @@ public class CashLedgerService : ICashLedgerService
 
         var txRef = await _tagGenerator.GenerateCashLedgerReferenceAsync(shift.Branch?.Code ?? "BR", cancellationToken);
         var now = DateTimeOffset.UtcNow;
-        var userId = _currentUserService.UserId ?? Guid.Empty;
+        var userId = _currentUserService.UserId ?? shift.CashierId;
 
         var tx = new CashLedgerTransaction
         {
@@ -1388,7 +1585,10 @@ public class CashLedgerService : ICashLedgerService
         _context.CashLedgerTransactions.Add(tx);
         _context.CashLedgerEntries.Add(entry);
 
-        await _context.SaveChangesAsync(cancellationToken);
+        if (autoSave)
+        {
+            await _context.SaveChangesAsync(cancellationToken);
+        }
 
         return MapToTransactionDto(tx);
     }
@@ -1406,7 +1606,7 @@ public class CashLedgerService : ICashLedgerService
         }
     }
 
-    private void ValidateShiftForPosting(Shift shift)
+    private void ValidateShiftForPosting(Shift shift, bool isSystem = false)
     {
         if (shift.Status != ShiftStatus.Open)
         {
@@ -1416,6 +1616,11 @@ public class CashLedgerService : ICashLedgerService
         if (shift.CashDrawer == null || !shift.CashDrawer.IsActive)
         {
             throw new BusinessRuleException($"Cash drawer '{shift.CashDrawer?.Name ?? shift.CashDrawerId.ToString()}' is inactive or invalid.");
+        }
+
+        if (isSystem)
+        {
+            return;
         }
 
         // Branch check
