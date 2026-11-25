@@ -1309,6 +1309,140 @@ export interface CreateCashDrawerRequest {
   description?: string | null;
 }
 
+// Module 12: Cash Ledger & Cash Drawer Movements
+export interface CashMovementCategory {
+  id: string;
+  name: string;
+  code: string;
+  allowedDirection: number; // 1: In, 2: Out, 3: Both
+  description?: string | null;
+  isActive: boolean;
+  isSystem: boolean;
+  createdAt: string;
+}
+
+export interface CashLedgerEntry {
+  id: string;
+  cashLedgerTransactionId: string;
+  branchId: string;
+  cashDrawerId: string;
+  cashDrawerName?: string | null;
+  cashDrawerCode?: string | null;
+  shiftId: string;
+  shiftNumber?: string | null;
+  direction: number; // 1: In, 2: Out
+  directionName: string;
+  amount: number;
+  currencyCode: string;
+  createdAt: string;
+  createdBy?: string | null;
+  createdByName?: string | null;
+}
+
+export interface CashLedgerTransaction {
+  id: string;
+  transactionReference: string;
+  branchId: string;
+  branchName?: string | null;
+  transactionType: number; // 1: CashIn, 2: CashOut, 3: Transfer, 4: Reversal
+  transactionTypeName: string;
+  sourceType: number; // 1: Manual, 2: PosSale, etc.
+  sourceTypeName: string;
+  sourceReferenceId?: string | null;
+  amount: number;
+  currencyCode: string;
+  description?: string | null;
+  reason?: string | null;
+  categoryId?: string | null;
+  categoryName?: string | null;
+  categoryCode?: string | null;
+  status: number; // 1: Posted, 2: Reversed
+  statusName: string;
+  transactionAt: string;
+  reversalOfTransactionId?: string | null;
+  reversalOfTransactionReference?: string | null;
+  createdAt: string;
+  createdBy?: string | null;
+  createdByName?: string | null;
+  entries: CashLedgerEntry[];
+}
+
+export interface ShiftCashLedgerSummary {
+  shiftId: string;
+  shiftNumber: string;
+  branchId: string;
+  branchName?: string | null;
+  cashDrawerId: string;
+  cashDrawerName?: string | null;
+  cashDrawerCode?: string | null;
+  cashierId: string;
+  cashierName?: string | null;
+  shiftStatus: number;
+  openingBalance: number;
+  totalCashIn: number;
+  totalCashOut: number;
+  currentExpectedBalance: number;
+  currencyCode: string;
+  totalTransactionsCount: number;
+}
+
+export interface PostCashInRequest {
+  shiftId: string;
+  amount: number;
+  categoryId?: string | null;
+  description?: string | null;
+  reason?: string | null;
+  externalReference?: string | null;
+}
+
+export interface PostCashOutRequest {
+  shiftId: string;
+  amount: number;
+  categoryId?: string | null;
+  description?: string | null;
+  reason?: string | null;
+  externalReference?: string | null;
+}
+
+export interface PostTransferRequest {
+  sourceShiftId: string;
+  destinationShiftId: string;
+  amount: number;
+  reason: string;
+  externalReference?: string | null;
+}
+
+export interface ReverseTransactionRequest {
+  reversalReason: string;
+}
+
+export interface CreateCategoryRequest {
+  name: string;
+  code: string;
+  allowedDirection: number;
+  description?: string | null;
+}
+
+export interface UpdateCategoryRequest {
+  name: string;
+  allowedDirection: number;
+  description?: string | null;
+}
+
+export interface CashLedgerTransactionFilter {
+  branchId?: string | null;
+  cashDrawerId?: string | null;
+  shiftId?: string | null;
+  transactionType?: number | null;
+  categoryId?: string | null;
+  userId?: string | null;
+  fromDate?: string | null;
+  toDate?: string | null;
+  status?: number | null;
+  page?: number;
+  pageSize?: number;
+}
+
 export interface CreateCustomerRequest {
   fullName: string;
   primaryPhone: string;
@@ -1456,4 +1590,82 @@ export const shiftApi = {
     apiRequest<void>(`/shifts/drawers/${id}`, {
       method: 'DELETE',
     }),
+};
+
+export const shiftsApi = shiftApi;
+
+export const cashLedgerApi = {
+  getTransactions: (filter?: CashLedgerTransactionFilter) => {
+    const q = new URLSearchParams();
+    if (filter?.branchId) q.append('branchId', filter.branchId);
+    if (filter?.cashDrawerId) q.append('cashDrawerId', filter.cashDrawerId);
+    if (filter?.shiftId) q.append('shiftId', filter.shiftId);
+    if (filter?.transactionType !== undefined && filter?.transactionType !== null) q.append('transactionType', String(filter.transactionType));
+    if (filter?.categoryId) q.append('categoryId', filter.categoryId);
+    if (filter?.userId) q.append('userId', filter.userId);
+    if (filter?.status !== undefined && filter?.status !== null) q.append('status', String(filter.status));
+    if (filter?.fromDate) q.append('fromDate', filter.fromDate);
+    if (filter?.toDate) q.append('toDate', filter.toDate);
+    if (filter?.page) q.append('page', String(filter.page));
+    if (filter?.pageSize) q.append('pageSize', String(filter.pageSize));
+    const qs = q.toString();
+    return apiRequest<PagedResult<CashLedgerTransaction>>(`/cash-ledger/transactions${qs ? `?${qs}` : ''}`);
+  },
+  getTransactionById: (id: string) => apiRequest<CashLedgerTransaction>(`/cash-ledger/transactions/${id}`),
+  postCashIn: (data: PostCashInRequest, idempotencyKey?: string) => {
+    const headers: Record<string, string> = {};
+    if (idempotencyKey) headers['Idempotency-Key'] = idempotencyKey;
+    return apiRequest<CashLedgerTransaction>('/cash-ledger/cash-in', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(data)
+    });
+  },
+  postCashOut: (data: PostCashOutRequest, idempotencyKey?: string) => {
+    const headers: Record<string, string> = {};
+    if (idempotencyKey) headers['Idempotency-Key'] = idempotencyKey;
+    return apiRequest<CashLedgerTransaction>('/cash-ledger/cash-out', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(data)
+    });
+  },
+  postTransfer: (data: PostTransferRequest, idempotencyKey?: string) => {
+    const headers: Record<string, string> = {};
+    if (idempotencyKey) headers['Idempotency-Key'] = idempotencyKey;
+    return apiRequest<CashLedgerTransaction>('/cash-ledger/transfer', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(data)
+    });
+  },
+  reverseTransaction: (id: string, data: ReverseTransactionRequest, idempotencyKey?: string) => {
+    const headers: Record<string, string> = {};
+    if (idempotencyKey) headers['Idempotency-Key'] = idempotencyKey;
+    return apiRequest<CashLedgerTransaction>(`/cash-ledger/transactions/${id}/reverse`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(data)
+    });
+  },
+  getShiftSummary: (shiftId: string) => apiRequest<ShiftCashLedgerSummary>(`/cash-ledger/shifts/${shiftId}/summary`),
+  getCategories: (direction?: number, includeInactive?: boolean) => {
+    const q = new URLSearchParams();
+    if (direction !== undefined && direction !== null) q.append('direction', String(direction));
+    if (includeInactive) q.append('includeInactive', 'true');
+    const qs = q.toString();
+    return apiRequest<CashMovementCategory[]>(`/cash-ledger/categories${qs ? `?${qs}` : ''}`);
+  },
+  createCategory: (data: CreateCategoryRequest) => apiRequest<CashMovementCategory>('/cash-ledger/categories', {
+    method: 'POST',
+    body: JSON.stringify(data)
+  }),
+  updateCategory: (id: string, data: UpdateCategoryRequest) => apiRequest<CashMovementCategory>(`/cash-ledger/categories/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data)
+  }),
+  updateCategoryStatus: (id: string, isActive: boolean) => apiRequest<CashMovementCategory>(`/cash-ledger/categories/${id}/status`, {
+    method: 'PATCH',
+    body: JSON.stringify({ isActive })
+  })
 };

@@ -78,6 +78,11 @@ public class AppDbContext : DbContext, IAppDbContext
     public DbSet<CashDrawer> CashDrawers => Set<CashDrawer>();
     public DbSet<Shift> Shifts => Set<Shift>();
 
+    // Module 12: Cash Ledger & Cash Drawer Movements
+    public DbSet<CashMovementCategory> CashMovementCategories => Set<CashMovementCategory>();
+    public DbSet<CashLedgerTransaction> CashLedgerTransactions => Set<CashLedgerTransaction>();
+    public DbSet<CashLedgerEntry> CashLedgerEntries => Set<CashLedgerEntry>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -883,6 +888,145 @@ public class AppDbContext : DbContext, IAppDbContext
                   .HasForeignKey(s => s.ClosedBy)
                   .OnDelete(DeleteBehavior.Restrict);
         });
+
+        // Module 12: Cash Ledger Configuration
+        modelBuilder.HasSequence<long>("CashLedgerSequence").StartsAt(1).IncrementsBy(1);
+
+        modelBuilder.Entity<CashMovementCategory>(entity =>
+        {
+            entity.ToTable("CashMovementCategories");
+            entity.HasKey(c => c.Id);
+
+            entity.Property(c => c.Name).HasMaxLength(100).IsRequired();
+            entity.Property(c => c.Code).HasMaxLength(50).IsRequired();
+            entity.HasIndex(c => c.Code).IsUnique();
+
+            entity.Property(c => c.AllowedDirection).HasConversion<int>().IsRequired();
+            entity.Property(c => c.Description).HasMaxLength(250);
+            entity.Property(c => c.IsActive).HasDefaultValue(true);
+            entity.Property(c => c.IsSystem).HasDefaultValue(false);
+
+            entity.HasIndex(c => c.IsActive);
+
+            entity.HasOne(c => c.Creator)
+                  .WithMany()
+                  .HasForeignKey(c => c.CreatedBy)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(c => c.Updater)
+                  .WithMany()
+                  .HasForeignKey(c => c.UpdatedBy)
+                  .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<CashLedgerTransaction>(entity =>
+        {
+            entity.ToTable("CashLedgerTransactions", t =>
+            {
+                t.HasCheckConstraint("CK_CashLedgerTransactions_Amount", "\"Amount\" > 0");
+                t.HasCheckConstraint("CK_CashLedgerTransactions_Type", "\"TransactionType\" IN (1, 2, 3, 4)");
+                t.HasCheckConstraint("CK_CashLedgerTransactions_Status", "\"Status\" IN (1, 2)");
+            });
+
+            entity.HasKey(t => t.Id);
+
+            entity.Property(t => t.TransactionReference).HasMaxLength(50).IsRequired();
+            entity.HasIndex(t => t.TransactionReference).IsUnique();
+
+            entity.Property(t => t.TransactionType).HasConversion<int>().IsRequired();
+            entity.Property(t => t.SourceType).HasConversion<int>().IsRequired();
+            entity.Property(t => t.SourceReferenceId).HasMaxLength(100);
+
+            entity.Property(t => t.Amount).HasPrecision(18, 2).IsRequired();
+            entity.Property(t => t.CurrencyCode).HasMaxLength(10).IsRequired().HasDefaultValue("LKR");
+            entity.Property(t => t.Description).HasMaxLength(500);
+            entity.Property(t => t.Reason).HasMaxLength(500);
+            entity.Property(t => t.Status).HasConversion<int>().IsRequired();
+            entity.Property(t => t.IdempotencyKey).HasMaxLength(100);
+
+            // Reversal uniqueness: A transaction can be reversed at most once
+            entity.HasIndex(t => t.ReversalOfTransactionId)
+                  .IsUnique()
+                  .HasFilter("\"ReversalOfTransactionId\" IS NOT NULL");
+
+            // Source reference uniqueness for future POS / External modules
+            entity.HasIndex(t => new { t.SourceType, t.SourceReferenceId })
+                  .IsUnique()
+                  .HasFilter("\"SourceReferenceId\" IS NOT NULL");
+
+            entity.HasIndex(t => new { t.BranchId, t.TransactionAt });
+            entity.HasIndex(t => t.Status);
+            entity.HasIndex(t => t.CreatedAt);
+
+            entity.HasOne(t => t.Branch)
+                  .WithMany()
+                  .HasForeignKey(t => t.BranchId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(t => t.Category)
+                  .WithMany(c => c.Transactions)
+                  .HasForeignKey(t => t.CategoryId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(t => t.ReversalOfTransaction)
+                  .WithMany(t => t.ReversedByTransactions)
+                  .HasForeignKey(t => t.ReversalOfTransactionId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(t => t.Creator)
+                  .WithMany()
+                  .HasForeignKey(t => t.CreatedBy)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(t => t.Updater)
+                  .WithMany()
+                  .HasForeignKey(t => t.UpdatedBy)
+                  .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<CashLedgerEntry>(entity =>
+        {
+            entity.ToTable("CashLedgerEntries", e =>
+            {
+                e.HasCheckConstraint("CK_CashLedgerEntries_Amount", "\"Amount\" > 0");
+                e.HasCheckConstraint("CK_CashLedgerEntries_Direction", "\"Direction\" IN (1, 2)");
+            });
+
+            entity.HasKey(e => e.Id);
+
+            entity.Property(e => e.Direction).HasConversion<int>().IsRequired();
+            entity.Property(e => e.Amount).HasPrecision(18, 2).IsRequired();
+            entity.Property(e => e.CurrencyCode).HasMaxLength(10).IsRequired().HasDefaultValue("LKR");
+
+            entity.HasIndex(e => e.ShiftId);
+            entity.HasIndex(e => e.CashDrawerId);
+            entity.HasIndex(e => new { e.BranchId, e.CreatedAt });
+
+            entity.HasOne(e => e.CashLedgerTransaction)
+                  .WithMany(t => t.Entries)
+                  .HasForeignKey(e => e.CashLedgerTransactionId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(e => e.Branch)
+                  .WithMany()
+                  .HasForeignKey(e => e.BranchId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(e => e.CashDrawer)
+                  .WithMany()
+                  .HasForeignKey(e => e.CashDrawerId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(e => e.Shift)
+                  .WithMany()
+                  .HasForeignKey(e => e.ShiftId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(e => e.Creator)
+                  .WithMany()
+                  .HasForeignKey(e => e.CreatedBy)
+                  .OnDelete(DeleteBehavior.Restrict);
+        });
     }
 
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
@@ -893,6 +1037,37 @@ public class AppDbContext : DbContext, IAppDbContext
             if (entry.State == EntityState.Modified || entry.State == EntityState.Deleted)
             {
                 throw new InvalidOperationException("Audit logs are append-only immutable records and cannot be modified or deleted.");
+            }
+        }
+
+        // Financial immutability check: Cash ledger entries can NEVER be modified or deleted
+        foreach (var entry in ChangeTracker.Entries<CashLedgerEntry>())
+        {
+            if (entry.State == EntityState.Modified || entry.State == EntityState.Deleted)
+            {
+                throw new InvalidOperationException("Cash ledger entries are immutable financial records and cannot be modified or deleted. Use reversals instead.");
+            }
+        }
+
+        // Financial immutability check: Cash ledger transactions can NEVER be deleted
+        foreach (var entry in ChangeTracker.Entries<CashLedgerTransaction>())
+        {
+            if (entry.State == EntityState.Deleted)
+            {
+                throw new InvalidOperationException("Cash ledger transactions are immutable financial records and cannot be deleted. Use reversals instead.");
+            }
+            if (entry.State == EntityState.Modified)
+            {
+                var propAmount = entry.Property(t => t.Amount);
+                var propType = entry.Property(t => t.TransactionType);
+                var propRef = entry.Property(t => t.TransactionReference);
+                var propBranch = entry.Property(t => t.BranchId);
+                var propReversal = entry.Property(t => t.ReversalOfTransactionId);
+
+                if (propAmount.IsModified || propType.IsModified || propRef.IsModified || propBranch.IsModified || (propReversal.IsModified && propReversal.OriginalValue != null))
+                {
+                    throw new InvalidOperationException("Core financial attributes of a posted cash ledger transaction cannot be modified. Use reversals instead.");
+                }
             }
         }
 

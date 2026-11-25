@@ -6,9 +6,11 @@ import { useAuth } from '@/lib/auth-context';
 import { useBranch } from '@/lib/branch-context';
 import {
   shiftApi,
+  cashLedgerApi,
   Shift,
   CashDrawer,
   ShiftOpeningDefaults,
+  ShiftCashLedgerSummary,
   PagedResult
 } from '@/lib/api';
 
@@ -34,6 +36,7 @@ export default function ShiftsPage() {
   const [showOpenModal, setShowOpenModal] = useState<boolean>(false);
   const [showCloseModal, setShowCloseModal] = useState<boolean>(false);
   const [closingShiftTarget, setClosingShiftTarget] = useState<Shift | null>(null);
+  const [closingShiftSummary, setClosingShiftSummary] = useState<ShiftCashLedgerSummary | null>(null);
   const [showAddDrawerModal, setShowAddDrawerModal] = useState<boolean>(false);
   const [editingDrawer, setEditingDrawer] = useState<CashDrawer | null>(null);
   const [selectedShiftForDetail, setSelectedShiftForDetail] = useState<Shift | null>(null);
@@ -204,6 +207,8 @@ export default function ShiftsPage() {
   // Prepare Close Modal
   const initiateCloseShift = (target: Shift) => {
     setClosingShiftTarget(target);
+    setClosingShiftSummary(null);
+    cashLedgerApi.getShiftSummary(target.id).then(setClosingShiftSummary).catch(() => {});
     const exp = target.expectedClosingBalance ?? target.openingBalance;
     setActualClosingCash(exp.toFixed(2));
     setClosingVarianceReason('');
@@ -1080,6 +1085,22 @@ export default function ShiftsPage() {
                     Rs. {targetShift.openingBalance.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
                   </span>
                 </div>
+                {closingShiftSummary && (
+                  <>
+                    <div className="flex items-center justify-between text-xs text-emerald-700">
+                      <span>Total Posted Cash In (+):</span>
+                      <span className="font-mono font-semibold">
+                        + Rs. {closingShiftSummary.totalCashIn.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs text-rose-700">
+                      <span>Total Posted Cash Out (-):</span>
+                      <span className="font-mono font-semibold">
+                        - Rs. {closingShiftSummary.totalCashOut.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                  </>
+                )}
                 <div className="flex items-center justify-between text-xs text-gray-600 border-t border-gray-200 pt-2">
                   <span className="font-bold text-gray-900">Backend Expected Closing Cash:</span>
                   <span className="font-mono font-extrabold text-[#0D3826] text-sm">
@@ -1087,7 +1108,7 @@ export default function ShiftsPage() {
                   </span>
                 </div>
                 <p className="text-[10px] text-gray-400">
-                  *Authoritative backend expected cash calculation (no artificial movements to conceal discrepancy).
+                  *Authoritative backend calculation (Opening + Total In − Total Out).
                 </p>
               </div>
 

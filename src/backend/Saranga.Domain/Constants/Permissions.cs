@@ -78,6 +78,11 @@ public static class Permissions
     public const string ShiftOverrideClose = "SHIFT_OVERRIDE_CLOSE";
     public const string CashDrawerManage = "CASH_DRAWER_MANAGE";
     public const string CashLedgerView = "CASH_LEDGER_VIEW";
+    public const string CashLedgerCashIn = "CASH_LEDGER_CASH_IN";
+    public const string CashLedgerCashOut = "CASH_LEDGER_CASH_OUT";
+    public const string CashLedgerTransfer = "CASH_LEDGER_TRANSFER";
+    public const string CashLedgerReverse = "CASH_LEDGER_REVERSE";
+    public const string CashLedgerCategoryManage = "CASH_LEDGER_CATEGORY_MANAGE";
     public const string CashLedgerAdjust = "CASH_LEDGER_ADJUST";
 
     // Module: Sales Verification
@@ -160,6 +165,11 @@ public static class Permissions
         new(ShiftOverrideClose, "Override and close active shifts on behalf of other cashiers", "Shift & Cash"),
         new(CashDrawerManage, "Create, configure, and manage physical branch cash drawers", "Shift & Cash"),
         new(CashLedgerView, "View branch cash ledger entries", "Shift & Cash"),
+        new(CashLedgerCashIn, "Post authorized cash-in receipts to physical drawer", "Shift & Cash"),
+        new(CashLedgerCashOut, "Post authorized cash-out payments from physical drawer", "Shift & Cash"),
+        new(CashLedgerTransfer, "Transfer physical cash between open cash drawers in branch", "Shift & Cash"),
+        new(CashLedgerReverse, "Reverse manual physical cash ledger transactions with mandatory reason", "Shift & Cash"),
+        new(CashLedgerCategoryManage, "Configure and manage cash movement categories", "Shift & Cash"),
         new(CashLedgerAdjust, "Perform cash-in / cash-out ledger adjustments", "Shift & Cash"),
 
         // Verification

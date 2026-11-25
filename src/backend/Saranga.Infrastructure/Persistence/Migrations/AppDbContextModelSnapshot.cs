@@ -22,6 +22,8 @@ namespace Saranga.Infrastructure.Persistence.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.HasSequence("CashLedgerSequence");
+
             modelBuilder.HasSequence("CustomerCodeSequence");
 
             modelBuilder.HasSequence("InventoryTagSequence")
@@ -196,6 +198,244 @@ namespace Saranga.Infrastructure.Persistence.Migrations
                         .IsUnique();
 
                     b.ToTable("CashDrawers", (string)null);
+                });
+
+            modelBuilder.Entity("Saranga.Domain.Entities.CashLedgerEntry", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<Guid>("BranchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CashDrawerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CashLedgerTransactionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CurrencyCode")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasDefaultValue("LKR");
+
+                    b.Property<int>("Direction")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid>("ShiftId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CashDrawerId");
+
+                    b.HasIndex("CashLedgerTransactionId");
+
+                    b.HasIndex("CreatedBy");
+
+                    b.HasIndex("ShiftId");
+
+                    b.HasIndex("BranchId", "CreatedAt");
+
+                    b.ToTable("CashLedgerEntries", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_CashLedgerEntries_Amount", "\"Amount\" > 0");
+
+                            t.HasCheckConstraint("CK_CashLedgerEntries_Direction", "\"Direction\" IN (1, 2)");
+                        });
+                });
+
+            modelBuilder.Entity("Saranga.Domain.Entities.CashLedgerTransaction", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<Guid>("BranchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("CategoryId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CurrencyCode")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasDefaultValue("LKR");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("IdempotencyKey")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<Guid?>("ReversalOfTransactionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("SourceReferenceId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("SourceType")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("TransactionAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("TransactionReference")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<int>("TransactionType")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CategoryId");
+
+                    b.HasIndex("CreatedAt");
+
+                    b.HasIndex("CreatedBy");
+
+                    b.HasIndex("ReversalOfTransactionId")
+                        .IsUnique()
+                        .HasFilter("\"ReversalOfTransactionId\" IS NOT NULL");
+
+                    b.HasIndex("Status");
+
+                    b.HasIndex("TransactionReference")
+                        .IsUnique();
+
+                    b.HasIndex("UpdatedBy");
+
+                    b.HasIndex("BranchId", "TransactionAt");
+
+                    b.HasIndex("SourceType", "SourceReferenceId")
+                        .IsUnique()
+                        .HasFilter("\"SourceReferenceId\" IS NOT NULL");
+
+                    b.ToTable("CashLedgerTransactions", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_CashLedgerTransactions_Amount", "\"Amount\" > 0");
+
+                            t.HasCheckConstraint("CK_CashLedgerTransactions_Status", "\"Status\" IN (1, 2)");
+
+                            t.HasCheckConstraint("CK_CashLedgerTransactions_Type", "\"TransactionType\" IN (1, 2, 3, 4)");
+                        });
+                });
+
+            modelBuilder.Entity("Saranga.Domain.Entities.CashMovementCategory", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("AllowedDirection")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(250)
+                        .HasColumnType("character varying(250)");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsSystem")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique();
+
+                    b.HasIndex("CreatedBy");
+
+                    b.HasIndex("IsActive");
+
+                    b.HasIndex("UpdatedBy");
+
+                    b.ToTable("CashMovementCategories", (string)null);
                 });
 
             modelBuilder.Entity("Saranga.Domain.Entities.Category", b =>
@@ -2094,6 +2334,104 @@ namespace Saranga.Infrastructure.Persistence.Migrations
                     b.Navigation("Branch");
                 });
 
+            modelBuilder.Entity("Saranga.Domain.Entities.CashLedgerEntry", b =>
+                {
+                    b.HasOne("Saranga.Domain.Entities.Branch", "Branch")
+                        .WithMany()
+                        .HasForeignKey("BranchId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Saranga.Domain.Entities.CashDrawer", "CashDrawer")
+                        .WithMany()
+                        .HasForeignKey("CashDrawerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Saranga.Domain.Entities.CashLedgerTransaction", "CashLedgerTransaction")
+                        .WithMany("Entries")
+                        .HasForeignKey("CashLedgerTransactionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Saranga.Domain.Entities.User", "Creator")
+                        .WithMany()
+                        .HasForeignKey("CreatedBy")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Saranga.Domain.Entities.Shift", "Shift")
+                        .WithMany()
+                        .HasForeignKey("ShiftId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Branch");
+
+                    b.Navigation("CashDrawer");
+
+                    b.Navigation("CashLedgerTransaction");
+
+                    b.Navigation("Creator");
+
+                    b.Navigation("Shift");
+                });
+
+            modelBuilder.Entity("Saranga.Domain.Entities.CashLedgerTransaction", b =>
+                {
+                    b.HasOne("Saranga.Domain.Entities.Branch", "Branch")
+                        .WithMany()
+                        .HasForeignKey("BranchId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Saranga.Domain.Entities.CashMovementCategory", "Category")
+                        .WithMany("Transactions")
+                        .HasForeignKey("CategoryId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Saranga.Domain.Entities.User", "Creator")
+                        .WithMany()
+                        .HasForeignKey("CreatedBy")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Saranga.Domain.Entities.CashLedgerTransaction", "ReversalOfTransaction")
+                        .WithMany("ReversedByTransactions")
+                        .HasForeignKey("ReversalOfTransactionId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Saranga.Domain.Entities.User", "Updater")
+                        .WithMany()
+                        .HasForeignKey("UpdatedBy")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Branch");
+
+                    b.Navigation("Category");
+
+                    b.Navigation("Creator");
+
+                    b.Navigation("ReversalOfTransaction");
+
+                    b.Navigation("Updater");
+                });
+
+            modelBuilder.Entity("Saranga.Domain.Entities.CashMovementCategory", b =>
+                {
+                    b.HasOne("Saranga.Domain.Entities.User", "Creator")
+                        .WithMany()
+                        .HasForeignKey("CreatedBy")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Saranga.Domain.Entities.User", "Updater")
+                        .WithMany()
+                        .HasForeignKey("UpdatedBy")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Creator");
+
+                    b.Navigation("Updater");
+                });
+
             modelBuilder.Entity("Saranga.Domain.Entities.Customer", b =>
                 {
                     b.HasOne("Saranga.Domain.Entities.User", "Creator")
@@ -2545,6 +2883,18 @@ namespace Saranga.Infrastructure.Persistence.Migrations
                     b.Navigation("StockLocations");
 
                     b.Navigation("UserBranches");
+                });
+
+            modelBuilder.Entity("Saranga.Domain.Entities.CashLedgerTransaction", b =>
+                {
+                    b.Navigation("Entries");
+
+                    b.Navigation("ReversedByTransactions");
+                });
+
+            modelBuilder.Entity("Saranga.Domain.Entities.CashMovementCategory", b =>
+                {
+                    b.Navigation("Transactions");
                 });
 
             modelBuilder.Entity("Saranga.Domain.Entities.InventoryComposition", b =>

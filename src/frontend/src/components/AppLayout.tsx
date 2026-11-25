@@ -51,11 +51,11 @@ export default function AppLayout({ children }: AppLayoutProps) {
     { name: 'VAT Configuration', href: '/vat', icon: '🏷️' },
     { name: 'Customers', href: '/customers', icon: '👤' },
     { name: 'Shifts', href: '/shifts', icon: '💵' },
+    { name: 'Cash Ledger', href: '/cash-ledger', icon: '🪙' },
   ];
 
   const upcomingModules = [
     { name: 'POS & Billing', icon: '🧾' },
-    { name: 'Cash Ledger', icon: '🪙' },
     { name: 'Sales Verification', icon: '🔍' },
     { name: 'Audit Logs', icon: '📜' },
   ];

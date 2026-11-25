@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Saranga.Application.Common.Interfaces;
 using Saranga.Domain.Constants;
 using Saranga.Domain.Entities;
+using Saranga.Domain.Enums;
 
 namespace Saranga.Infrastructure.Persistence;
 
@@ -177,6 +178,11 @@ public class DataSeeder : IDataSeeder
             Permissions.ShiftOverrideClose,
             Permissions.CashDrawerManage,
             Permissions.CashLedgerView,
+            Permissions.CashLedgerCashIn,
+            Permissions.CashLedgerCashOut,
+            Permissions.CashLedgerTransfer,
+            Permissions.CashLedgerReverse,
+            Permissions.CashLedgerCategoryManage,
             Permissions.CashLedgerAdjust,
             Permissions.SalesVerifyL1,
             Permissions.SalesFlagReview,
@@ -200,7 +206,10 @@ public class DataSeeder : IDataSeeder
             Permissions.OrderManage,
             Permissions.RepairManage,
             Permissions.ShiftStart,
-            Permissions.ShiftEnd
+            Permissions.ShiftEnd,
+            Permissions.CashLedgerView,
+            Permissions.CashLedgerCashIn,
+            Permissions.CashLedgerCashOut
         };
         AssignPermissionsToRole(SystemRoles.Cashier, cashierPerms);
 
@@ -248,6 +257,108 @@ public class DataSeeder : IDataSeeder
         {
             await _context.SaveChangesAsync(cancellationToken);
             _logger.LogInformation("Linked Owner / Super Admin role to existing global admin user accounts.");
+        }
+
+        // 5. Seed default cash movement categories if none exist
+        if (!await _context.CashMovementCategories.AnyAsync(cancellationToken))
+        {
+            var systemCategories = new[]
+            {
+                new CashMovementCategory
+                {
+                    Name = "Added Float",
+                    Code = "ADDED_FLOAT",
+                    AllowedDirection = CashCategoryDirection.In,
+                    Description = "Additional physical cash float added to drawer",
+                    IsActive = true,
+                    IsSystem = true
+                },
+                new CashMovementCategory
+                {
+                    Name = "Loan Repayment",
+                    Code = "LOAN_REPAYMENT",
+                    AllowedDirection = CashCategoryDirection.In,
+                    Description = "Physical cash received for loan repayment",
+                    IsActive = true,
+                    IsSystem = true
+                },
+                new CashMovementCategory
+                {
+                    Name = "Miscellaneous Income",
+                    Code = "MISC_INCOME",
+                    AllowedDirection = CashCategoryDirection.In,
+                    Description = "Miscellaneous cash income received",
+                    IsActive = true,
+                    IsSystem = true
+                },
+                new CashMovementCategory
+                {
+                    Name = "Other Cash Receipt",
+                    Code = "OTHER_RECEIPT",
+                    AllowedDirection = CashCategoryDirection.In,
+                    Description = "Other authorized physical cash receipt",
+                    IsActive = true,
+                    IsSystem = true
+                },
+                new CashMovementCategory
+                {
+                    Name = "Petty Expense",
+                    Code = "PETTY_EXPENSE",
+                    AllowedDirection = CashCategoryDirection.Out,
+                    Description = "Day-to-day petty cash expense",
+                    IsActive = true,
+                    IsSystem = true
+                },
+                new CashMovementCategory
+                {
+                    Name = "Refreshments",
+                    Code = "REFRESHMENTS",
+                    AllowedDirection = CashCategoryDirection.Out,
+                    Description = "Tea, food, and staff refreshments",
+                    IsActive = true,
+                    IsSystem = true
+                },
+                new CashMovementCategory
+                {
+                    Name = "Store Supplies",
+                    Code = "STORE_SUPPLIES",
+                    AllowedDirection = CashCategoryDirection.Out,
+                    Description = "Consumables, cleaning items, and store supplies",
+                    IsActive = true,
+                    IsSystem = true
+                },
+                new CashMovementCategory
+                {
+                    Name = "Loan Issued",
+                    Code = "LOAN_ISSUED",
+                    AllowedDirection = CashCategoryDirection.Out,
+                    Description = "Physical money lent out or salary advances",
+                    IsActive = true,
+                    IsSystem = true
+                },
+                new CashMovementCategory
+                {
+                    Name = "Bank Deposit",
+                    Code = "BANK_DEPOSIT",
+                    AllowedDirection = CashCategoryDirection.Out,
+                    Description = "Physical cash taken from drawer for bank deposit",
+                    IsActive = true,
+                    IsSystem = true
+                },
+                new CashMovementCategory
+                {
+                    Name = "Other Expense",
+                    Code = "OTHER_EXPENSE",
+                    AllowedDirection = CashCategoryDirection.Out,
+                    Description = "Other authorized physical cash expense",
+                    IsActive = true,
+                    IsSystem = true
+                }
+            };
+
+            _context.CashMovementCategories.AddRange(systemCategories);
+            await _context.SaveChangesAsync(cancellationToken);
+            _logger.LogInformation("Seeded {Count} default cash movement categories.", systemCategories.Length);
         }
 
         _logger.LogInformation("Idempotent data seeding completed successfully.");

@@ -194,6 +194,11 @@ public class ShiftService : IShiftService
             throw new BusinessRuleException("Closing cash balance cannot exceed 2 decimal places.");
         }
 
+        // Section 16: Concurrency and exclusive row locking for shift closure
+        await using var dbTransaction = await _context.Database.BeginTransactionAsync(cancellationToken);
+
+        await _context.Database.ExecuteSqlInterpolatedAsync($"SELECT 1 FROM \"Shifts\" WHERE \"Id\" = {shiftId} FOR UPDATE", cancellationToken);
+
         var shift = await _context.Shifts
             .Include(s => s.CashDrawer)
             .Include(s => s.Branch)
@@ -290,6 +295,7 @@ public class ShiftService : IShiftService
         });
 
         await _context.SaveChangesAsync(cancellationToken);
+        await dbTransaction.CommitAsync(cancellationToken);
 
         _logger.LogInformation("Shift {ShiftNumber} successfully closed by User {CloserId} (Override: {IsOverride}). Actual: {Actual:N2}, Expected: {Expected:N2}, Variance: {Variance:N2} {Currency}",
             shift.ShiftNumber, closerId, shift.IsOverrideClose, shift.ActualClosingBalance, shift.ExpectedClosingBalance, shift.ClosingVariance, shift.CurrencyCode);
@@ -309,7 +315,7 @@ public class ShiftService : IShiftService
             .FirstOrDefaultAsync(s => s.Id == shiftId, cancellationToken)
             ?? throw new NotFoundException("Shift", shiftId);
 
-        return MapToDto(shift);
+        return await MapToDtoAsync(shift, cancellationToken);
     }
 
     public async Task<ShiftDto?> GetActiveShiftForCashierAsync(Guid? cashierId = null, CancellationToken cancellationToken = default)
@@ -327,7 +333,7 @@ public class ShiftService : IShiftService
             .Include(s => s.Closer)
             .FirstOrDefaultAsync(s => s.CashierId == targetCashierId.Value && s.Status == ShiftStatus.Open, cancellationToken);
 
-        return shift != null ? MapToDto(shift) : null;
+        return shift != null ? await MapToDtoAsync(shift, cancellationToken) : null;
     }
 
     public async Task<ShiftDto?> GetActiveShiftForDrawerAsync(Guid drawerId, CancellationToken cancellationToken = default)
@@ -341,7 +347,7 @@ public class ShiftService : IShiftService
             .Include(s => s.Closer)
             .FirstOrDefaultAsync(s => s.CashDrawerId == drawerId && s.Status == ShiftStatus.Open, cancellationToken);
 
-        return shift != null ? MapToDto(shift) : null;
+        return shift != null ? await MapToDtoAsync(shift, cancellationToken) : null;
     }
 
     public async Task<ShiftOpeningDefaultsDto> GetOpeningDefaultsAsync(Guid drawerId, CancellationToken cancellationToken = default)
@@ -419,7 +425,11 @@ public class ShiftService : IShiftService
             .Take(pageSize)
             .ToListAsync(cancellationToken);
 
-        var dtos = items.Select(MapToDto).ToList();
+        var dtos = new List<ShiftDto>();
+        foreach (var s in items)
+        {
+            dtos.Add(await MapToDtoAsync(s, cancellationToken));
+        }
         return new PagedResult<ShiftDto>(dtos, totalCount, page, pageSize);
     }
 
@@ -642,6 +652,8 @@ public class ShiftService : IShiftService
     public async Task<Shift> GetShiftForUpdateAsync(Guid shiftId, CancellationToken cancellationToken = default)
     {
         // Safe row locking for Module 12 Cash Ledger coordination
+        await _context.Database.ExecuteSqlInterpolatedAsync($"SELECT 1 FROM \"Shifts\" WHERE \"Id\" = {shiftId} FOR UPDATE", cancellationToken);
+
         var shift = await _context.Shifts
             .FirstOrDefaultAsync(s => s.Id == shiftId, cancellationToken)
             ?? throw new NotFoundException("Shift", shiftId);
@@ -654,8 +666,14 @@ public class ShiftService : IShiftService
         return shift;
     }
 
-    private static ShiftDto MapToDto(Shift s)
+    private async Task<ShiftDto> MapToDtoAsync(Shift s, CancellationToken cancellationToken = default)
     {
+        var expected = s.ExpectedClosingBalance;
+        if (s.Status == ShiftStatus.Open)
+        {
+            expected = await _expectedBalanceService.CalculateExpectedClosingBalanceAsync(s.Id, s.OpeningBalance, cancellationToken);
+        }
+
         return new ShiftDto(
             s.Id,
             s.ShiftNumber,
@@ -680,7 +698,7 @@ public class ShiftService : IShiftService
             s.ClosedBy,
             s.Closer?.FullName,
             s.ActualClosingBalance,
-            s.ExpectedClosingBalance,
+            expected,
             s.ClosingVariance,
             s.ClosingVarianceReason,
             s.ClosingNotes,

@@ -59,5 +59,10 @@ public interface IAppDbContext
     DbSet<CashDrawer> CashDrawers { get; }
     DbSet<Shift> Shifts { get; }
 
+    // Module 12: Cash Ledger & Cash Drawer Movements
+    DbSet<CashMovementCategory> CashMovementCategories { get; }
+    DbSet<CashLedgerTransaction> CashLedgerTransactions { get; }
+    DbSet<CashLedgerEntry> CashLedgerEntries { get; }
+
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

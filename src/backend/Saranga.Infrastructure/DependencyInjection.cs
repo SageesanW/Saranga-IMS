@@ -64,6 +64,9 @@ public static class DependencyInjection
         services.AddScoped<IShiftExpectedBalanceService, ShiftExpectedBalanceService>();
         services.AddScoped<IShiftService, ShiftService>();
 
+        // Module 12: Cash Ledger & Cash Drawer Movements
+        services.AddScoped<ICashLedgerService, CashLedgerService>();
+
         // Authorization Handler & Policy Provider
         services.AddSingleton<IAuthorizationPolicyProvider, PermissionPolicyProvider>();
         services.AddScoped<IAuthorizationHandler, PermissionAuthorizationHandler>();
