@@ -120,9 +120,9 @@ export default function RolesPage() {
               setSuccessMsg(null);
               setIsAddModalOpen(true);
             }}
-            className="inline-flex items-center justify-center space-x-2 bg-[#0D3826] hover:bg-[#1B6543] text-white px-4 py-2.5 rounded-lg text-sm font-semibold shadow-sm transition border border-[#D4AF37]/50"
+            className="inline-flex items-center justify-center space-x-2 bg-[#123B32] hover:bg-[#1B6543] text-white px-4 py-2.5 rounded-lg text-sm font-semibold shadow-sm transition border border-[#B89A60]/50"
           >
-            <span>➕</span>
+            
             <span>New Custom Role</span>
           </button>
         </div>
@@ -162,7 +162,7 @@ export default function RolesPage() {
                       }}
                       className={`w-full text-left p-3.5 rounded-xl border transition flex flex-col space-y-1.5 ${
                         isSelected
-                          ? 'bg-[#0D3826] text-white border-[#D4AF37] shadow-sm'
+                          ? 'bg-[#123B32] text-white border-[#B89A60] shadow-sm'
                           : 'bg-gray-50 hover:bg-gray-100 text-gray-800 border-gray-200'
                       }`}
                     >
@@ -172,7 +172,7 @@ export default function RolesPage() {
                           <span
                             className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${
                               isSelected
-                                ? 'bg-[#D4AF37] text-[#0D3826]'
+                                ? 'bg-[#B89A60] text-[#123B32]'
                                 : 'bg-[#FAF4DB] text-[#7A571E] border border-[#E4BF59]'
                             }`}
                           >
@@ -191,7 +191,7 @@ export default function RolesPage() {
                       <p className={`text-xs line-clamp-2 ${isSelected ? 'text-gray-200' : 'text-gray-500'}`}>
                         {r.description || 'No description provided.'}
                       </p>
-                      <div className={`text-[11px] font-mono pt-1 ${isSelected ? 'text-[#D4AF37]' : 'text-gray-400'}`}>
+                      <div className={`text-[11px] font-mono pt-1 ${isSelected ? 'text-[#B89A60]' : 'text-gray-400'}`}>
                         {r.permissions.length} active permissions
                       </div>
                     </button>
@@ -227,7 +227,7 @@ export default function RolesPage() {
                         })
                       }
                       disabled={savePermissionsMutation.isPending}
-                      className="px-4 py-2 bg-[#0D3826] hover:bg-[#1B6543] text-white text-xs font-bold rounded-lg shadow-sm border border-[#D4AF37]/50 transition"
+                      className="px-4 py-2 bg-[#123B32] hover:bg-[#1B6543] text-white text-xs font-bold rounded-lg shadow-sm border border-[#B89A60]/50 transition"
                     >
                       {savePermissionsMutation.isPending ? 'Saving...' : 'Save Permissions'}
                     </button>
@@ -236,7 +236,7 @@ export default function RolesPage() {
 
                 {isOwnerRole && (
                   <div className="bg-amber-50 border border-amber-200 p-3 rounded-lg text-xs text-amber-900 font-medium flex items-center space-x-2">
-                    <span>👑</span>
+                    
                     <span>
                       The <strong>Owner / Super Admin</strong> role possesses all system permissions by design and cannot be modified or reduced.
                     </span>
@@ -253,7 +253,7 @@ export default function RolesPage() {
                         <div key={moduleName} className="border rounded-xl p-4 bg-gray-50/50 space-y-3">
                           <div className="flex items-center justify-between border-b pb-2">
                             <span className="text-xs font-bold uppercase tracking-wider text-gray-700 flex items-center space-x-1.5">
-                              <span>📂</span>
+                              
                               <span>{moduleName}</span>
                               <span className="text-gray-400 font-normal">({perms.length})</span>
                             </span>
@@ -261,7 +261,7 @@ export default function RolesPage() {
                               <button
                                 type="button"
                                 onClick={() => handleToggleModuleAll(moduleName, !allChecked)}
-                                className="text-[11px] font-semibold text-[#0D3826] hover:underline"
+                                className="text-[11px] font-semibold text-[#123B32] hover:underline"
                               >
                                 {allChecked ? 'Deselect All' : 'Select All'}
                               </button>
@@ -285,7 +285,7 @@ export default function RolesPage() {
                                     checked={checked}
                                     disabled={isOwnerRole}
                                     onChange={() => handleTogglePermission(p.id)}
-                                    className="mt-0.5 rounded text-[#0D3826] focus:ring-[#0D3826]"
+                                    className="mt-0.5 rounded text-[#123B32] focus:ring-[#123B32]"
                                   />
                                   <div>
                                     <div className="font-mono font-bold tracking-tight text-[11px] text-gray-900">
@@ -343,7 +343,7 @@ export default function RolesPage() {
                   placeholder="e.g. Senior Gold Appraiser"
                   value={newRole.name}
                   onChange={(e) => setNewRole({ ...newRole, name: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-[#0D3826] outline-none"
+                  className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-[#123B32] outline-none"
                 />
               </div>
 
@@ -352,10 +352,10 @@ export default function RolesPage() {
                 <textarea
                   rows={3}
                   required
-                  placeholder="Responsibilities and access scope of this role..."
+                  placeholder="Responsibilities and access scope of this role"
                   value={newRole.description}
                   onChange={(e) => setNewRole({ ...newRole, description: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-[#0D3826] outline-none"
+                  className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-[#123B32] outline-none"
                 />
               </div>
 
@@ -370,7 +370,7 @@ export default function RolesPage() {
                 <button
                   type="submit"
                   disabled={createRoleMutation.isPending}
-                  className="px-4 py-2 text-xs font-semibold text-white bg-[#0D3826] hover:bg-[#1B6543] rounded-lg shadow-sm border border-[#D4AF37]/50"
+                  className="px-4 py-2 text-xs font-semibold text-white bg-[#123B32] hover:bg-[#1B6543] rounded-lg shadow-sm border border-[#B89A60]/50"
                 >
                   {createRoleMutation.isPending ? 'Creating...' : 'Create Role'}
                 </button>

@@ -147,8 +147,8 @@ export default function VatConfigurationPage() {
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <div className="flex items-center space-x-3">
-              <span className="text-2xl">🏷️</span>
-              <h1 className="text-2xl font-black text-[#0D3826] tracking-tight">VAT Configuration</h1>
+              
+              <h1 className="text-2xl font-black text-[#123B32] tracking-tight">VAT Configuration</h1>
             </div>
             <p className="text-sm text-gray-500 mt-1">
               Branch-specific Value Added Tax rate and calculation configuration.
@@ -182,9 +182,9 @@ export default function VatConfigurationPage() {
                   }
                   setIsUpdateModalOpen(true);
                 }}
-                className="inline-flex items-center px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-bold text-white bg-[#0D3826] hover:bg-[#1B6543] transition"
+                className="inline-flex items-center px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-bold text-white bg-[#123B32] hover:bg-[#1B6543] transition"
               >
-                ⚙️ Update VAT Rate
+                Update VAT Rate
               </button>
             </div>
           )}
@@ -209,7 +209,7 @@ export default function VatConfigurationPage() {
           <div className="px-6 py-4 border-b border-gray-200 bg-gray-50 flex items-center justify-between">
             <div className="flex items-center space-x-2">
               <span className="font-bold text-gray-900">Active VAT Policy for:</span>
-              <span className="font-extrabold text-[#0D3826] bg-[#0D3826]/10 px-2.5 py-0.5 rounded text-sm">
+              <span className="font-extrabold text-[#123B32] bg-[#123B32]/10 px-2.5 py-0.5 rounded text-sm">
                 {currentBranch?.code} - {currentBranch?.name}
               </span>
             </div>
@@ -232,7 +232,7 @@ export default function VatConfigurationPage() {
             <div className="p-6 grid grid-cols-1 md:grid-cols-4 gap-6">
               <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
                 <span className="text-xs uppercase font-bold text-gray-500">Configured Rate</span>
-                <div className="text-3xl font-black text-[#0D3826] mt-1">
+                <div className="text-3xl font-black text-[#123B32] mt-1">
                   {currentConfig?.ratePercentage.toFixed(2)}%
                 </div>
                 <div className="text-[11px] text-gray-400 mt-1">
@@ -311,7 +311,7 @@ export default function VatConfigurationPage() {
                           <span className="text-[10px] font-bold text-emerald-700">[CURRENT OPERATIONAL]</span>
                         )}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-center font-bold text-[#0D3826]">
+                      <td className="px-6 py-4 whitespace-nowrap text-center font-bold text-[#123B32]">
                         {h.ratePercentage.toFixed(2)}%
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-center">
@@ -351,7 +351,7 @@ export default function VatConfigurationPage() {
         {isUpdateModalOpen && (
           <div className="fixed inset-0 z-50 overflow-y-auto bg-black/50 flex items-center justify-center p-4">
             <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-2xl border border-gray-200">
-              <h3 className="text-lg font-bold text-[#0D3826] mb-2">Update VAT Configuration</h3>
+              <h3 className="text-lg font-bold text-[#123B32] mb-2">Update VAT Configuration</h3>
               <p className="text-xs text-gray-500 mb-4">
                 Creating an updated configuration will safely supersede the active policy while preserving full historical records.
               </p>
@@ -363,8 +363,8 @@ export default function VatConfigurationPage() {
                     type="text"
                     value={configName}
                     onChange={(e) => setConfigName(e.target.value)}
-                    placeholder="e.g. Standard Sri Lankan VAT 2026"
-                    className="w-full border border-gray-300 rounded-md p-2 text-sm focus:ring-[#0D3826] focus:border-[#0D3826]"
+                    placeholder="e.g. 18.00"
+                    className="w-full border border-gray-300 rounded-md p-2 text-sm focus:ring-[#123B32] focus:border-[#123B32]"
                     required
                   />
                 </div>
@@ -379,7 +379,7 @@ export default function VatConfigurationPage() {
                       max="100"
                       value={ratePercentage}
                       onChange={(e) => setRatePercentage(e.target.value)}
-                      className="w-full border border-gray-300 rounded-md p-2 text-sm font-bold text-[#0D3826] focus:ring-[#0D3826] focus:border-[#0D3826] pr-8"
+                      className="w-full border border-gray-300 rounded-md p-2 text-sm font-bold text-[#123B32] focus:ring-[#123B32] focus:border-[#123B32] pr-8"
                       required
                     />
                     <span className="absolute right-3 top-2 text-gray-500 font-bold">%</span>
@@ -392,7 +392,7 @@ export default function VatConfigurationPage() {
                     id="enableVatCheck"
                     checked={isEnabled}
                     onChange={(e) => setIsEnabled(e.target.checked)}
-                    className="rounded text-[#0D3826] focus:ring-[#0D3826] h-4 w-4"
+                    className="rounded text-[#123B32] focus:ring-[#123B32] h-4 w-4"
                   />
                   <label htmlFor="enableVatCheck" className="text-sm font-semibold text-gray-800">
                     Enable VAT collection immediately for this branch
@@ -405,7 +405,7 @@ export default function VatConfigurationPage() {
                     type="datetime-local"
                     value={effectiveDate}
                     onChange={(e) => setEffectiveDate(e.target.value)}
-                    className="w-full border border-gray-300 rounded-md p-2 text-xs focus:ring-[#0D3826] focus:border-[#0D3826]"
+                    className="w-full border border-gray-300 rounded-md p-2 text-xs focus:ring-[#123B32] focus:border-[#123B32]"
                   />
                 </div>
 
@@ -420,7 +420,7 @@ export default function VatConfigurationPage() {
                   <button
                     type="submit"
                     disabled={submitting}
-                    className="px-4 py-2 bg-[#0D3826] text-white rounded-md text-sm font-bold hover:bg-[#1B6543] disabled:opacity-50"
+                    className="px-4 py-2 bg-[#123B32] text-white rounded-md text-sm font-bold hover:bg-[#1B6543] disabled:opacity-50"
                   >
                     {submitting ? 'Saving...' : 'Save Configuration'}
                   </button>
@@ -453,7 +453,7 @@ export default function VatConfigurationPage() {
                     onChange={(e) => setToggleReason(e.target.value)}
                     placeholder="e.g. Government gazette implementation date or tax holiday..."
                     rows={2}
-                    className="w-full border border-gray-300 rounded-md p-2 text-sm focus:ring-[#0D3826] focus:border-[#0D3826]"
+                    className="w-full border border-gray-300 rounded-md p-2 text-sm focus:ring-[#123B32] focus:border-[#123B32]"
                   />
                 </div>
 

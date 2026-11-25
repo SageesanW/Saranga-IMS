@@ -395,9 +395,9 @@ export default function CashLedgerPage() {
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div>
             <div className="flex items-center space-x-2">
-              <span className="text-2xl">🪙</span>
+              
               <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Physical Cash Ledger</h1>
-              <span className="text-xs px-2 py-0.5 rounded-full font-bold bg-[#D4AF37]/20 text-[#0D3826] border border-[#D4AF37]/40">
+              <span className="text-xs px-2 py-0.5 rounded-full font-bold bg-[#B89A60]/20 text-[#123B32] border border-[#B89A60]/40">
                 Single Source of Truth
               </span>
             </div>
@@ -419,7 +419,7 @@ export default function CashLedgerPage() {
                 }}
                 className="px-3 py-2 bg-white text-gray-700 hover:bg-gray-50 rounded-lg text-xs font-semibold border border-gray-200 shadow-sm flex items-center gap-1.5 transition"
               >
-                <Tag className="w-3.5 h-3.5 text-[#0D3826]" />
+                <Tag className="w-3.5 h-3.5 text-[#123B32]" />
                 Categories
               </button>
             )}
@@ -447,9 +447,9 @@ export default function CashLedgerPage() {
             {canCashIn && activeShift && (
               <button
                 onClick={() => setShowCashInModal(true)}
-                className="px-3.5 py-2 bg-[#0D3826] hover:bg-[#1B6543] text-white rounded-lg text-xs font-bold shadow-sm flex items-center gap-1.5 transition border border-[#D4AF37]/40"
+                className="px-3.5 py-2 bg-[#123B32] hover:bg-[#1B6543] text-white rounded-lg text-xs font-bold shadow-sm flex items-center gap-1.5 transition border border-[#B89A60]/40"
               >
-                <ArrowDownLeft className="w-3.5 h-3.5 text-[#D4AF37]" />
+                <ArrowDownLeft className="w-3.5 h-3.5 text-[#B89A60]" />
                 Cash In
               </button>
             )}
@@ -483,11 +483,11 @@ export default function CashLedgerPage() {
 
         {/* Active Shift Financial Card */}
         {activeShift && shiftSummary ? (
-          <div className="bg-gradient-to-br from-[#0D3826] to-[#124b33] rounded-2xl p-6 text-white shadow-md border border-[#D4AF37]/30">
+          <div className="bg-gradient-to-br from-[#123B32] to-[#124b33] rounded-2xl p-6 text-white shadow-md border border-[#B89A60]/30">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-white/10">
               <div>
                 <div className="flex items-center space-x-2">
-                  <span className="text-xs uppercase font-bold text-[#D4AF37] tracking-wider">
+                  <span className="text-xs uppercase font-bold text-[#B89A60] tracking-wider">
                     Physical Drawer In-Flight Session
                   </span>
                   <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/30 text-emerald-300 border border-emerald-400/40">
@@ -497,7 +497,7 @@ export default function CashLedgerPage() {
                 <h2 className="text-xl font-bold mt-1 flex items-center gap-2">
                   <span>{shiftSummary.cashDrawerName}</span>
                   <span className="text-xs font-normal text-gray-300">({shiftSummary.cashDrawerCode})</span>
-                  <span className="text-xs font-normal text-[#D4AF37]">• {shiftSummary.shiftNumber}</span>
+                  <span className="text-xs font-normal text-[#B89A60]">• {shiftSummary.shiftNumber}</span>
                 </h2>
                 <p className="text-xs text-gray-300 mt-0.5">
                   Cashier: <strong className="text-white">{shiftSummary.cashierName}</strong> • Branch: <strong className="text-white">{shiftSummary.branchName}</strong>
@@ -505,7 +505,7 @@ export default function CashLedgerPage() {
               </div>
 
               <div className="text-right">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-[#D4AF37]">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-[#B89A60]">
                   Authoritative Expected Cash
                 </span>
                 <div className="text-3xl font-black text-white mt-0.5">
@@ -544,9 +544,9 @@ export default function CashLedgerPage() {
                 </p>
               </div>
 
-              <div className="bg-[#D4AF37]/10 rounded-xl p-3 border border-[#D4AF37]/30">
-                <p className="text-[10px] text-[#D4AF37] uppercase font-semibold">Formula Balance</p>
-                <p className="text-base font-black text-[#D4AF37] mt-0.5">
+              <div className="bg-[#B89A60]/10 rounded-xl p-3 border border-[#B89A60]/30">
+                <p className="text-[10px] text-[#B89A60] uppercase font-semibold">Formula Balance</p>
+                <p className="text-base font-black text-[#B89A60] mt-0.5">
                   Rs. {shiftSummary.currentExpectedBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                 </p>
               </div>
@@ -571,7 +571,7 @@ export default function CashLedgerPage() {
           <div className="p-4 border-b border-gray-200 bg-gray-50/70 space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center space-x-2">
-                <FileText className="w-4 h-4 text-[#0D3826]" />
+                <FileText className="w-4 h-4 text-[#123B32]" />
                 <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wider">
                   Ledger Transactions History ({totalCount})
                 </h3>
@@ -903,8 +903,8 @@ export default function CashLedgerPage() {
                     required
                     value={inAmount}
                     onChange={(e) => setInAmount(e.target.value)}
-                    placeholder="0.00"
-                    className="mt-1 w-full text-base font-bold font-mono border border-gray-300 rounded-lg px-3 py-2 text-gray-900 focus:ring-2 focus:ring-[#0D3826]"
+                    placeholder="e.g. 5,000.00"
+                    className="mt-1 w-full text-base font-bold font-mono border border-gray-300 rounded-lg px-3 py-2 text-gray-900 focus:ring-2 focus:ring-[#123B32]"
                   />
                 </div>
 
@@ -938,7 +938,7 @@ export default function CashLedgerPage() {
                     rows={2}
                     value={inReason}
                     onChange={(e) => setInReason(e.target.value)}
-                    placeholder="E.g. Additional morning float, loan repayment received..."
+                    placeholder="Describe where the received cash came from"
                     className="mt-1 w-full text-xs border border-gray-300 rounded-lg px-3 py-2 text-gray-900"
                   />
                 </div>
@@ -949,7 +949,7 @@ export default function CashLedgerPage() {
                     type="text"
                     value={inReference}
                     onChange={(e) => setInReference(e.target.value)}
-                    placeholder="E.g. BANK-SL-9921, RCP-0012"
+                    placeholder="e.g. receipt or deposit reference"
                     className="mt-1 w-full text-xs border border-gray-300 rounded-lg px-3 py-2 text-gray-900"
                   />
                 </div>
@@ -965,7 +965,7 @@ export default function CashLedgerPage() {
                   <button
                     type="submit"
                     disabled={isSubmitting}
-                    className="px-5 py-2 bg-[#0D3826] hover:bg-[#1B6543] text-white rounded-lg text-xs font-bold shadow-sm disabled:opacity-50"
+                    className="px-5 py-2 bg-[#123B32] hover:bg-[#1B6543] text-white rounded-lg text-xs font-bold shadow-sm disabled:opacity-50"
                   >
                     {isSubmitting ? 'Posting...' : 'Post Cash In'}
                   </button>
@@ -1005,7 +1005,7 @@ export default function CashLedgerPage() {
                     required
                     value={outAmount}
                     onChange={(e) => setOutAmount(e.target.value)}
-                    placeholder="0.00"
+                    placeholder="e.g. 5,000.00"
                     className="mt-1 w-full text-base font-bold font-mono border border-gray-300 rounded-lg px-3 py-2 text-gray-900 focus:ring-2 focus:ring-rose-600"
                   />
                 </div>
@@ -1064,7 +1064,7 @@ export default function CashLedgerPage() {
                     type="text"
                     value={outReference}
                     onChange={(e) => setOutReference(e.target.value)}
-                    placeholder="E.g. VOUCH-0045, BNK-DEP-110"
+                    placeholder="e.g. receipt or expense voucher reference"
                     className="mt-1 w-full text-xs border border-gray-300 rounded-lg px-3 py-2 text-gray-900"
                   />
                 </div>
@@ -1145,7 +1145,7 @@ export default function CashLedgerPage() {
                     required
                     value={transferAmount}
                     onChange={(e) => setTransferAmount(e.target.value)}
-                    placeholder="0.00"
+                    placeholder="e.g. 5,000.00"
                     className="mt-1 w-full text-base font-bold font-mono border border-gray-300 rounded-lg px-3 py-2 text-gray-900 focus:ring-2 focus:ring-amber-600"
                   />
                 </div>
@@ -1157,7 +1157,7 @@ export default function CashLedgerPage() {
                     required
                     value={transferReason}
                     onChange={(e) => setTransferReason(e.target.value)}
-                    placeholder="E.g. Float replenishment to Drawer 2, end-of-counter consolidation..."
+                    placeholder="Explain the purpose of this cash transfer"
                     className="mt-1 w-full text-xs border border-gray-300 rounded-lg px-3 py-2 text-gray-900"
                   />
                 </div>
@@ -1223,7 +1223,7 @@ export default function CashLedgerPage() {
                     required
                     value={reversalReason}
                     onChange={(e) => setReversalReason(e.target.value)}
-                    placeholder="Explain why this transaction was recorded in error..."
+                    placeholder="Explain why the original cash movement must be reversed"
                     className="mt-1 w-full text-xs border border-gray-300 rounded-lg px-3 py-2 text-gray-900 focus:ring-2 focus:ring-purple-600"
                   />
                 </div>
@@ -1386,7 +1386,7 @@ export default function CashLedgerPage() {
 
               {/* Create/Edit Category Form */}
               <form onSubmit={handleSaveCategory} className="space-y-3 mt-4 p-4 bg-gray-50 rounded-xl border border-gray-200">
-                <h4 className="text-xs font-bold uppercase text-[#0D3826] tracking-wider">
+                <h4 className="text-xs font-bold uppercase text-[#123B32] tracking-wider">
                   {editingCategory ? `Edit Category: ${editingCategory.name}` : 'Add New Category'}
                 </h4>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -1397,7 +1397,7 @@ export default function CashLedgerPage() {
                       required
                       value={catName}
                       onChange={(e) => setCatName(e.target.value)}
-                      placeholder="E.g. Bank Deposit"
+                      placeholder="e.g. Bank Deposit"
                       className="mt-1 w-full text-xs border border-gray-300 rounded-lg px-2.5 py-1.5 bg-white text-gray-900"
                     />
                   </div>
@@ -1409,7 +1409,7 @@ export default function CashLedgerPage() {
                       disabled={!!editingCategory}
                       value={catCode}
                       onChange={(e) => setCatCode(e.target.value.toUpperCase())}
-                      placeholder="E.g. BANK_DEP"
+                      placeholder="e.g. BANK_DEP"
                       className="mt-1 w-full text-xs border border-gray-300 rounded-lg px-2.5 py-1.5 bg-white text-gray-900 uppercase disabled:bg-gray-100"
                     />
                   </div>
@@ -1433,7 +1433,7 @@ export default function CashLedgerPage() {
                     type="text"
                     value={catDescription}
                     onChange={(e) => setCatDescription(e.target.value)}
-                    placeholder="Brief description of this movement classification"
+                    placeholder="Describe this cash movement classification"
                     className="mt-1 w-full text-xs border border-gray-300 rounded-lg px-2.5 py-1.5 bg-white text-gray-900"
                   />
                 </div>
@@ -1457,7 +1457,7 @@ export default function CashLedgerPage() {
                   <button
                     type="submit"
                     disabled={isSubmitting}
-                    className="px-4 py-1.5 bg-[#0D3826] hover:bg-[#1B6543] text-white rounded-lg text-xs font-bold disabled:opacity-50"
+                    className="px-4 py-1.5 bg-[#123B32] hover:bg-[#1B6543] text-white rounded-lg text-xs font-bold disabled:opacity-50"
                   >
                     {isSubmitting ? 'Saving...' : editingCategory ? 'Update Category' : 'Create Category'}
                   </button>
@@ -1504,7 +1504,7 @@ export default function CashLedgerPage() {
                               setCatDirection(String(c.allowedDirection));
                               setCatDescription(c.description || '');
                             }}
-                            className="text-xs text-[#0D3826] hover:underline font-bold"
+                            className="text-xs text-[#123B32] hover:underline font-bold"
                           >
                             Edit
                           </button>

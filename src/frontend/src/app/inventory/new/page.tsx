@@ -46,6 +46,7 @@ export default function NewInventoryItemPage() {
 
   // Master Data Lookups
   const [branches, setBranches] = useState<Branch[]>([]);
+  const activeBranch = branches.find((b) => b.id === (branchId || activeBranchId));
   const [locations, setLocations] = useState<StockLocation[]>([]);
   const [materials, setMaterials] = useState<Material[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -694,38 +695,38 @@ export default function NewInventoryItemPage() {
 
                   <div className="space-y-4">
                     <div>
-                      <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 mb-1.5">
-                        Item Name <span className="text-red-500">*</span>
+                      <label className="block text-xs font-bold uppercase tracking-wider text-[#202824] mb-1.5">
+                        Item Name <span className="text-rose-600">*</span>
                       </label>
                       <input
                         type="text"
                         value={name}
                         onChange={(e) => setName(e.target.value)}
-                        placeholder="e.g., 22K Traditional Sovereign Gold Bangle"
-                        className="w-full px-3.5 py-2.5 text-sm border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#0D3826] focus:border-transparent"
+                        placeholder="e.g. 22K Floral Gold Necklace"
+                        className="w-full px-3.5 py-2.5 text-sm border border-[#E2E6E3] rounded-xl focus:ring-1 focus:ring-[#123B32] focus:border-[#123B32]"
                       />
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 mb-1.5">
+                        <label className="block text-xs font-bold uppercase tracking-wider text-[#202824] mb-1.5">
                           Internal Item Code / SKU <span className="text-gray-400 font-normal">(Optional)</span>
                         </label>
                         <input
                           type="text"
                           value={itemCode}
                           onChange={(e) => setItemCode(e.target.value)}
-                          placeholder="e.g., SKU-BGL-001"
-                          className="w-full px-3.5 py-2.5 text-sm border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#0D3826] focus:border-transparent"
+                          placeholder="e.g. NKL-22K-001"
+                          className="w-full px-3.5 py-2.5 text-sm border border-[#E2E6E3] rounded-xl focus:ring-1 focus:ring-[#123B32] focus:border-[#123B32]"
                         />
-                        <span className="text-[11px] text-gray-400 mt-1 block">
+                        <span className="text-[11px] text-[#69736E] mt-1 block">
                           If omitted, defaults to the generated jewellery tag number.
                         </span>
                       </div>
 
                       <div>
-                        <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 mb-1.5">
-                          Piece Count <span className="text-red-500">*</span>
+                        <label className="block text-xs font-bold uppercase tracking-wider text-[#202824] mb-1.5">
+                          Piece Count <span className="text-rose-600">*</span>
                         </label>
                         <input
                           type="number"
@@ -733,24 +734,25 @@ export default function NewInventoryItemPage() {
                           step="1"
                           value={pieceCount}
                           onChange={(e) => setPieceCount(e.target.value)}
-                          className="w-full px-3.5 py-2.5 text-sm border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#0D3826] focus:border-transparent"
+                          placeholder="e.g. 1"
+                          className="w-full px-3.5 py-2.5 text-sm border border-[#E2E6E3] rounded-xl focus:ring-1 focus:ring-[#123B32] focus:border-[#123B32]"
                         />
-                        <span className="text-[11px] text-gray-400 mt-1 block">
+                        <span className="text-[11px] text-[#69736E] mt-1 block">
                           Individually tracked jewellery items default to 1 piece.
                         </span>
                       </div>
                     </div>
 
                     <div>
-                      <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 mb-1.5">
+                      <label className="block text-xs font-bold uppercase tracking-wider text-[#202824] mb-1.5">
                         Description / Craftsmanship Notes <span className="text-gray-400 font-normal">(Optional)</span>
                       </label>
                       <textarea
                         rows={3}
                         value={description}
                         onChange={(e) => setDescription(e.target.value)}
-                        placeholder="Details about craftsmanship, hallmark, motif, certifications..."
-                        className="w-full px-3.5 py-2.5 text-sm border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#0D3826] focus:border-transparent"
+                        placeholder="Describe the jewellery design or distinguishing features"
+                        className="w-full px-3.5 py-2.5 text-sm border border-[#E2E6E3] rounded-xl focus:ring-1 focus:ring-[#123B32] focus:border-[#123B32]"
                       />
                     </div>
                   </div>
@@ -837,8 +839,8 @@ export default function NewInventoryItemPage() {
 
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
                     <div>
-                      <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 mb-1.5">
-                        Gross Weight (g) <span className="text-red-500">*</span>
+                      <label className="block text-xs font-bold uppercase tracking-wider text-[#202824] mb-1.5">
+                        Gross Weight (g) <span className="text-rose-600">*</span>
                       </label>
                       <div className="relative">
                         <input
@@ -847,17 +849,17 @@ export default function NewInventoryItemPage() {
                           min="0.0001"
                           value={grossWeight}
                           onChange={(e) => setGrossWeight(e.target.value)}
-                          placeholder="0.0000"
-                          className="w-full pr-8 pl-3.5 py-2.5 text-base font-semibold border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#0D3826] focus:border-transparent"
+                          placeholder="e.g. 8.5000"
+                          className="w-full pr-8 pl-3.5 py-2.5 text-base font-semibold border border-[#E2E6E3] rounded-xl focus:ring-1 focus:ring-[#123B32] focus:border-[#123B32]"
                         />
-                        <span className="absolute right-3 top-3 text-xs font-bold text-gray-400">g</span>
+                        <span className="absolute right-3 top-3 text-xs font-bold text-[#69736E]">g</span>
                       </div>
-                      <span className="text-[11px] text-gray-400 mt-1 block">Total weight on electronic scale</span>
+                      <span className="text-[11px] text-[#69736E] mt-1 block">Total weight of the jewellery including stones.</span>
                     </div>
 
                     <div>
-                      <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 mb-1.5">
-                        Stone Weight (g) <span className="text-red-500">*</span>
+                      <label className="block text-xs font-bold uppercase tracking-wider text-[#202824] mb-1.5">
+                        Stone Weight (g) <span className="text-rose-600">*</span>
                       </label>
                       <div className="relative">
                         <input
@@ -866,32 +868,32 @@ export default function NewInventoryItemPage() {
                           min="0.0000"
                           value={stoneWeight}
                           onChange={(e) => setStoneWeight(e.target.value)}
-                          placeholder="0.0000"
-                          className="w-full pr-8 pl-3.5 py-2.5 text-base font-semibold border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#0D3826] focus:border-transparent"
+                          placeholder="e.g. 0.2500"
+                          className="w-full pr-8 pl-3.5 py-2.5 text-base font-semibold border border-[#E2E6E3] rounded-xl focus:ring-1 focus:ring-[#123B32] focus:border-[#123B32]"
                         />
-                        <span className="absolute right-3 top-3 text-xs font-bold text-gray-400">g</span>
+                        <span className="absolute right-3 top-3 text-xs font-bold text-[#69736E]">g</span>
                       </div>
-                      <span className="text-[11px] text-gray-400 mt-1 block">Gems, stones, or enamel tare</span>
+                      <span className="text-[11px] text-[#69736E] mt-1 block">Enter the total stone weight. Leave at zero if not applicable.</span>
                     </div>
 
                     <div>
-                      <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 mb-1.5">
+                      <label className="block text-xs font-bold uppercase tracking-wider text-[#202824] mb-1.5">
                         Net Metal Weight (g)
                       </label>
                       <div className={`p-2.5 rounded-xl border flex items-center justify-between ${
-                        hasWeightError ? 'bg-red-50 border-red-300 text-red-700' : 'bg-[#FAF8F5] border-[#D4AF37]/50 text-[#0D3826]'
+                        hasWeightError ? 'bg-rose-50 border-rose-300 text-rose-700' : 'bg-[#F8F7F4] border-[#B89A60]/40 text-[#123B32]'
                       }`}>
                         <span className="text-xs font-bold">Calculated Net:</span>
                         <span className="font-mono text-lg font-black">{netWeightPreview} g</span>
                       </div>
-                      <span className="text-[11px] text-gray-400 mt-1 block">
-                        Authoritative value is computed server-side: Gross - Stone.
+                      <span className="text-[11px] text-[#69736E] mt-1 block">
+                        Calculated automatically from gross weight minus stone weight.
                       </span>
                     </div>
                   </div>
 
                   {hasWeightError && (
-                    <p className="text-xs text-red-600 font-semibold">
+                    <p className="text-xs text-rose-600 font-semibold">
                       Stone weight cannot exceed gross weight. Please correct weight entries.
                     </p>
                   )}
@@ -902,16 +904,16 @@ export default function NewInventoryItemPage() {
               {currentStep === 5 && (
                 <div className="space-y-5">
                   <div>
-                    <h2 className="text-lg font-bold text-gray-900">Step 5 — Making Charge Configuration</h2>
-                    <p className="text-xs text-gray-500">
-                      Configure craftsmanship and making charges in Sri Lankan Rupees (LKR).
+                    <h2 className="text-lg font-bold text-[#123B32]">Step 5 — Making Charge Configuration</h2>
+                    <p className="text-xs text-[#69736E]">
+                      Configure craftsmanship and making charges in operating currency ({activeBranch?.currencyCode || 'LKR'}).
                     </p>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                     <div>
-                      <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 mb-1.5">
-                        Calculation Method <span className="text-red-500">*</span>
+                      <label className="block text-xs font-bold uppercase tracking-wider text-[#202824] mb-1.5">
+                        Calculation Method <span className="text-rose-600">*</span>
                       </label>
                       <div className="grid grid-cols-2 gap-3">
                         <button
@@ -919,12 +921,12 @@ export default function NewInventoryItemPage() {
                           onClick={() => setMakingChargeMethod(1)}
                           className={`p-3 rounded-xl border text-left transition-all ${
                             makingChargeMethod === 1
-                              ? 'border-[#0D3826] bg-[#0D3826]/5 text-[#0D3826] ring-2 ring-[#0D3826]'
-                              : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
+                              ? 'border-[#123B32] bg-[#123B32]/5 text-[#123B32] ring-1 ring-[#123B32]'
+                              : 'border-[#E2E6E3] bg-white text-gray-700 hover:bg-[#F8F7F4]'
                           }`}
                         >
                           <span className="block font-bold text-sm">Per Gram</span>
-                          <span className="text-[11px] text-gray-500">Applied per net gram</span>
+                          <span className="text-[11px] text-[#69736E]">Applied per net gram</span>
                         </button>
 
                         <button
@@ -932,34 +934,34 @@ export default function NewInventoryItemPage() {
                           onClick={() => setMakingChargeMethod(2)}
                           className={`p-3 rounded-xl border text-left transition-all ${
                             makingChargeMethod === 2
-                              ? 'border-[#0D3826] bg-[#0D3826]/5 text-[#0D3826] ring-2 ring-[#0D3826]'
-                              : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
+                              ? 'border-[#123B32] bg-[#123B32]/5 text-[#123B32] ring-1 ring-[#123B32]'
+                              : 'border-[#E2E6E3] bg-white text-gray-700 hover:bg-[#F8F7F4]'
                           }`}
                         >
                           <span className="block font-bold text-sm">Per Item</span>
-                          <span className="text-[11px] text-gray-500">Fixed charge per piece</span>
+                          <span className="text-[11px] text-[#69736E]">Fixed charge per piece</span>
                         </button>
                       </div>
                     </div>
 
                     <div>
-                      <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 mb-1.5">
-                        Making Charge Value (LKR) <span className="text-red-500">*</span>
+                      <label className="block text-xs font-bold uppercase tracking-wider text-[#202824] mb-1.5">
+                        Making Charge Value ({activeBranch?.currencyCode || 'LKR'}) <span className="text-rose-600">*</span>
                       </label>
                       <div className="relative">
-                        <span className="absolute left-3.5 top-3 text-xs font-bold text-gray-500">Rs.</span>
+                        <span className="absolute left-3.5 top-3 text-xs font-bold text-[#69736E]">{activeBranch?.currencyCode || 'LKR'}</span>
                         <input
                           type="number"
                           step="0.01"
                           min="0.00"
                           value={makingChargeValue}
                           onChange={(e) => setMakingChargeValue(e.target.value)}
-                          placeholder="0.00"
-                          className="w-full pl-10 pr-3.5 py-2.5 text-base font-semibold border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#0D3826] focus:border-transparent"
+                          placeholder="e.g. 2,500.00"
+                          className="w-full pl-12 pr-3.5 py-2.5 text-base font-semibold border border-[#E2E6E3] rounded-xl focus:ring-1 focus:ring-[#123B32] focus:border-[#123B32]"
                         />
                       </div>
-                      <span className="text-[11px] text-gray-400 mt-1 block">
-                        Example: Rs. 2,500.00 per gram or Rs. 15,000.00 fixed
+                      <span className="text-[11px] text-[#69736E] mt-1 block">
+                        Example: 2,500.00 per gram or 15,000.00 fixed piece charge
                       </span>
                     </div>
                   </div>

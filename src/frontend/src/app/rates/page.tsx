@@ -246,7 +246,7 @@ export default function RatesManagementPage() {
     if (isOverride) {
       return (
         <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-amber-100 text-amber-900 border border-amber-300">
-          ⚠️ Admin Override
+          Admin Override
         </span>
       );
     }
@@ -254,13 +254,13 @@ export default function RatesManagementPage() {
       case 'EXTERNAL_API':
         return (
           <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-emerald-100 text-emerald-800 border border-emerald-300">
-            ⚡ Live External
+            Live External
           </span>
         );
       case 'MANUAL':
         return (
           <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-blue-100 text-blue-800 border border-blue-300">
-            ✍️ Manual Entry
+            Manual Entry
           </span>
         );
       default:
@@ -279,8 +279,8 @@ export default function RatesManagementPage() {
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <div className="flex items-center space-x-3">
-              <span className="text-2xl">🪙</span>
-              <h1 className="text-2xl font-black text-[#0D3826] tracking-tight">Metal Rates Management</h1>
+              
+              <h1 className="text-2xl font-black text-[#123B32] tracking-tight">Metal Rates Management</h1>
             </div>
             <p className="text-sm text-gray-500 mt-1">
               Authoritative daily pricing reference board for precious metals.
@@ -299,13 +299,13 @@ export default function RatesManagementPage() {
               }}
               className="inline-flex items-center px-3 py-2 border border-emerald-700 text-emerald-800 bg-emerald-50 hover:bg-emerald-100 rounded-lg text-sm font-semibold transition"
             >
-              🧮 Reference Calculator
+              Reference Calculator
             </button>
             <button
               onClick={openHistoryModal}
               className="inline-flex items-center px-3 py-2 border border-gray-300 text-gray-700 bg-white hover:bg-gray-50 rounded-lg text-sm font-semibold transition"
             >
-              📜 Rate History
+              Rate History
             </button>
             {canManageRates && (
               <>
@@ -315,16 +315,16 @@ export default function RatesManagementPage() {
                     if (purities.length > 0) setManualPurityId(purities[0].id);
                     setIsManualModalOpen(true);
                   }}
-                  className="inline-flex items-center px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-bold text-white bg-[#0D3826] hover:bg-[#1B6543] transition"
+                  className="inline-flex items-center px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-bold text-white bg-[#123B32] hover:bg-[#1B6543] transition"
                 >
                   + Add Manual Rate
                 </button>
                 <button
                   onClick={handleRefreshExternal}
                   disabled={refreshing}
-                  className="inline-flex items-center px-4 py-2 border border-[#D4AF37] rounded-lg shadow-sm text-sm font-bold text-[#0D3826] bg-[#D4AF37]/20 hover:bg-[#D4AF37]/30 transition disabled:opacity-50"
+                  className="inline-flex items-center px-4 py-2 border border-[#B89A60] rounded-lg shadow-sm text-sm font-bold text-[#123B32] bg-[#B89A60]/20 hover:bg-[#B89A60]/30 transition disabled:opacity-50"
                 >
-                  {refreshing ? 'Refreshing...' : '🔄 Refresh External API'}
+                  {refreshing ? 'Refreshing...' : 'Refresh External API'}
                 </button>
               </>
             )}
@@ -348,18 +348,18 @@ export default function RatesManagementPage() {
         {/* External Provider Status Bar */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
           <div className="flex items-center space-x-3">
-            <span className="text-lg">📡</span>
+            
             <div>
               <div className="text-xs uppercase font-bold tracking-wider text-gray-500">External Provider Feed</div>
               <div className="flex items-center space-x-2 mt-0.5">
                 <span className="text-sm font-bold text-gray-900">{providerStatus?.providerName || 'GoldApi'}</span>
                 {providerStatus?.isAvailable ? (
                   <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-emerald-100 text-emerald-800">
-                    🟢 Feed Operational
+                    Feed Operational
                   </span>
                 ) : (
                   <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-amber-100 text-amber-800">
-                    🟡 Manual Mode / Degraded
+                    Manual Mode / Degraded
                   </span>
                 )}
               </div>
@@ -377,7 +377,7 @@ export default function RatesManagementPage() {
             </div>
             <div>
               <span className="text-gray-400">Branch Currency: </span>
-              <span className="font-bold text-[#0D3826] bg-[#0D3826]/10 px-2 py-0.5 rounded">
+              <span className="font-bold text-[#123B32] bg-[#123B32]/10 px-2 py-0.5 rounded">
                 {currencyCode}
               </span>
             </div>
@@ -395,7 +395,7 @@ export default function RatesManagementPage() {
             <div className="p-12 text-center text-gray-500">Loading active rates...</div>
           ) : rates.length === 0 ? (
             <div className="p-12 text-center">
-              <div className="text-3xl mb-2">⚖️</div>
+              
               <p className="text-sm font-semibold text-gray-700">No active metal rates configured for this branch.</p>
               <p className="text-xs text-gray-500 mt-1">Use &ldquo;+ Add Manual Rate&rdquo; or &ldquo;Refresh External API&rdquo; to establish current rates.</p>
             </div>
@@ -423,7 +423,7 @@ export default function RatesManagementPage() {
                         <div className="text-xs text-gray-400">{rate.materialCode}</div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <span className="font-bold text-[#0D3826] bg-[#0D3826]/10 px-2 py-0.5 rounded text-xs">
+                        <span className="font-bold text-[#123B32] bg-[#123B32]/10 px-2 py-0.5 rounded text-xs">
                           {rate.purityName}
                         </span>
                         <div className="text-[11px] text-gray-500 mt-0.5">
@@ -431,7 +431,7 @@ export default function RatesManagementPage() {
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right">
-                        <div className="text-lg font-black text-[#0D3826]">
+                        <div className="text-lg font-black text-[#123B32]">
                           {currencyCode} {rate.ratePerGram.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
                         </div>
                         <div className="text-[10px] text-gray-400">per 1.0000 gram</div>
@@ -463,7 +463,7 @@ export default function RatesManagementPage() {
                               setOverrideReason('');
                               setIsOverrideModalOpen(true);
                             }}
-                            className="text-[#D4AF37] hover:text-amber-800 font-bold bg-[#D4AF37]/10 hover:bg-[#D4AF37]/20 px-3 py-1 rounded transition border border-[#D4AF37]/30"
+                            className="text-[#B89A60] hover:text-amber-800 font-bold bg-[#B89A60]/10 hover:bg-[#B89A60]/20 px-3 py-1 rounded transition border border-[#B89A60]/30"
                           >
                             Override
                           </button>
@@ -481,14 +481,14 @@ export default function RatesManagementPage() {
         {isManualModalOpen && (
           <div className="fixed inset-0 z-50 overflow-y-auto bg-black/50 flex items-center justify-center p-4">
             <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-2xl border border-gray-200">
-              <h3 className="text-lg font-bold text-[#0D3826] mb-4">Set Manual Metal Rate</h3>
+              <h3 className="text-lg font-bold text-[#123B32] mb-4">Set Manual Metal Rate</h3>
               <form onSubmit={handleCreateManual} className="space-y-4">
                 <div>
                   <label className="block text-xs font-bold uppercase text-gray-600 mb-1">Material</label>
                   <select
                     value={manualMaterialId}
                     onChange={(e) => setManualMaterialId(e.target.value)}
-                    className="w-full border border-gray-300 rounded-md p-2 text-sm focus:ring-[#0D3826] focus:border-[#0D3826]"
+                    className="w-full border border-gray-300 rounded-md p-2 text-sm focus:ring-[#123B32] focus:border-[#123B32]"
                     required
                   >
                     {materials.map((m) => (
@@ -502,7 +502,7 @@ export default function RatesManagementPage() {
                   <select
                     value={manualPurityId}
                     onChange={(e) => setManualPurityId(e.target.value)}
-                    className="w-full border border-gray-300 rounded-md p-2 text-sm focus:ring-[#0D3826] focus:border-[#0D3826]"
+                    className="w-full border border-gray-300 rounded-md p-2 text-sm focus:ring-[#123B32] focus:border-[#123B32]"
                     required
                   >
                     {purities.map((p) => (
@@ -521,8 +521,8 @@ export default function RatesManagementPage() {
                     min="0.0001"
                     value={manualRate}
                     onChange={(e) => setManualRate(e.target.value)}
-                    placeholder="e.g. 28500.0000"
-                    className="w-full border border-gray-300 rounded-md p-2 text-sm font-semibold focus:ring-[#0D3826] focus:border-[#0D3826]"
+                    placeholder="e.g. 25,000.00"
+                    className="w-full border border-gray-300 rounded-md p-2 text-sm font-semibold focus:ring-[#123B32] focus:border-[#123B32]"
                     required
                   />
                 </div>
@@ -534,7 +534,7 @@ export default function RatesManagementPage() {
                     value={manualNotes}
                     onChange={(e) => setManualNotes(e.target.value)}
                     placeholder="e.g. Daily morning board rate update"
-                    className="w-full border border-gray-300 rounded-md p-2 text-sm focus:ring-[#0D3826] focus:border-[#0D3826]"
+                    className="w-full border border-gray-300 rounded-md p-2 text-sm focus:ring-[#123B32] focus:border-[#123B32]"
                   />
                 </div>
 
@@ -549,7 +549,7 @@ export default function RatesManagementPage() {
                   <button
                     type="submit"
                     disabled={manualSubmitting}
-                    className="px-4 py-2 bg-[#0D3826] text-white rounded-md text-sm font-bold hover:bg-[#1B6543] disabled:opacity-50"
+                    className="px-4 py-2 bg-[#123B32] text-white rounded-md text-sm font-bold hover:bg-[#1B6543] disabled:opacity-50"
                   >
                     {manualSubmitting ? 'Saving...' : 'Set Manual Rate'}
                   </button>
@@ -564,7 +564,7 @@ export default function RatesManagementPage() {
           <div className="fixed inset-0 z-50 overflow-y-auto bg-black/50 flex items-center justify-center p-4">
             <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-2xl border border-gray-200">
               <div className="flex items-center space-x-2 text-amber-700 mb-2">
-                <span className="text-xl">⚠️</span>
+                <span className="text-xl"></span>
                 <h3 className="text-lg font-bold">Admin Rate Override</h3>
               </div>
               <p className="text-xs text-gray-600 mb-4">
@@ -590,7 +590,7 @@ export default function RatesManagementPage() {
                     min="0.0001"
                     value={overrideRateValue}
                     onChange={(e) => setOverrideRateValue(e.target.value)}
-                    className="w-full border border-amber-300 rounded-md p-2 text-sm font-bold text-[#0D3826] focus:ring-amber-500 focus:border-amber-500"
+                    className="w-full border border-amber-300 rounded-md p-2 text-sm font-bold text-[#123B32] focus:ring-amber-500 focus:border-amber-500"
                     required
                   />
                 </div>
@@ -604,7 +604,7 @@ export default function RatesManagementPage() {
                     onChange={(e) => setOverrideReason(e.target.value)}
                     placeholder="Explain the operational rationale for overriding external/reference board rate..."
                     rows={3}
-                    className="w-full border border-gray-300 rounded-md p-2 text-sm focus:ring-[#0D3826] focus:border-[#0D3826]"
+                    className="w-full border border-gray-300 rounded-md p-2 text-sm focus:ring-[#123B32] focus:border-[#123B32]"
                     required
                   />
                 </div>
@@ -636,7 +636,7 @@ export default function RatesManagementPage() {
             <div className="bg-white rounded-xl max-w-4xl w-full p-6 shadow-2xl border border-gray-200 max-h-[85vh] flex flex-col">
               <div className="flex justify-between items-center pb-4 border-b">
                 <div>
-                  <h3 className="text-lg font-bold text-[#0D3826]">Historical Metal Rates</h3>
+                  <h3 className="text-lg font-bold text-[#123B32]">Historical Metal Rates</h3>
                   <p className="text-xs text-gray-500">Unbroken audit timeline of market, manual, and overridden rates.</p>
                 </div>
                 <button
@@ -671,7 +671,7 @@ export default function RatesManagementPage() {
                             {h.materialName} - {h.purityName}
                             {h.isActive && <span className="ml-2 text-[10px] text-emerald-700 font-bold">[Active]</span>}
                           </td>
-                          <td className="px-4 py-2 text-right font-bold text-[#0D3826]">
+                          <td className="px-4 py-2 text-right font-bold text-[#123B32]">
                             {h.currencyCode} {h.ratePerGram.toFixed(4)}
                           </td>
                           <td className="px-4 py-2">{getSourceBadge(h.source, h.isOverride)}</td>
@@ -701,7 +701,7 @@ export default function RatesManagementPage() {
             <div className="bg-white rounded-xl max-w-lg w-full p-6 shadow-2xl border border-gray-200">
               <div className="flex justify-between items-center mb-4">
                 <div>
-                  <h3 className="text-lg font-bold text-[#0D3826]">Reference Pricing Calculator</h3>
+                  <h3 className="text-lg font-bold text-[#123B32]">Reference Pricing Calculator</h3>
                   <p className="text-xs text-gray-500">Test gold valuation + making charge + VAT reference breakdown.</p>
                 </div>
                 <button
@@ -798,7 +798,7 @@ export default function RatesManagementPage() {
                   <button
                     type="submit"
                     disabled={calcLoading}
-                    className="w-full py-2 bg-[#0D3826] text-white rounded text-sm font-bold hover:bg-[#1B6543] disabled:opacity-50"
+                    className="w-full py-2 bg-[#123B32] text-white rounded text-sm font-bold hover:bg-[#1B6543] disabled:opacity-50"
                   >
                     {calcLoading ? 'Calculating...' : 'Compute Reference Breakdown'}
                   </button>
@@ -827,7 +827,7 @@ export default function RatesManagementPage() {
                     <span>VAT ({calcResult.vatEnabled ? `${calcResult.vatRatePercentage}%` : 'Disabled'}):</span>
                     <span>{calcResult.currencyCode} {calcResult.vatAmount.toFixed(2)}</span>
                   </div>
-                  <div className="flex justify-between font-black text-sm text-[#0D3826] pt-1 border-t border-emerald-300">
+                  <div className="flex justify-between font-black text-sm text-[#123B32] pt-1 border-t border-emerald-300">
                     <span>Reference Total:</span>
                     <span>{calcResult.currencyCode} {calcResult.referenceTotal.toFixed(2)}</span>
                   </div>

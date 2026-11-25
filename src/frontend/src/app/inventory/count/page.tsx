@@ -191,13 +191,13 @@ export default function InventoryCountListPage() {
       case 2: // RequiresReview
         return (
           <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 border border-amber-200">
-            ⚠️ REQUIRES REVIEW
+            Requires Review
           </span>
         );
       case 3: // Completed
         return (
           <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200">
-            ✓ COMPLETED
+            Completed
           </span>
         );
       case 4: // Cancelled
@@ -224,7 +224,7 @@ export default function InventoryCountListPage() {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white p-6 rounded-xl shadow-sm border border-gray-200">
           <div>
             <div className="flex items-center space-x-3">
-              <span className="text-3xl">📋</span>
+              
               <div>
                 <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Inventory Count & Stock Verification</h1>
                 <p className="text-sm text-gray-500 mt-1">
@@ -246,7 +246,7 @@ export default function InventoryCountListPage() {
                 setModalNotes('');
                 setIsStartModalOpen(true);
               }}
-              className="inline-flex items-center px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-semibold text-white bg-[#0D3826] hover:bg-[#1B6543] focus:outline-none transition shadow-sm"
+              className="inline-flex items-center px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-semibold text-white bg-[#123B32] hover:bg-[#1B6543] focus:outline-none transition shadow-sm"
             >
               <span className="mr-2 text-base">＋</span> Start Inventory Count
             </button>
@@ -266,7 +266,7 @@ export default function InventoryCountListPage() {
                 setSelectedLocationId('');
                 setPage(1);
               }}
-              className="w-full text-sm border-gray-300 rounded-lg shadow-sm focus:border-[#0D3826] focus:ring-[#0D3826] bg-gray-50 p-2 border"
+              className="w-full text-sm border-gray-300 rounded-lg shadow-sm focus:border-[#123B32] focus:ring-[#123B32] bg-gray-50 p-2 border"
             >
               <option value="">All Accessible Branches</option>
               {branches.map((b) => (
@@ -287,7 +287,7 @@ export default function InventoryCountListPage() {
                 setSelectedLocationId(e.target.value);
                 setPage(1);
               }}
-              className="w-full text-sm border-gray-300 rounded-lg shadow-sm focus:border-[#0D3826] focus:ring-[#0D3826] bg-gray-50 p-2 border"
+              className="w-full text-sm border-gray-300 rounded-lg shadow-sm focus:border-[#123B32] focus:ring-[#123B32] bg-gray-50 p-2 border"
               disabled={!selectedBranchId}
             >
               <option value="">All Locations in Branch</option>
@@ -309,7 +309,7 @@ export default function InventoryCountListPage() {
                 setSelectedStatus(e.target.value);
                 setPage(1);
               }}
-              className="w-full text-sm border-gray-300 rounded-lg shadow-sm focus:border-[#0D3826] focus:ring-[#0D3826] bg-gray-50 p-2 border"
+              className="w-full text-sm border-gray-300 rounded-lg shadow-sm focus:border-[#123B32] focus:ring-[#123B32] bg-gray-50 p-2 border"
             >
               <option value="">All Statuses</option>
               <option value="1">In Progress</option>
@@ -369,7 +369,7 @@ export default function InventoryCountListPage() {
                 ) : counts.length === 0 ? (
                   <tr>
                     <td colSpan={8} className="px-6 py-12 text-center text-gray-500">
-                      <div className="text-4xl mb-2">📋</div>
+                      
                       <p className="font-semibold text-gray-700">No inventory count sessions found.</p>
                       <p className="text-xs text-gray-400 mt-1">
                         Select a branch and stock location, then click &quot;Start Inventory Count&quot; to begin stock verification.
@@ -395,7 +395,7 @@ export default function InventoryCountListPage() {
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="font-semibold text-gray-900">{c.branchCode} - {c.branchName}</div>
                           <div className="text-xs text-gray-500">
-                            📍 {c.stockLocationCode} ({c.stockLocationName})
+                            {c.stockLocationCode} ({c.stockLocationName})
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
@@ -416,10 +416,10 @@ export default function InventoryCountListPage() {
                           ) : (
                             <div className="space-y-0.5 text-xs">
                               {c.missingCount > 0 && (
-                                <div className="text-red-600 font-semibold">❌ {c.missingCount} Missing</div>
+                                <div className="text-red-600 font-semibold">Missing: {c.missingCount} Missing</div>
                               )}
                               {c.unexpectedCount > 0 && (
-                                <div className="text-amber-700 font-semibold">⚠️ {c.unexpectedCount} Unexpected</div>
+                                <div className="text-amber-700 font-semibold">Unexpected: {c.unexpectedCount} Unexpected</div>
                               )}
                             </div>
                           )}
@@ -432,7 +432,7 @@ export default function InventoryCountListPage() {
                             <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
                               <div
                                 className={`h-2 rounded-full transition-all duration-300 ${
-                                  c.progressPercentage >= 100 ? 'bg-emerald-600' : 'bg-[#D4AF37]'
+                                  c.progressPercentage >= 100 ? 'bg-emerald-600' : 'bg-[#B89A60]'
                                 }`}
                                 style={{ width: `${Math.min(100, c.progressPercentage)}%` }}
                               ></div>
@@ -443,7 +443,7 @@ export default function InventoryCountListPage() {
                           {c.status === 1 ? (
                             <Link
                               href={`/inventory/count/${c.id}`}
-                              className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-bold rounded-lg text-white bg-[#0D3826] hover:bg-[#1B6543] shadow-sm transition"
+                              className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-bold rounded-lg text-white bg-[#123B32] hover:bg-[#1B6543] shadow-sm transition"
                             >
                               Scan & Count →
                             </Link>
@@ -505,7 +505,7 @@ export default function InventoryCountListPage() {
           <div className="bg-white rounded-2xl shadow-2xl border border-gray-200 max-w-lg w-full p-6 space-y-6">
             <div className="flex items-center justify-between border-b pb-4">
               <div className="flex items-center space-x-2">
-                <span className="text-2xl">📋</span>
+                
                 <h3 className="text-lg font-bold text-gray-900">Start New Inventory Count</h3>
               </div>
               <button
@@ -533,7 +533,7 @@ export default function InventoryCountListPage() {
                     setModalBranchId(e.target.value);
                     setModalLocationId('');
                   }}
-                  className="w-full text-sm border-gray-300 rounded-lg shadow-sm focus:border-[#0D3826] focus:ring-[#0D3826] bg-gray-50 p-2.5 border"
+                  className="w-full text-sm border-gray-300 rounded-lg shadow-sm focus:border-[#123B32] focus:ring-[#123B32] bg-gray-50 p-2.5 border"
                   required
                 >
                   <option value="">Select Branch...</option>
@@ -552,7 +552,7 @@ export default function InventoryCountListPage() {
                 <select
                   value={modalLocationId}
                   onChange={(e) => setModalLocationId(e.target.value)}
-                  className="w-full text-sm border-gray-300 rounded-lg shadow-sm focus:border-[#0D3826] focus:ring-[#0D3826] bg-gray-50 p-2.5 border"
+                  className="w-full text-sm border-gray-300 rounded-lg shadow-sm focus:border-[#123B32] focus:ring-[#123B32] bg-gray-50 p-2.5 border"
                   disabled={!modalBranchId}
                   required
                 >
@@ -571,7 +571,7 @@ export default function InventoryCountListPage() {
               ) : activeCheck?.hasActiveCount ? (
                 <div className="p-3 bg-red-50 border border-red-300 rounded-lg text-red-800 text-xs space-y-1">
                   <div className="font-bold flex items-center">
-                    <span className="mr-1.5">⛔</span> Active Count In Progress
+                     Active Count In Progress
                   </div>
                   <p>
                     An inventory count is already active for this stock location (Session #{activeCheck.activeCountId?.substring(0, 8).toUpperCase()}, Status: {activeCheck.statusName}).
@@ -582,7 +582,7 @@ export default function InventoryCountListPage() {
                 </div>
               ) : modalLocationId ? (
                 <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-emerald-800 text-xs">
-                  <span className="font-bold">✓ Location Available:</span> No active count session in progress. Ready to capture frozen baseline.
+                  <span className="font-bold">Location Available:</span> No active count session in progress. Ready to capture frozen baseline.
                 </div>
               ) : null}
 
@@ -594,15 +594,15 @@ export default function InventoryCountListPage() {
                   value={modalNotes}
                   onChange={(e) => setModalNotes(e.target.value)}
                   rows={2}
-                  placeholder="e.g. Weekly vault physical audit, display showcase routine reconciliation"
-                  className="w-full text-sm border-gray-300 rounded-lg shadow-sm focus:border-[#0D3826] focus:ring-[#0D3826] bg-gray-50 p-2.5 border"
+                  placeholder="Record observations from the physical stock count"
+                  className="w-full text-sm border-gray-300 rounded-lg shadow-sm focus:border-[#123B32] focus:ring-[#123B32] bg-gray-50 p-2.5 border"
                 />
               </div>
 
               {/* Baseline Guarantee Callout */}
               <div className="p-3.5 bg-blue-50 border border-blue-200 rounded-xl text-blue-900 text-xs space-y-1.5">
                 <div className="font-bold text-blue-950 flex items-center">
-                  <span className="mr-1.5">🔒</span> Frozen Baseline Guarantee
+                   Frozen Baseline Guarantee
                 </div>
                 <p>
                   Starting this session will freeze a permanent snapshot of all physical jewellery items currently recorded in this location (excluding SOLD items).
@@ -623,7 +623,7 @@ export default function InventoryCountListPage() {
                 <button
                   type="submit"
                   disabled={isStarting || isCheckingActive || activeCheck?.hasActiveCount || !modalLocationId}
-                  className="px-5 py-2 text-sm font-bold text-white bg-[#0D3826] hover:bg-[#1B6543] rounded-lg shadow disabled:opacity-50 transition"
+                  className="px-5 py-2 text-sm font-bold text-white bg-[#123B32] hover:bg-[#1B6543] rounded-lg shadow disabled:opacity-50 transition"
                 >
                   {isStarting ? 'Capturing Baseline...' : 'Start Session & Freeze Baseline'}
                 </button>

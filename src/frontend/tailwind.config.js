@@ -9,36 +9,66 @@ module.exports = {
     extend: {
       colors: {
         saranga: {
+          DEFAULT: '#123B32',
+          forest: '#0B2822',
           green: {
-            50: '#F0F9F4',
-            100: '#DCF1E6',
-            200: '#BCE4CF',
-            300: '#8ED1AF',
-            400: '#59B889',
-            500: '#349D6B',
-            600: '#237E53',
-            700: '#1B6543',
-            800: '#144F35',
-            900: '#0D3826',
-            950: '#072016',
-            DEFAULT: '#0D3826', // Royal Deep Green
+            50: '#F0F9F5',
+            100: '#DCEFE6',
+            200: '#B8DFC9',
+            300: '#8ACAA6',
+            400: '#5BAE81',
+            500: '#389163',
+            600: '#26734D',
+            700: '#1B5B3C',
+            800: '#123B32', // Royal Green
+            900: '#0B2822', // Deep Forest
+            950: '#061713',
           },
           gold: {
-            50: '#FDFBF0',
-            100: '#FAF4DB',
-            200: '#F5E7B5',
-            300: '#EED588',
-            400: '#E4BF59',
-            500: '#D4AF37', // Royal Gold
-            600: '#BA9225',
-            700: '#946E1E',
-            800: '#7A571E',
-            900: '#67471E',
-            950: '#3D260D',
-            DEFAULT: '#D4AF37',
-          }
+            50: '#FBF9F2',
+            100: '#F5F0DF',
+            200: '#EBDDBE',
+            300: '#DEC496',
+            400: '#CCA86E',
+            500: '#B89A60', // Muted Luxury Gold
+            600: '#9C7E47',
+            700: '#7D6336',
+            800: '#644F2D',
+            900: '#524126',
+            950: '#2E2413',
+            DEFAULT: '#B89A60',
+          },
+          ivory: '#F8F7F4',
+          surface: '#FFFFFF',
+          text: {
+            primary: '#202824',
+            secondary: '#69736E',
+            muted: '#8E9994',
+          },
+          border: '#E2E6E3',
+          borderDark: '#CCD2CE',
         }
-      }
+      },
+      fontFamily: {
+        sans: [
+          'Inter',
+          '-apple-system',
+          'BlinkMacSystemFont',
+          '"Segoe UI"',
+          'Roboto',
+          'Helvetica',
+          'Arial',
+          'sans-serif',
+        ],
+        mono: [
+          'ui-monospace',
+          'SFMono-Regular',
+          'Menlo',
+          'Monaco',
+          'Consolas',
+          'monospace',
+        ],
+      },
     },
   },
   plugins: [],

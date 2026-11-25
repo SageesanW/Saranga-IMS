@@ -311,7 +311,7 @@ export default function InventoryCountWorkspacePage() {
       <AppLayout>
         <div className="bg-red-50 p-6 rounded-xl border border-red-200 text-center space-y-3">
           <p className="text-red-700 font-semibold">{error || 'Inventory count session not found.'}</p>
-          <Link href="/inventory/count" className="text-sm text-[#0D3826] font-bold underline">
+          <Link href="/inventory/count" className="text-sm text-[#123B32] font-bold underline">
             ← Return to Inventory Counts
           </Link>
         </div>
@@ -332,7 +332,7 @@ export default function InventoryCountWorkspacePage() {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white p-6 rounded-xl shadow-sm border border-gray-200">
           <div>
             <div className="flex items-center space-x-3">
-              <span className="text-3xl">📋</span>
+              
               <div>
                 <div className="flex items-center space-x-2">
                   <h1 className="text-2xl font-bold text-gray-900 tracking-tight">
@@ -353,7 +353,7 @@ export default function InventoryCountWorkspacePage() {
                   </span>
                 </div>
                 <p className="text-xs text-gray-500 mt-1">
-                  Branch: <span className="font-semibold text-gray-800">{count.branchCode} - {count.branchName}</span> &nbsp;|&nbsp; Location: <span className="font-semibold text-gray-800">📍 {count.stockLocationCode} ({count.stockLocationName})</span> &nbsp;|&nbsp; Started: {new Date(count.startedAt).toLocaleString('en-GB')}
+                  Branch: <span className="font-semibold text-gray-800">{count.branchCode} - {count.branchName}</span> &nbsp;|&nbsp; Location: <span className="font-semibold text-gray-800">{count.stockLocationCode} ({count.stockLocationName})</span> &nbsp;|&nbsp; Started: {new Date(count.startedAt).toLocaleString('en-GB')}
                 </p>
               </div>
             </div>
@@ -373,7 +373,7 @@ export default function InventoryCountWorkspacePage() {
                   onClick={() => setIsFinishModalOpen(true)}
                   className="px-4 py-2 text-xs font-bold text-white bg-emerald-700 hover:bg-emerald-800 rounded-lg shadow transition flex items-center space-x-1.5"
                 >
-                  <span>✓</span>
+                  ✓
                   <span>Finish & Reconcile Count</span>
                 </button>
                 <button
@@ -389,7 +389,7 @@ export default function InventoryCountWorkspacePage() {
               <button
                 onClick={() => setIsCompleteModalOpen(true)}
                 disabled={!allVariancesResolved}
-                className="px-4 py-2 text-xs font-bold text-white bg-[#0D3826] hover:bg-[#1B6543] rounded-lg shadow disabled:opacity-40 transition"
+                className="px-4 py-2 text-xs font-bold text-white bg-[#123B32] hover:bg-[#1B6543] rounded-lg shadow disabled:opacity-40 transition"
                 title={!allVariancesResolved ? 'All variances must be resolved before completing' : ''}
               >
                 Complete Count Session →
@@ -413,11 +413,11 @@ export default function InventoryCountWorkspacePage() {
           </div>
 
           <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-[#D4AF37]">Progress</span>
+            <span className="text-[11px] font-bold uppercase tracking-wider text-[#B89A60]">Progress</span>
             <div className="text-2xl font-black text-gray-900 mt-1">{count.progressPercentage.toFixed(1)}%</div>
             <div className="w-full bg-gray-200 rounded-full h-1.5 mt-1.5 overflow-hidden">
               <div
-                className="bg-[#D4AF37] h-1.5 rounded-full transition-all duration-300"
+                className="bg-[#B89A60] h-1.5 rounded-full transition-all duration-300"
                 style={{ width: `${Math.min(100, count.progressPercentage)}%` }}
               ></div>
             </div>
@@ -450,14 +450,14 @@ export default function InventoryCountWorkspacePage() {
             {/* Left 2 Cols: High-Speed Repetitive Scanner & Activity */}
             <div className="lg:col-span-2 space-y-6">
               {/* Scanner Form */}
-              <div className="bg-white p-6 rounded-2xl shadow-sm border border-[#0D3826]/30 bg-gradient-to-br from-white via-white to-emerald-50/20">
+              <div className="bg-white p-6 rounded-2xl shadow-sm border border-[#123B32]/30 bg-gradient-to-br from-white via-white to-emerald-50/20">
                 <form onSubmit={handleScanSubmit} className="space-y-4">
                   <div className="flex items-center justify-between">
                     <label
                       htmlFor="barcodeInput"
                       className="block text-sm font-bold text-gray-900 tracking-tight flex items-center space-x-2"
                     >
-                      <span className="text-lg">⚡</span>
+                      
                       <span>Scan Barcode or Tag Number</span>
                     </label>
                     <span className="text-xs bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded border border-emerald-300">
@@ -472,25 +472,25 @@ export default function InventoryCountWorkspacePage() {
                       type="text"
                       value={scanInput}
                       onChange={(e) => setScanInput(e.target.value)}
-                      placeholder="Click or scan barcode / tag (e.g. SAR-JAF-000001)..."
+                      placeholder="Scan or enter the item barcode"
                       disabled={isScanning}
                       autoComplete="off"
-                      className="w-full text-lg font-mono tracking-wider p-4 pl-12 pr-28 rounded-xl border-2 border-[#0D3826] focus:outline-none focus:ring-4 focus:ring-[#0D3826]/20 bg-white shadow-inner"
+                      className="w-full text-lg font-mono tracking-wider p-4 pl-12 pr-28 rounded-xl border-2 border-[#123B32] focus:outline-none focus:ring-4 focus:ring-[#123B32]/20 bg-white shadow-inner"
                     />
                     <span className="absolute left-4 top-1/2 -translate-y-1/2 text-2xl text-gray-400">
-                      🏷️
+                      
                     </span>
                     <button
                       type="submit"
                       disabled={isScanning || !scanInput.trim()}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 px-5 py-2.5 bg-[#0D3826] hover:bg-[#1B6543] text-white text-xs font-bold rounded-lg shadow transition disabled:opacity-50"
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 px-5 py-2.5 bg-[#123B32] hover:bg-[#1B6543] text-white text-xs font-bold rounded-lg shadow transition disabled:opacity-50"
                     >
                       {isScanning ? 'Scanning...' : 'Scan / Enter'}
                     </button>
                   </div>
 
                   <p className="text-xs text-gray-500">
-                    💡 <span className="font-semibold">Hardware Scanner Support:</span> Handheld USB/Bluetooth barcode scanners behaving as keyboard input submit automatically. The field refocuses after every scan.
+                    <span className="font-semibold">Hardware Scanner Support:</span> Handheld USB/Bluetooth barcode scanners behaving as keyboard input submit automatically. The field refocuses after every scan.
                   </p>
                 </form>
 
@@ -511,14 +511,14 @@ export default function InventoryCountWorkspacePage() {
                   >
                     <span className="text-2xl flex-shrink-0">
                       {scanFeedback.scanOutcome === 'MATCHED'
-                        ? '✅'
+                        ? 'Match'
                         : scanFeedback.scanOutcome === 'UNEXPECTED'
-                        ? '⚠️'
+                        ? 'Review'
                         : scanFeedback.scanOutcome === 'ALREADY_COUNTED'
-                        ? '🔄'
+                        ? 'Reconciled'
                         : scanFeedback.scanOutcome === 'COMPOSITION_PARENT'
-                        ? '📦'
-                        : '❌'}
+                        ? 'Counted'
+                        : 'Missing'}
                     </span>
                     <div className="flex-1">
                       <div className="font-bold tracking-tight uppercase text-xs">
@@ -562,7 +562,7 @@ export default function InventoryCountWorkspacePage() {
                           <td className="px-3 py-2 whitespace-nowrap">
                             {l.isCounted ? (
                               <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800">
-                                ✓ Counted
+                                Counted
                               </span>
                             ) : (
                               <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-gray-100 text-gray-600">
@@ -611,12 +611,12 @@ export default function InventoryCountWorkspacePage() {
                         <div className="flex items-center space-x-2">
                           <span className="text-sm">
                             {scan.outcome === 'MATCHED'
-                              ? '✅'
+                              ? 'Match'
                               : scan.outcome === 'UNEXPECTED'
-                              ? '⚠️'
+                              ? 'Review'
                               : scan.outcome === 'ALREADY_COUNTED'
-                              ? '🔄'
-                              : '❌'}
+                              ? 'Reconciled'
+                              : 'Missing'}
                           </span>
                           <div>
                             <div className="font-semibold text-gray-900 font-mono">
@@ -640,7 +640,7 @@ export default function InventoryCountWorkspacePage() {
               {unexpectedItems.length > 0 && (
                 <div className="bg-amber-50 rounded-xl shadow-sm border border-amber-200 p-4">
                   <h3 className="text-sm font-bold text-amber-900 pb-2 border-b border-amber-200 flex items-center justify-between">
-                    <span>⚠️ Unexpected Items ({unexpectedItems.length})</span>
+                    <span>Unexpected Items ({unexpectedItems.length})</span>
                   </h3>
                   <p className="text-xs text-amber-700 mt-1 mb-3">
                     These items belong to this branch but are currently assigned to a different physical location in the system.
@@ -678,7 +678,7 @@ export default function InventoryCountWorkspacePage() {
             {/* Variance Header Alert */}
             {count.status === 2 && (
               <div className="p-4 bg-amber-50 border border-amber-300 rounded-xl text-amber-900 flex items-start space-x-3">
-                <span className="text-2xl">⚠️</span>
+                <span className="text-2xl"></span>
                 <div className="flex-1">
                   <h3 className="font-bold text-sm text-amber-950">
                     Stock Variances Detected — Investigation & Review Required
@@ -714,11 +714,11 @@ export default function InventoryCountWorkspacePage() {
                   onClick={() => setVarianceTab('missing')}
                   className={`px-6 py-3 text-xs font-bold uppercase tracking-wider transition border-b-2 flex items-center space-x-2 ${
                     varianceTab === 'missing'
-                      ? 'border-[#0D3826] text-[#0D3826] bg-white'
+                      ? 'border-[#123B32] text-[#123B32] bg-white'
                       : 'border-transparent text-gray-500 hover:text-gray-700'
                   }`}
                 >
-                  <span>❌ Missing Items</span>
+                  <span>Missing Items</span>
                   <span
                     className={`px-2 py-0.5 rounded-full text-[10px] ${
                       unresolvedMissing > 0 ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-600'
@@ -732,11 +732,11 @@ export default function InventoryCountWorkspacePage() {
                   onClick={() => setVarianceTab('unexpected')}
                   className={`px-6 py-3 text-xs font-bold uppercase tracking-wider transition border-b-2 flex items-center space-x-2 ${
                     varianceTab === 'unexpected'
-                      ? 'border-[#0D3826] text-[#0D3826] bg-white'
+                      ? 'border-[#123B32] text-[#123B32] bg-white'
                       : 'border-transparent text-gray-500 hover:text-gray-700'
                   }`}
                 >
-                  <span>⚠️ Unexpected Items</span>
+                  <span>Unexpected Items</span>
                   <span
                     className={`px-2 py-0.5 rounded-full text-[10px] ${
                       unresolvedUnexpected > 0 ? 'bg-amber-100 text-amber-800' : 'bg-gray-100 text-gray-600'
@@ -768,7 +768,7 @@ export default function InventoryCountWorkspacePage() {
                         {variances.missingItems.length === 0 ? (
                           <tr>
                             <td colSpan={8} className="px-4 py-8 text-center text-gray-400 font-medium">
-                              ✓ No missing items recorded. All expected baseline stock was physically accounted for!
+                              No missing items recorded. All expected baseline stock was physically accounted for!
                             </td>
                           </tr>
                         ) : (
@@ -793,7 +793,7 @@ export default function InventoryCountWorkspacePage() {
                               <td className="px-4 py-3 whitespace-nowrap">
                                 {item.resolutionStatus === 1 ? (
                                   <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
-                                    ✓ Resolved ({item.resolutionReasonCode})
+                                    Resolved ({item.resolutionReasonCode})
                                   </span>
                                 ) : (
                                   <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-red-100 text-red-800">
@@ -817,7 +817,7 @@ export default function InventoryCountWorkspacePage() {
                                       setReasonCode('ITEM_FOUND');
                                       setResolutionNotes(item.resolutionNotes || '');
                                     }}
-                                    className="px-2.5 py-1 text-xs font-bold rounded text-white bg-[#0D3826] hover:bg-[#1B6543] transition"
+                                    className="px-2.5 py-1 text-xs font-bold rounded text-white bg-[#123B32] hover:bg-[#1B6543] transition"
                                   >
                                     {item.resolutionStatus === 1 ? 'Edit Resolution' : 'Resolve'}
                                   </button>
@@ -850,7 +850,7 @@ export default function InventoryCountWorkspacePage() {
                         {variances.unexpectedItems.length === 0 ? (
                           <tr>
                             <td colSpan={8} className="px-4 py-8 text-center text-gray-400 font-medium">
-                              ✓ No unexpected items found. No items from other locations were scanned here.
+                              No unexpected items found. No items from other locations were scanned here.
                             </td>
                           </tr>
                         ) : (
@@ -862,7 +862,7 @@ export default function InventoryCountWorkspacePage() {
                               </td>
                               <td className="px-4 py-3 font-semibold text-gray-900">{item.itemNameSnapshot}</td>
                               <td className="px-4 py-3 text-amber-800 font-semibold">
-                                📍 {item.currentSystemLocationNameSnapshot}
+                                {item.currentSystemLocationNameSnapshot}
                               </td>
                               <td className="px-4 py-3 text-right font-mono font-medium">
                                 {item.grossWeightSnapshot.toFixed(3)}g
@@ -875,7 +875,7 @@ export default function InventoryCountWorkspacePage() {
                               <td className="px-4 py-3 whitespace-nowrap">
                                 {item.resolutionStatus === 1 ? (
                                   <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
-                                    ✓ Resolved ({item.resolutionReasonCode})
+                                    Resolved ({item.resolutionReasonCode})
                                   </span>
                                 ) : (
                                   <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800">
@@ -899,7 +899,7 @@ export default function InventoryCountWorkspacePage() {
                                       setReasonCode('WRONG_RECORDED_LOCATION');
                                       setResolutionNotes(item.resolutionNotes || '');
                                     }}
-                                    className="px-2.5 py-1 text-xs font-bold rounded text-white bg-[#0D3826] hover:bg-[#1B6543] transition"
+                                    className="px-2.5 py-1 text-xs font-bold rounded text-white bg-[#123B32] hover:bg-[#1B6543] transition"
                                   >
                                     {item.resolutionStatus === 1 ? 'Edit Resolution' : 'Resolve'}
                                   </button>
@@ -926,7 +926,7 @@ export default function InventoryCountWorkspacePage() {
           <div className="bg-white rounded-2xl shadow-2xl border border-gray-200 max-w-xl w-full p-6 space-y-6">
             <div className="border-b pb-4">
               <div className="flex items-center space-x-2">
-                <span className="text-2xl">📦</span>
+                
                 <div>
                   <h3 className="text-lg font-bold text-gray-900">
                     {compositionPreview.type}: {compositionPreview.name}
@@ -941,7 +941,7 @@ export default function InventoryCountWorkspacePage() {
             {/* Core Invariant Callout */}
             <div className="p-3.5 bg-purple-50 border border-purple-200 rounded-xl text-xs text-purple-900 space-y-1">
               <div className="font-bold flex items-center">
-                <span className="mr-1.5">⚖️</span> Core Accounting Invariant
+                 Core Accounting Invariant
               </div>
               <p>
                 The parent composition itself is an organizational/selling grouping and is{' '}
@@ -964,7 +964,7 @@ export default function InventoryCountWorkspacePage() {
                       setSelectedMemberIds(compositionPreview.members.map((m) => m.inventoryItemId));
                     }
                   }}
-                  className="text-[#0D3826] font-bold underline"
+                  className="text-[#123B32] font-bold underline"
                 >
                   {selectedMemberIds.length === compositionPreview.members.length ? 'Deselect All' : 'Select All'}
                 </button>
@@ -987,7 +987,7 @@ export default function InventoryCountWorkspacePage() {
                             setSelectedMemberIds((prev) => prev.filter((id) => id !== member.inventoryItemId));
                           }
                         }}
-                        className="rounded border-gray-300 text-[#0D3826] focus:ring-[#0D3826] w-4 h-4"
+                        className="rounded border-gray-300 text-[#123B32] focus:ring-[#123B32] w-4 h-4"
                       />
                       <div>
                         <div className="font-bold text-gray-900 font-mono text-xs">{member.tagNumber}</div>
@@ -1019,7 +1019,7 @@ export default function InventoryCountWorkspacePage() {
                 type="button"
                 onClick={handleConfirmComposition}
                 disabled={isConfirmingComposition || selectedMemberIds.length === 0}
-                className="px-5 py-2 text-xs font-bold text-white bg-[#0D3826] hover:bg-[#1B6543] rounded-lg shadow disabled:opacity-50 transition"
+                className="px-5 py-2 text-xs font-bold text-white bg-[#123B32] hover:bg-[#1B6543] rounded-lg shadow disabled:opacity-50 transition"
               >
                 {isConfirmingComposition
                   ? 'Confirming...'
@@ -1037,7 +1037,7 @@ export default function InventoryCountWorkspacePage() {
         <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl border border-gray-200 max-w-md w-full p-6 space-y-5">
             <div className="flex items-center space-x-3 border-b pb-4">
-              <span className="text-3xl">⚖️</span>
+              
               <div>
                 <h3 className="text-lg font-bold text-gray-900">Finish & Reconcile Count</h3>
                 <p className="text-xs text-gray-500">Stock Location: {count.stockLocationName}</p>
@@ -1065,11 +1065,11 @@ export default function InventoryCountWorkspacePage() {
 
             {uncountedBaselineCount === 0 && count.unexpectedCount === 0 ? (
               <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-emerald-800 text-xs">
-                <span className="font-bold">🎉 Perfect Match!</span> All expected items were physically accounted for with zero unexpected observations. This session will be automatically marked COMPLETED.
+                <span className="font-bold">Stock Perfectly Matches</span> All expected items were physically accounted for with zero unexpected observations. This session will be automatically marked COMPLETED.
               </div>
             ) : (
               <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-xs">
-                <span className="font-bold">⚠️ Variances Detected:</span> Finishing will transition this session to REQUIRES_REVIEW for formal investigation before final completion.
+                <span className="font-bold">Variances Detected:</span> Finishing will transition this session to REQUIRES_REVIEW for formal investigation before final completion.
               </div>
             )}
 
@@ -1102,7 +1102,7 @@ export default function InventoryCountWorkspacePage() {
           <div className="bg-white rounded-2xl shadow-2xl border border-gray-200 max-w-lg w-full p-6 space-y-5">
             <div className="flex items-center justify-between border-b pb-4">
               <div className="flex items-center space-x-2">
-                <span className="text-2xl">{resolvingVariance.type === 'Missing' ? '❌' : '⚠️'}</span>
+                <span className="text-2xl">{resolvingVariance.type === 'Missing' ? '' : ''}</span>
                 <div>
                   <h3 className="text-lg font-bold text-gray-900">
                     Resolve {resolvingVariance.type} Variance
@@ -1134,7 +1134,7 @@ export default function InventoryCountWorkspacePage() {
                 <select
                   value={reasonCode}
                   onChange={(e) => setReasonCode(e.target.value)}
-                  className="w-full text-sm border-gray-300 rounded-lg shadow-sm focus:border-[#0D3826] focus:ring-[#0D3826] bg-gray-50 p-2.5 border"
+                  className="w-full text-sm border-gray-300 rounded-lg shadow-sm focus:border-[#123B32] focus:ring-[#123B32] bg-gray-50 p-2.5 border"
                   required
                 >
                   <option value="ITEM_FOUND">ITEM_FOUND — Item located physically during investigation</option>
@@ -1153,8 +1153,8 @@ export default function InventoryCountWorkspacePage() {
                   value={resolutionNotes}
                   onChange={(e) => setResolutionNotes(e.target.value)}
                   rows={3}
-                  placeholder="Record full findings, investigation context, and planned operational actions..."
-                  className="w-full text-sm border-gray-300 rounded-lg shadow-sm focus:border-[#0D3826] focus:ring-[#0D3826] bg-gray-50 p-2.5 border"
+                  placeholder="Explain why the physical stock differs from the system record"
+                  className="w-full text-sm border-gray-300 rounded-lg shadow-sm focus:border-[#123B32] focus:ring-[#123B32] bg-gray-50 p-2.5 border"
                   required={reasonCode === 'OTHER'}
                 />
               </div>
@@ -1162,7 +1162,7 @@ export default function InventoryCountWorkspacePage() {
               {/* No Auto Adjustment Guarantee Callout */}
               <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-900 space-y-1">
                 <div className="font-bold flex items-center">
-                  <span className="mr-1">🛡️</span> Investigation Outcome Guarantee
+                   Investigation Outcome Guarantee
                 </div>
                 <p>
                   Resolving this variance records an authoritative audit finding. It will{' '}
@@ -1181,7 +1181,7 @@ export default function InventoryCountWorkspacePage() {
                 <button
                   type="submit"
                   disabled={isResolving}
-                  className="px-5 py-2 text-xs font-bold text-white bg-[#0D3826] hover:bg-[#1B6543] rounded-lg shadow disabled:opacity-50 transition"
+                  className="px-5 py-2 text-xs font-bold text-white bg-[#123B32] hover:bg-[#1B6543] rounded-lg shadow disabled:opacity-50 transition"
                 >
                   {isResolving ? 'Saving Resolution...' : 'Save Resolution'}
                 </button>
@@ -1198,7 +1198,7 @@ export default function InventoryCountWorkspacePage() {
         <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl border border-gray-200 max-w-md w-full p-6 space-y-5">
             <div className="flex items-center space-x-3 border-b pb-4">
-              <span className="text-3xl">🏁</span>
+              
               <div>
                 <h3 className="text-lg font-bold text-gray-900">Complete Inventory Count</h3>
                 <p className="text-xs text-gray-500">Session #{count.id.substring(0, 8).toUpperCase()}</p>
@@ -1217,8 +1217,8 @@ export default function InventoryCountWorkspacePage() {
                 value={completionNotes}
                 onChange={(e) => setCompletionNotes(e.target.value)}
                 rows={2}
-                placeholder="Audit completion remarks, sign-off notes, or supervisor approvals..."
-                className="w-full text-sm border-gray-300 rounded-lg shadow-sm focus:border-[#0D3826] focus:ring-[#0D3826] bg-gray-50 p-2.5 border"
+                placeholder="Record observations from the physical stock count"
+                className="w-full text-sm border-gray-300 rounded-lg shadow-sm focus:border-[#123B32] focus:ring-[#123B32] bg-gray-50 p-2.5 border"
               />
             </div>
 
@@ -1234,7 +1234,7 @@ export default function InventoryCountWorkspacePage() {
                 type="button"
                 onClick={handleCompleteCount}
                 disabled={isCompleting}
-                className="px-5 py-2 text-xs font-bold text-white bg-[#0D3826] hover:bg-[#1B6543] rounded-lg shadow disabled:opacity-50 transition"
+                className="px-5 py-2 text-xs font-bold text-white bg-[#123B32] hover:bg-[#1B6543] rounded-lg shadow disabled:opacity-50 transition"
               >
                 {isCompleting ? 'Completing...' : 'Complete & Archive Session'}
               </button>
@@ -1250,7 +1250,7 @@ export default function InventoryCountWorkspacePage() {
         <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl border border-gray-200 max-w-md w-full p-6 space-y-5">
             <div className="flex items-center space-x-3 border-b pb-4">
-              <span className="text-3xl">🛑</span>
+              
               <div>
                 <h3 className="text-lg font-bold text-gray-900">Cancel Inventory Count</h3>
                 <p className="text-xs text-gray-500">Session #{count.id.substring(0, 8).toUpperCase()}</p>
@@ -1270,7 +1270,7 @@ export default function InventoryCountWorkspacePage() {
                   value={cancellationReason}
                   onChange={(e) => setCancellationReason(e.target.value)}
                   rows={2}
-                  placeholder="Explain why this count session is being cancelled..."
+                  placeholder="Explain why this count session is being cancelled"
                   className="w-full text-sm border-gray-300 rounded-lg shadow-sm focus:border-red-500 focus:ring-red-500 bg-gray-50 p-2.5 border"
                   required
                 />

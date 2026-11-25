@@ -112,9 +112,9 @@ export default function BranchesPage() {
               setErrorMsg(null);
               setIsAddModalOpen(true);
             }}
-            className="inline-flex items-center justify-center space-x-2 bg-[#0D3826] hover:bg-[#1B6543] text-white px-4 py-2.5 rounded-lg text-sm font-semibold shadow-sm transition border border-[#D4AF37]/50"
+            className="inline-flex items-center justify-center space-x-2 bg-[#123B32] hover:bg-[#1B6543] text-white px-4 py-2.5 rounded-lg text-sm font-semibold shadow-sm transition border border-[#B89A60]/50"
           >
-            <span>➕</span>
+            
             <span>Add Branch</span>
           </button>
         </div>
@@ -142,7 +142,7 @@ export default function BranchesPage() {
                 <tbody className="divide-y divide-gray-100 text-sm">
                   {branches.map((b) => (
                     <tr key={b.id} className="hover:bg-gray-50/80 transition">
-                      <td className="px-6 py-4 font-bold text-[#0D3826]">
+                      <td className="px-6 py-4 font-bold text-[#123B32]">
                         <span className="bg-emerald-50 text-emerald-800 border border-emerald-200 px-2.5 py-1 rounded-md text-xs font-mono">
                           {b.code}
                         </span>
@@ -219,7 +219,7 @@ export default function BranchesPage() {
                   placeholder="e.g. Jaffna Main Branch"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-[#0D3826] outline-none"
+                  className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-[#123B32] outline-none"
                 />
               </div>
 
@@ -228,10 +228,10 @@ export default function BranchesPage() {
                 <input
                   type="text"
                   required
-                  placeholder="e.g. JAF-01"
+                  placeholder="e.g. JAF"
                   value={formData.code}
                   onChange={(e) => setFormData({ ...formData, code: e.target.value.toUpperCase() })}
-                  className="w-full px-3 py-2 border rounded-lg text-sm uppercase font-mono focus:ring-2 focus:ring-[#0D3826] outline-none"
+                  className="w-full px-3 py-2 border rounded-lg text-sm uppercase font-mono focus:ring-2 focus:ring-[#123B32] outline-none"
                 />
               </div>
 
@@ -243,7 +243,7 @@ export default function BranchesPage() {
                     required
                     value={formData.country}
                     onChange={(e) => setFormData({ ...formData, country: e.target.value })}
-                    className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-[#0D3826] outline-none"
+                    className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-[#123B32] outline-none"
                   />
                 </div>
                 <div>
@@ -253,7 +253,7 @@ export default function BranchesPage() {
                     required
                     value={formData.currencyCode}
                     onChange={(e) => setFormData({ ...formData, currencyCode: e.target.value.toUpperCase() })}
-                    className="w-full px-3 py-2 border rounded-lg text-sm uppercase font-mono focus:ring-2 focus:ring-[#0D3826] outline-none"
+                    className="w-full px-3 py-2 border rounded-lg text-sm uppercase font-mono focus:ring-2 focus:ring-[#123B32] outline-none"
                   />
                 </div>
               </div>
@@ -265,7 +265,7 @@ export default function BranchesPage() {
                   required
                   value={formData.timeZone}
                   onChange={(e) => setFormData({ ...formData, timeZone: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg text-sm font-mono focus:ring-2 focus:ring-[#0D3826] outline-none"
+                  className="w-full px-3 py-2 border rounded-lg text-sm font-mono focus:ring-2 focus:ring-[#123B32] outline-none"
                 />
               </div>
 
@@ -275,7 +275,7 @@ export default function BranchesPage() {
                   id="isActive"
                   checked={formData.isActive}
                   onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })}
-                  className="w-4 h-4 text-[#0D3826] rounded"
+                  className="w-4 h-4 text-[#123B32] rounded"
                 />
                 <label htmlFor="isActive" className="text-xs font-medium text-gray-700">Active Branch</label>
               </div>
@@ -291,7 +291,7 @@ export default function BranchesPage() {
                 <button
                   type="submit"
                   disabled={createMutation.isPending}
-                  className="px-4 py-2 text-xs font-semibold text-white bg-[#0D3826] hover:bg-[#1B6543] rounded-lg shadow-sm border border-[#D4AF37]/50"
+                  className="px-4 py-2 text-xs font-semibold text-white bg-[#123B32] hover:bg-[#1B6543] rounded-lg shadow-sm border border-[#B89A60]/50"
                 >
                   {createMutation.isPending ? 'Saving...' : 'Create Branch'}
                 </button>
@@ -324,7 +324,7 @@ export default function BranchesPage() {
                   required
                   value={editingBranch.name}
                   onChange={(e) => setEditingBranch({ ...editingBranch, name: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-[#0D3826] outline-none"
+                  className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-[#123B32] outline-none"
                 />
               </div>
 
@@ -336,7 +336,7 @@ export default function BranchesPage() {
                     required
                     value={editingBranch.country}
                     onChange={(e) => setEditingBranch({ ...editingBranch, country: e.target.value })}
-                    className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-[#0D3826] outline-none"
+                    className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-[#123B32] outline-none"
                   />
                 </div>
                 <div>
@@ -346,7 +346,7 @@ export default function BranchesPage() {
                     required
                     value={editingBranch.currencyCode}
                     onChange={(e) => setEditingBranch({ ...editingBranch, currencyCode: e.target.value.toUpperCase() })}
-                    className="w-full px-3 py-2 border rounded-lg text-sm uppercase font-mono focus:ring-2 focus:ring-[#0D3826] outline-none"
+                    className="w-full px-3 py-2 border rounded-lg text-sm uppercase font-mono focus:ring-2 focus:ring-[#123B32] outline-none"
                   />
                 </div>
               </div>
@@ -358,7 +358,7 @@ export default function BranchesPage() {
                   required
                   value={editingBranch.timeZone}
                   onChange={(e) => setEditingBranch({ ...editingBranch, timeZone: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg text-sm font-mono focus:ring-2 focus:ring-[#0D3826] outline-none"
+                  className="w-full px-3 py-2 border rounded-lg text-sm font-mono focus:ring-2 focus:ring-[#123B32] outline-none"
                 />
               </div>
 
@@ -368,7 +368,7 @@ export default function BranchesPage() {
                   id="editIsActive"
                   checked={editingBranch.isActive}
                   onChange={(e) => setEditingBranch({ ...editingBranch, isActive: e.target.checked })}
-                  className="w-4 h-4 text-[#0D3826] rounded"
+                  className="w-4 h-4 text-[#123B32] rounded"
                 />
                 <label htmlFor="editIsActive" className="text-xs font-medium text-gray-700">Active Branch</label>
               </div>
@@ -384,7 +384,7 @@ export default function BranchesPage() {
                 <button
                   type="submit"
                   disabled={updateMutation.isPending}
-                  className="px-4 py-2 text-xs font-semibold text-white bg-[#0D3826] hover:bg-[#1B6543] rounded-lg shadow-sm border border-[#D4AF37]/50"
+                  className="px-4 py-2 text-xs font-semibold text-white bg-[#123B32] hover:bg-[#1B6543] rounded-lg shadow-sm border border-[#B89A60]/50"
                 >
                   {updateMutation.isPending ? 'Updating...' : 'Save Changes'}
                 </button>

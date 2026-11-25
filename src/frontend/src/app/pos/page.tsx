@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import Link from 'next/link';
 import AppLayout from '@/components/AppLayout';
 import { useAuth } from '@/lib/auth-context';
 import { useBranch } from '@/lib/branch-context';
@@ -11,22 +12,34 @@ import {
   PosInvoice,
   PosItemLookupResult,
   Customer,
-  Shift
+  Shift,
 } from '@/lib/api';
+import { PageHeader } from '@/components/ui/PageHeader';
+import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
+import { Select } from '@/components/ui/Select';
+import { Modal } from '@/components/ui/Modal';
+import { Badge } from '@/components/ui/Badge';
+import { Table } from '@/components/ui/Table';
 import {
-  ShoppingCart,
-  Scan,
-  UserPlus,
   CreditCard,
   Banknote,
   Building,
-  CheckCircle2,
+  UserPlus,
   Trash2,
   Edit2,
   Search,
   AlertTriangle,
   Receipt,
-  RotateCcw
+  CheckCircle2,
+  Scan,
+  Printer,
+  RotateCcw,
+  Plus,
+  Wallet,
+  Clock,
+  ArrowRight,
+  Info,
 } from 'lucide-react';
 
 interface PaymentRow {
@@ -43,6 +56,7 @@ interface PaymentRow {
 export default function PosTerminalPage() {
   const { user } = useAuth();
   const { activeBranch } = useBranch();
+  const barcodeInputRef = useRef<HTMLInputElement>(null);
 
   // Shift & Cashier State
   const [activeShift, setActiveShift] = useState<Shift | null>(null);
@@ -59,7 +73,7 @@ export default function PosTerminalPage() {
     primaryPhone: '',
     email: '',
     city: '',
-    notes: ''
+    notes: '',
   });
 
   // Current POS Invoice State
@@ -78,16 +92,18 @@ export default function PosTerminalPage() {
 
   // Payments & Finalization
   const [payments, setPayments] = useState<PaymentRow[]>([
-    { method: 1, amount: 0, cashTendered: 0 }
+    { method: 1, amount: 0, cashTendered: 0 },
   ]);
   const [discountAmount, setDiscountAmount] = useState<number>(0);
   const [invoiceNotes, setInvoiceNotes] = useState('');
   const [isFinalizing, setIsFinalizing] = useState(false);
   const [finalizedSuccess, setFinalizedSuccess] = useState<PosInvoice | null>(null);
 
-  // General Messages
+  // Messages
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [infoMsg, setInfoMsg] = useState<string | null>(null);
+
+  const currency = activeBranch?.currencyCode || 'LKR';
 
   // Load Active Shift for the current user and branch
   useEffect(() => {
@@ -98,11 +114,10 @@ export default function PosTerminalPage() {
       try {
         const shiftsRes = await shiftsApi.getShifts({
           branchId: activeBranch.id,
-          status: 1
+          status: 1,
         });
         const shifts = shiftsRes.items || [];
-        // Find shift for current user or first open shift
-        const myShift = shifts.find(s => s.cashierId === user?.id && s.status === 1) || shifts[0] || null;
+        const myShift = shifts.find((s) => s.cashierId === user?.id && s.status === 1) || shifts[0] || null;
         setActiveShift(myShift);
       } catch (err: any) {
         console.error('Failed to load active shift:', err);
@@ -136,7 +151,14 @@ export default function PosTerminalPage() {
     return () => clearTimeout(timer);
   }, [customerSearchQuery]);
 
-  // Item Lookup (Enter key or button)
+  // Focus barcode input on mount
+  useEffect(() => {
+    if (activeShift && !finalizedSuccess) {
+      barcodeInputRef.current?.focus();
+    }
+  }, [activeShift, finalizedSuccess]);
+
+  // Item Lookup
   const handleItemLookup = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!activeShift) {
@@ -148,195 +170,199 @@ export default function PosTerminalPage() {
     setIsLookingUp(true);
     setErrorMsg(null);
     setScannedItem(null);
+
     try {
       const item = await posApi.lookupItem(activeShift.id, scanQuery.trim());
       setScannedItem(item);
-      setNegotiatedPriceInput(String(item.referencePrice));
+      setNegotiatedPriceInput(item.referencePrice.toFixed(2));
     } catch (err: any) {
-      setErrorMsg(err.message || 'Item lookup failed.');
+      setErrorMsg(err.message || 'Item lookup failed. Verify barcode or tag number.');
     } finally {
       setIsLookingUp(false);
     }
   };
 
-  // Add Item to Draft Invoice
-  const handleAddItemToInvoice = async () => {
-    if (!scannedItem || !activeShift) return;
+  // Ensure Draft Exists with Selected Customer
+  const ensureDraftInvoice = async (customer: Customer): Promise<PosInvoice> => {
+    if (currentInvoice && currentInvoice.customerId === customer.id) {
+      return currentInvoice;
+    }
+
+    if (!activeShift) {
+      throw new Error('No active shift found. Open a shift before creating transactions.');
+    }
+
+    setIsLoadingInvoice(true);
+    try {
+      const invoice = await posApi.createDraft({
+        customerId: customer.id,
+        shiftId: activeShift.id,
+        notes: 'POS Walk-in Sale',
+      });
+      setCurrentInvoice(invoice);
+      return invoice;
+    } finally {
+      setIsLoadingInvoice(false);
+    }
+  };
+
+  // Add Item to Cart
+  const handleAddToCart = async () => {
+    if (!scannedItem) return;
+    if (!selectedCustomer) {
+      setErrorMsg('Please select or create a customer before adding items to cart.');
+      return;
+    }
 
     const price = parseFloat(negotiatedPriceInput);
     if (isNaN(price) || price < 0) {
-      setErrorMsg('Please enter a valid negotiated selling price.');
+      setErrorMsg('Please specify a valid non-negative negotiated selling price.');
       return;
     }
 
     setErrorMsg(null);
-    setIsLoadingInvoice(true);
     try {
-      let draft = currentInvoice;
-
-      // Create draft if not exists
-      if (!draft) {
-        if (!selectedCustomer) {
-          setErrorMsg('Please select or quick-create a customer before adding items to sale.');
-          setIsLoadingInvoice(false);
-          return;
-        }
-
-        draft = await posApi.createDraft({
-          shiftId: activeShift.id,
-          customerId: selectedCustomer.id,
-          notes: invoiceNotes
-        });
-        setCurrentInvoice(draft);
-      }
-
-      // Add line to draft
-      const updated = await posApi.addLine(draft.id, {
+      const invoice = await ensureDraftInvoice(selectedCustomer);
+      const updated = await posApi.addLine(invoice.id, {
         itemBarcodeOrTag: scannedItem.tagNumber,
-        negotiatedUnitPrice: price
+        negotiatedUnitPrice: price,
       });
 
       setCurrentInvoice(updated);
       setScannedItem(null);
       setScanQuery('');
       setNegotiatedPriceInput('');
-
-      // Auto-update first payment row with total if single payment
-      if (payments.length === 1 && payments[0].amount === 0) {
-        setPayments([{ ...payments[0], amount: updated.totalAmount, cashTendered: updated.totalAmount }]);
-      }
+      setInfoMsg(`Added ${scannedItem.itemName} (${scannedItem.tagNumber}) to cart.`);
+      barcodeInputRef.current?.focus();
     } catch (err: any) {
       setErrorMsg(err.message || 'Failed to add item to invoice.');
-    } finally {
-      setIsLoadingInvoice(false);
     }
   };
 
-  // Quick Customer Create
-  const handleQuickCustomerSubmit = async (e: React.FormEvent) => {
+  // Quick Customer Creation
+  const handleQuickCreateCustomer = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!activeShift) {
-      setErrorMsg('Active shift required.');
-      return;
-    }
     if (!quickCustomer.fullName.trim() || !quickCustomer.primaryPhone.trim()) {
-      setErrorMsg('Customer Name and Primary Phone are mandatory.');
+      setErrorMsg('Full name and primary phone number are required.');
       return;
     }
 
     setErrorMsg(null);
-    setIsLoadingInvoice(true);
     try {
-      const inv = await posApi.quickCustomerDraft({
-        shiftId: activeShift.id,
+      const newCust = await customerApi.createCustomer({
         fullName: quickCustomer.fullName.trim(),
         primaryPhone: quickCustomer.primaryPhone.trim(),
         email: quickCustomer.email.trim() || undefined,
         city: quickCustomer.city.trim() || undefined,
-        notes: quickCustomer.notes.trim() || undefined
+        notes: quickCustomer.notes.trim() || undefined,
       });
 
-      setCurrentInvoice(inv);
-      setSelectedCustomer({
-        id: inv.customerId,
-        customerCode: inv.customerCode || 'NEW',
-        fullName: inv.customerName,
-        primaryPhone: inv.customerPhone,
-        normalizedPrimaryPhone: inv.customerPhone,
-        country: 'LK',
-        isActive: true,
-        rowVersion: '',
-        createdAt: inv.createdAt
-      });
+      setSelectedCustomer(newCust);
       setShowQuickAddModal(false);
       setQuickCustomer({ fullName: '', primaryPhone: '', email: '', city: '', notes: '' });
-      setInfoMsg(`Walk-in customer ${inv.customerName} registered and draft invoice created.`);
+      setInfoMsg(`Customer "${newCust.fullName}" selected.`);
     } catch (err: any) {
-      setErrorMsg(err.message || 'Quick customer registration failed.');
-    } finally {
-      setIsLoadingInvoice(false);
+      setErrorMsg(err.message || 'Failed to create customer.');
     }
   };
 
-  // Line Price Update
+  // Cart Line Management
+  const handleRemoveLine = async (lineId: string) => {
+    if (!currentInvoice) return;
+    try {
+      const updated = await posApi.removeLine(currentInvoice.id, lineId);
+      setCurrentInvoice(updated);
+      setInfoMsg('Item removed from cart.');
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Failed to remove item.');
+    }
+  };
+
   const handleUpdateLinePrice = async () => {
     if (!currentInvoice || !editingLineId) return;
     const price = parseFloat(editPriceValue);
     if (isNaN(price) || price < 0) {
-      setErrorMsg('Price must be greater than or equal to 0.');
+      setErrorMsg('Please specify a valid price.');
       return;
     }
 
-    setIsLoadingInvoice(true);
     try {
       const updated = await posApi.updateLine(currentInvoice.id, editingLineId, {
-        negotiatedUnitPrice: price
+        negotiatedUnitPrice: price,
       });
       setCurrentInvoice(updated);
       setEditingLineId(null);
       setEditPriceValue('');
+      setInfoMsg('Negotiated price updated.');
     } catch (err: any) {
       setErrorMsg(err.message || 'Failed to update line price.');
-    } finally {
-      setIsLoadingInvoice(false);
     }
   };
 
-  // Line Removal
-  const handleRemoveLine = async (lineId: string) => {
-    if (!currentInvoice) return;
-    setIsLoadingInvoice(true);
-    try {
-      const updated = await posApi.removeLine(currentInvoice.id, lineId);
-      setCurrentInvoice(updated);
-    } catch (err: any) {
-      setErrorMsg(err.message || 'Failed to remove line.');
-    } finally {
-      setIsLoadingInvoice(false);
+  // Financial Calculations
+  const linesTotal = currentInvoice?.lines.reduce((sum, l) => sum + l.lineTotal, 0) || 0;
+  const netPayable = Math.max(0, linesTotal - discountAmount);
+
+  // Auto-sync initial cash payment amount
+  useEffect(() => {
+    if (netPayable > 0 && payments.length === 1 && payments[0].amount === 0) {
+      setPayments([{ method: 1, amount: netPayable, cashTendered: netPayable }]);
     }
-  };
+  }, [netPayable, payments.length]);
 
-  // Payment Rows Management
-  const addPaymentRow = () => {
-    const currentTotalPaid = payments.reduce((acc, p) => acc + (p.amount || 0), 0);
-    const remaining = Math.max(0, (currentInvoice?.totalAmount || 0) - currentTotalPaid);
-    setPayments([...payments, { method: 2, amount: remaining }]);
-  };
+  const totalTendered = payments.reduce((sum, p) => {
+    if (p.method === 1) {
+      return sum + (p.cashTendered !== undefined ? p.cashTendered : p.amount);
+    }
+    return sum + (p.amount || 0);
+  }, 0);
 
-  const removePaymentRow = (index: number) => {
-    if (payments.length === 1) return;
-    setPayments(payments.filter((_, i) => i !== index));
-  };
+  const totalPaidAllocation = payments.reduce((sum, p) => sum + (p.amount || 0), 0);
+  const cashRow = payments.find((p) => p.method === 1);
+  const changeDue =
+    cashRow && (cashRow.cashTendered || 0) > cashRow.amount
+      ? (cashRow.cashTendered || 0) - cashRow.amount
+      : 0;
 
-  const updatePaymentRow = (index: number, updates: Partial<PaymentRow>) => {
-    const next = [...payments];
-    next[index] = { ...next[index], ...updates };
-    setPayments(next);
-  };
-
-  // Finalize Invoice
-  const handleFinalize = async () => {
-    if (!currentInvoice) return;
-    if (currentInvoice.lines.length === 0) {
-      setErrorMsg('Cannot finalize an empty invoice.');
+  // Checkout & Finalize Invoice
+  const handleCheckout = async () => {
+    if (!currentInvoice || currentInvoice.lines.length === 0) {
+      setErrorMsg('Cart is empty. Add items before checking out.');
       return;
     }
-
-    const totalPaid = payments.reduce((acc, p) => acc + (p.amount || 0), 0);
-    const invoiceTotal = (currentInvoice.subTotal - discountAmount);
-
-    if (totalPaid !== invoiceTotal) {
-      setErrorMsg(`Accepted payments (Rs. ${totalPaid.toLocaleString()}) must equal the final invoice total (Rs. ${invoiceTotal.toLocaleString()}).`);
+    if (!activeShift) {
+      setErrorMsg('Active shift required to complete checkout.');
+      return;
+    }
+    if (totalPaidAllocation < netPayable) {
+      setErrorMsg(
+        `Insufficient payment allocated. Allocated: ${currency} ${totalPaidAllocation.toFixed(
+          2
+        )}, Total Payable: ${currency} ${netPayable.toFixed(2)}`
+      );
       return;
     }
 
     setIsFinalizing(true);
     setErrorMsg(null);
     try {
+      const checkoutPayments = payments
+        .filter((p) => p.amount > 0)
+        .map((p) => ({
+          method: p.method,
+          amount: p.amount,
+          cashTendered: p.method === 1 ? p.cashTendered || p.amount : undefined,
+          cardLast4: p.method === 2 ? p.cardLast4 : undefined,
+          cardType: p.method === 2 ? p.cardType : undefined,
+          referenceNumber: p.referenceNumber,
+          bankName: p.method === 3 ? p.bankName : undefined,
+          notes: p.notes,
+        }));
+
       const finalized = await posApi.finalizeInvoice(currentInvoice.id, {
-        payments,
-        discountAmount: discountAmount > 0 ? discountAmount : undefined,
-        notes: invoiceNotes || undefined
+        payments: checkoutPayments,
+        discountAmount,
+        notes: invoiceNotes,
       });
 
       setFinalizedSuccess(finalized);
@@ -345,179 +371,230 @@ export default function PosTerminalPage() {
       setPayments([{ method: 1, amount: 0, cashTendered: 0 }]);
       setDiscountAmount(0);
       setInvoiceNotes('');
-      setInfoMsg(`Invoice ${finalized.invoiceNumber} finalized successfully!`);
     } catch (err: any) {
-      setErrorMsg(err.message || 'Failed to finalize invoice.');
+      setErrorMsg(err.message || 'Checkout failed. Please verify payments.');
     } finally {
       setIsFinalizing(false);
     }
   };
 
-  // Calculations
-  const invoiceSubtotal = currentInvoice?.subTotal || 0;
-  const invoiceTotal = Math.max(0, invoiceSubtotal - discountAmount);
-  const totalPaid = payments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
-  const balanceDue = Math.max(0, invoiceTotal - totalPaid);
-  const isFullyPaid = invoiceTotal > 0 && totalPaid === invoiceTotal;
-
   return (
     <AppLayout>
-      <div className="space-y-6">
-        {/* Terminal Header */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-gray-200 shadow-sm">
-          <div>
-            <div className="flex items-center space-x-2">
-              <span className="p-2 rounded-xl bg-[#0D3826] text-[#D4AF37]">
-                <Receipt className="w-5 h-5" />
-              </span>
-              <h1 className="text-xl font-black text-[#0D3826] tracking-tight">Point of Sale Terminal</h1>
-              <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-[#D4AF37]/20 text-[#0D3826] border border-[#D4AF37]/40">
-                Normal Sales
+      <PageHeader
+        title="POS Sales Workspace"
+        description="Authoritative jewellery retail checkout with reference price verification, price negotiation, and physical cash ledger posting."
+        badge={
+          activeShift ? (
+            <Badge variant="success" size="sm">
+              Shift #{activeShift.shiftNumber} • {activeShift.cashDrawerName}
+            </Badge>
+          ) : (
+            <Badge variant="warning" size="sm">
+              No Active Shift
+            </Badge>
+          )
+        }
+        actions={
+          activeShift && (
+            <div className="flex items-center gap-2">
+              <Link href="/shifts">
+                <Button variant="secondary" size="sm" leftIcon={<Wallet className="w-4 h-4" />}>
+                  Shift Details
+                </Button>
+              </Link>
+            </div>
+          )
+        }
+      />
+
+      {/* No Active Shift Warning Banner */}
+      {!isLoadingShift && !activeShift && (
+        <div className="mb-6 p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 flex items-start justify-between shadow-xs">
+          <div className="flex items-start gap-3">
+            <Clock className="w-5 h-5 text-amber-700 flex-shrink-0 mt-0.5" />
+            <div>
+              <h3 className="text-sm font-bold">Shift Opening Required</h3>
+              <p className="text-xs text-amber-800 mt-0.5">
+                POS transactions require an authoritative active shift to post cash receipts into physical drawers.
+              </p>
+            </div>
+          </div>
+          <Link href="/shifts">
+            <Button variant="primary" size="sm">
+              Open Shift Now &rarr;
+            </Button>
+          </Link>
+        </div>
+      )}
+
+      {/* Notifications */}
+      {errorMsg && (
+        <div className="mb-4 p-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-rose-600 flex-shrink-0" />
+            <span>{errorMsg}</span>
+          </div>
+          <button onClick={() => setErrorMsg(null)} className="text-rose-700 hover:text-rose-900">
+            ✕
+          </button>
+        </div>
+      )}
+
+      {infoMsg && (
+        <div className="mb-4 p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+            <span>{infoMsg}</span>
+          </div>
+          <button onClick={() => setInfoMsg(null)} className="text-emerald-700 hover:text-emerald-900">
+            ✕
+          </button>
+        </div>
+      )}
+
+      {/* Transaction Finished Receipt Screen */}
+      {finalizedSuccess ? (
+        <div className="max-w-2xl mx-auto bg-white rounded-2xl border border-[#E2E6E3] p-8 shadow-md text-center">
+          <div className="w-14 h-14 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 flex items-center justify-center mx-auto mb-4">
+            <CheckCircle2 className="w-8 h-8" />
+          </div>
+          <span className="text-xs font-bold text-[#B89A60] uppercase tracking-wider">
+            Sale Finalized Successfully
+          </span>
+          <h2 className="text-2xl font-bold text-[#123B32] mt-1">
+            Invoice {finalizedSuccess.invoiceNumber}
+          </h2>
+          <p className="text-xs text-[#69736E] mt-1">
+            Customer: <strong className="text-[#202824]">{finalizedSuccess.customerName}</strong> • Cashier: {user?.fullName || 'Cashier'}
+          </p>
+
+          <div className="my-6 p-4 rounded-xl bg-[#F8F7F4] border border-[#E2E6E3] text-left text-xs space-y-2">
+            <div className="flex justify-between py-1 border-b border-[#E2E6E3]">
+              <span className="text-[#69736E]">Subtotal</span>
+              <span className="font-mono font-medium text-[#202824]">
+                {currency} {finalizedSuccess.subTotal.toFixed(2)}
               </span>
             </div>
-            <p className="text-xs text-gray-500 mt-1">
-              Authoritative Jewellery POS • Dynamic Reference Pricing • Split Payments • Cash Ledger Linked
-            </p>
-          </div>
-
-          {/* Shift & Branch Status Badge */}
-          <div className="flex items-center gap-3">
-            {isLoadingShift ? (
-              <div className="text-xs text-gray-400">Verifying cashier shift...</div>
-            ) : activeShift ? (
-              <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 text-emerald-800 px-3 py-1.5 rounded-xl text-xs font-bold">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                <span>Shift {activeShift.shiftNumber} (Open)</span>
-                <span className="text-gray-400">|</span>
-                <span>Drawer: {activeShift.cashDrawerName || 'Drawer'}</span>
+            {finalizedSuccess.discountAmount > 0 && (
+              <div className="flex justify-between py-1 border-b border-[#E2E6E3] text-amber-800">
+                <span>Discount Applied</span>
+                <span className="font-mono font-medium">
+                  - {currency} {finalizedSuccess.discountAmount.toFixed(2)}
+                </span>
               </div>
-            ) : (
-              <div className="flex items-center gap-2 bg-rose-50 border border-rose-200 text-rose-800 px-3 py-1.5 rounded-xl text-xs font-bold">
-                <AlertTriangle className="w-4 h-4 text-rose-600" />
-                <span>No Active Open Shift</span>
-                <a href="/shifts" className="underline ml-1 text-rose-900">Open Shift</a>
+            )}
+            <div className="flex justify-between py-1.5 font-bold text-sm text-[#123B32] border-t border-[#E2E6E3]">
+              <span>Total Paid</span>
+              <span className="font-mono tabular-nums">
+                {currency} {finalizedSuccess.totalAmount.toFixed(2)}
+              </span>
+            </div>
+            {finalizedSuccess.totalCashChange > 0 && (
+              <div className="flex justify-between py-1 text-emerald-800 font-semibold border-t border-[#E2E6E3]">
+                <span>Change Returned</span>
+                <span className="font-mono tabular-nums">
+                  {currency} {finalizedSuccess.totalCashChange.toFixed(2)}
+                </span>
               </div>
             )}
           </div>
-        </div>
 
-        {/* Global Notifications */}
-        {errorMsg && (
-          <div className="bg-rose-50 border border-rose-200 text-rose-800 p-4 rounded-xl text-xs flex items-start justify-between shadow-sm">
-            <div className="flex items-center space-x-2">
-              <AlertTriangle className="w-4 h-4 text-rose-600 flex-shrink-0" />
-              <span>{errorMsg}</span>
-            </div>
-            <button onClick={() => setErrorMsg(null)} className="text-rose-500 hover:text-rose-700 font-bold">✕</button>
-          </div>
-        )}
-
-        {infoMsg && (
-          <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 p-4 rounded-xl text-xs flex items-start justify-between shadow-sm">
-            <div className="flex items-center space-x-2">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
-              <span>{infoMsg}</span>
-            </div>
-            <button onClick={() => setInfoMsg(null)} className="text-emerald-500 hover:text-emerald-700 font-bold">✕</button>
-          </div>
-        )}
-
-        {/* Finalized Success Banner */}
-        {finalizedSuccess && (
-          <div className="bg-gradient-to-r from-[#0D3826] to-[#1B6543] text-white p-6 rounded-2xl shadow-lg border border-[#D4AF37]/40 flex flex-col md:flex-row items-center justify-between gap-4">
-            <div className="flex items-center space-x-4">
-              <div className="w-12 h-12 rounded-full bg-[#D4AF37] text-[#0D3826] flex items-center justify-center font-black text-xl">
-                ✓
-              </div>
-              <div>
-                <span className="text-[10px] uppercase font-bold tracking-widest text-[#D4AF37]">Invoice Finalized</span>
-                <h3 className="text-xl font-black">{finalizedSuccess.invoiceNumber}</h3>
-                <p className="text-xs text-gray-200 mt-0.5">
-                  Customer: <strong>{finalizedSuccess.customerName}</strong> • Total Paid: <strong>Rs. {finalizedSuccess.totalAmount.toLocaleString()}</strong> ({finalizedSuccess.payments.length} payment records)
-                </p>
-              </div>
-            </div>
-            <button
-              onClick={() => setFinalizedSuccess(null)}
-              className="px-4 py-2 bg-[#D4AF37] hover:bg-[#BA9225] text-[#0D3826] font-bold text-xs rounded-xl transition"
+          <div className="flex items-center justify-center gap-3">
+            <Button
+              variant="secondary"
+              size="md"
+              leftIcon={<Printer className="w-4 h-4" />}
+              onClick={() => window.print()}
+            >
+              Print Receipt
+            </Button>
+            <Button
+              variant="primary"
+              size="md"
+              leftIcon={<Plus className="w-4 h-4" />}
+              onClick={() => {
+                setFinalizedSuccess(null);
+                setScannedItem(null);
+              }}
             >
               Start New Sale
-            </button>
+            </Button>
           </div>
-        )}
-
-        {/* Main POS Interface Grid */}
+        </div>
+      ) : (
+        /* POS Interactive Workspace */
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          {/* Left Column (7 cols): Customer + Barcode Scan + Cart Lines */}
+          {/* Left Column: Customer, Barcode Scanning, Scanned Item & Cart (7 cols) */}
           <div className="lg:col-span-7 space-y-5">
-            {/* 1. Customer Selection Bar */}
-            <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-sm space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
-                  <Search className="w-3.5 h-3.5" /> Customer Identification
+            {/* Customer Selection Card */}
+            <div className="bg-white p-4.5 rounded-xl border border-[#E2E6E3] shadow-xs">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-xs font-bold text-[#123B32] uppercase tracking-wider flex items-center gap-1.5">
+                  <span>Customer Selection</span>
+                  <span className="text-rose-600">*</span>
                 </span>
-                <button
-                  type="button"
+                <Button
+                  variant="ghost"
+                  size="sm"
                   onClick={() => setShowQuickAddModal(true)}
-                  className="inline-flex items-center gap-1 text-xs font-bold text-[#0D3826] hover:text-emerald-700 hover:underline"
+                  leftIcon={<UserPlus className="w-3.5 h-3.5 text-[#123B32]" />}
                 >
-                  <UserPlus className="w-3.5 h-3.5" /> Quick Walk-in Customer
-                </button>
+                  Quick Add Walk-in
+                </Button>
               </div>
 
               {selectedCustomer ? (
-                <div className="flex items-center justify-between bg-emerald-50/70 border border-emerald-200 p-3 rounded-xl">
-                  <div className="flex items-center space-x-3">
-                    <div className="w-8 h-8 rounded-full bg-[#0D3826] text-white flex items-center justify-center font-bold text-xs">
-                      {selectedCustomer.fullName.charAt(0)}
-                    </div>
-                    <div>
-                      <p className="text-xs font-bold text-gray-900">{selectedCustomer.fullName}</p>
-                      <p className="text-[11px] text-gray-500 font-mono">
-                        {selectedCustomer.primaryPhone} {selectedCustomer.customerCode ? `• ${selectedCustomer.customerCode}` : ''}
-                      </p>
-                    </div>
+                <div className="flex items-center justify-between p-3 rounded-lg bg-[#F8F7F4] border border-[#E2E6E3]">
+                  <div>
+                    <p className="text-xs font-bold text-[#123B32]">{selectedCustomer.fullName}</p>
+                    <p className="text-[11px] font-mono text-[#69736E] mt-0.5">
+                      {selectedCustomer.customerCode} • {selectedCustomer.primaryPhone}
+                    </p>
                   </div>
-                  {!currentInvoice && (
-                    <button
-                      type="button"
-                      onClick={() => setSelectedCustomer(null)}
-                      className="text-gray-400 hover:text-rose-600 text-xs font-bold"
-                    >
-                      Change
-                    </button>
-                  )}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setSelectedCustomer(null);
+                      setCurrentInvoice(null);
+                    }}
+                  >
+                    Change
+                  </Button>
                 </div>
               ) : (
                 <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-[#69736E]">
+                    <Search className="w-4 h-4" />
+                  </div>
                   <input
                     type="text"
                     value={customerSearchQuery}
                     onChange={(e) => setCustomerSearchQuery(e.target.value)}
-                    placeholder="Search customer by name or phone (e.g. 077 123 4567)..."
-                    className="w-full text-xs px-3.5 py-2.5 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#0D3826]/30 font-medium"
+                    placeholder="Search by customer name, phone or customer code"
+                    className="w-full pl-9 pr-3.5 py-2 text-xs rounded-lg border border-[#E2E6E3] focus:outline-none focus:ring-1 focus:ring-[#123B32] focus:border-[#123B32] text-[#202824] placeholder-gray-400"
                   />
-                  {isSearchingCustomers && (
-                    <span className="absolute right-3 top-2.5 text-xs text-gray-400 animate-pulse">Searching...</span>
-                  )}
+
+                  {/* Search Results Dropdown */}
                   {customerSearchResults.length > 0 && (
-                    <div className="absolute left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-20 max-h-48 overflow-y-auto">
+                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-[#E2E6E3] rounded-lg shadow-lg z-20 max-h-48 overflow-y-auto divide-y divide-[#E2E6E3]">
                       {customerSearchResults.map((c) => (
-                        <div
+                        <button
                           key={c.id}
+                          type="button"
                           onClick={() => {
                             setSelectedCustomer(c);
                             setCustomerSearchQuery('');
                             setCustomerSearchResults([]);
                           }}
-                          className="p-2.5 hover:bg-gray-50 cursor-pointer border-b border-gray-100 flex items-center justify-between text-xs"
+                          className="w-full text-left p-2.5 hover:bg-[#F8F7F4] text-xs flex justify-between items-center transition-colors"
                         >
                           <div>
-                            <p className="font-bold text-gray-900">{c.fullName}</p>
-                            <p className="text-[11px] text-gray-500 font-mono">{c.primaryPhone}</p>
+                            <p className="font-bold text-[#123B32]">{c.fullName}</p>
+                            <p className="font-mono text-[11px] text-[#69736E]">{c.primaryPhone}</p>
                           </div>
-                          <span className="text-[10px] font-mono text-gray-400">{c.customerCode}</span>
-                        </div>
+                          <span className="font-mono text-[10px] text-gray-400">{c.customerCode}</span>
+                        </button>
                       ))}
                     </div>
                   )}
@@ -525,501 +602,522 @@ export default function PosTerminalPage() {
               )}
             </div>
 
-            {/* 2. Item Scan & Dynamic Pricing Card */}
-            <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-sm space-y-4">
-              <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
-                <Scan className="w-3.5 h-3.5" /> Barcode & Tag Scan
-              </span>
-
+            {/* Barcode Scanning Input */}
+            <div className="bg-white p-4.5 rounded-xl border border-[#E2E6E3] shadow-xs">
               <form onSubmit={handleItemLookup} className="flex gap-2">
-                <input
-                  type="text"
-                  value={scanQuery}
-                  onChange={(e) => setScanQuery(e.target.value)}
-                  placeholder="Scan item barcode or enter tag number (e.g. TAG-COL-2026-0001)..."
-                  disabled={!activeShift || isLookingUp}
-                  className="flex-1 text-xs px-3.5 py-2.5 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#0D3826]/30 font-mono"
-                />
-                <button
+                <div className="relative flex-1">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-[#69736E]">
+                    <Scan className="w-4 h-4" />
+                  </div>
+                  <input
+                    ref={barcodeInputRef}
+                    type="text"
+                    value={scanQuery}
+                    onChange={(e) => setScanQuery(e.target.value)}
+                    placeholder="Scan or enter jewellery tag or barcode"
+                    disabled={!activeShift}
+                    className="w-full pl-9 pr-3.5 py-2 text-xs font-mono rounded-lg border border-[#E2E6E3] focus:outline-none focus:ring-1 focus:ring-[#123B32] focus:border-[#123B32] text-[#202824] placeholder-gray-400 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  />
+                </div>
+                <Button
+                  variant="primary"
+                  size="sm"
                   type="submit"
-                  disabled={!activeShift || isLookingUp || !scanQuery.trim()}
-                  className="px-4 py-2.5 bg-[#0D3826] hover:bg-[#1B6543] text-white rounded-xl text-xs font-bold transition disabled:opacity-50"
+                  isLoading={isLookingUp}
+                  disabled={!activeShift || !scanQuery.trim()}
+                  leftIcon={<Search className="w-3.5 h-3.5" />}
                 >
-                  {isLookingUp ? 'Scanning...' : 'Lookup Item'}
-                </button>
+                  Lookup
+                </Button>
               </form>
 
-              {/* Scanned Item Reference Price Breakdown */}
+              {/* Scanned Item Detail & Price Negotiation Card */}
               {scannedItem && (
-                <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3 animate-fadeIn">
-                  <div className="flex items-start justify-between">
+                <div className="mt-4 p-4 rounded-xl bg-[#F8F7F4] border border-[#B89A60]/40 shadow-xs space-y-3">
+                  <div className="flex justify-between items-start">
                     <div>
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-[#D4AF37] bg-[#0D3826] px-2 py-0.5 rounded">
-                        {scannedItem.purityName} {scannedItem.materialName}
+                      <span className="text-[10px] font-mono font-bold text-[#B89A60] uppercase tracking-wider">
+                        {scannedItem.tagNumber} • {scannedItem.purityName} {scannedItem.materialName}
                       </span>
-                      <h4 className="text-sm font-black text-gray-900 mt-1">{scannedItem.itemName}</h4>
-                      <p className="text-[11px] font-mono text-gray-500">
-                        Tag: {scannedItem.tagNumber} {scannedItem.barcode ? `• Barcode: ${scannedItem.barcode}` : ''}
+                      <h4 className="text-sm font-bold text-[#123B32]">{scannedItem.itemName}</h4>
+                      <p className="text-xs text-[#69736E] mt-0.5">
+                        Weight: Gross <strong className="text-[#202824]">{scannedItem.grossWeight.toFixed(4)}g</strong> | Net{' '}
+                        <strong className="text-[#202824]">{scannedItem.netWeight.toFixed(4)}g</strong>
                       </p>
                     </div>
-                    <div className="text-right">
-                      <span className="text-[10px] font-bold text-gray-400 uppercase">System Reference</span>
-                      <p className="text-base font-black text-emerald-700">
-                        Rs. {scannedItem.referencePrice.toLocaleString()}
-                      </p>
+                    <Badge variant={scannedItem.isPartOfComposition ? 'forest' : 'neutral'} size="sm">
+                      {scannedItem.isPartOfComposition ? 'Composite Set' : 'Individual Piece'}
+                    </Badge>
+                  </div>
+
+                  {/* Reference Breakdown */}
+                  <div className="p-3 bg-white rounded-lg border border-[#E2E6E3] text-xs grid grid-cols-3 gap-2">
+                    <div>
+                      <span className="text-[10px] text-[#69736E] block">Gold Value</span>
+                      <span className="font-mono font-medium text-[#202824]">
+                        {currency} {scannedItem.referenceMaterialValue.toFixed(2)}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-[#69736E] block">Making Charge</span>
+                      <span className="font-mono font-medium text-[#202824]">
+                        {currency} {scannedItem.referenceMakingCharge.toFixed(2)}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-[#69736E] block">Ref Total</span>
+                      <span className="font-mono font-bold text-[#123B32]">
+                        {currency} {scannedItem.referencePrice.toFixed(2)}
+                      </span>
                     </div>
                   </div>
 
-                  {/* Weights & Breakdown Grid */}
-                  <div className="grid grid-cols-4 gap-2 pt-2 border-t border-gray-200 text-[11px]">
-                    <div>
-                      <span className="text-gray-400 block">Net Wt</span>
-                      <strong className="font-mono text-gray-800">{scannedItem.netWeight.toFixed(3)}g</strong>
-                    </div>
-                    <div>
-                      <span className="text-gray-400 block">Rate/g</span>
-                      <strong className="font-mono text-gray-800">Rs. {scannedItem.activeRatePerGram.toLocaleString()}</strong>
-                    </div>
-                    <div>
-                      <span className="text-gray-400 block">Gold Value</span>
-                      <strong className="font-mono text-gray-800">Rs. {scannedItem.referenceMaterialValue.toLocaleString()}</strong>
-                    </div>
-                    <div>
-                      <span className="text-gray-400 block">Making Chg</span>
-                      <strong className="font-mono text-gray-800">Rs. {scannedItem.referenceMakingCharge.toLocaleString()}</strong>
-                    </div>
-                  </div>
-
-                  {/* Composition Alert */}
-                  {scannedItem.isPartOfComposition && (
-                    <div className="bg-amber-50 border border-amber-200 text-amber-800 px-3 py-1.5 rounded-lg text-[11px] flex items-center gap-1.5 font-medium">
-                      <AlertTriangle className="w-3.5 h-3.5 text-amber-600 flex-shrink-0" />
-                      <span>
-                        Part of <strong>{scannedItem.compositionType}</strong> ({scannedItem.compositionTagNumber}). Selling this item will automatically detach it from the composition.
-                      </span>
-                    </div>
-                  )}
-
-                  {/* Negotiated Selling Price Input */}
-                  <div className="pt-2 border-t border-gray-200 flex items-center justify-between gap-3">
-                    <div className="flex-1">
-                      <label className="block text-[11px] font-bold text-gray-700 mb-1">
-                        Actual Negotiated Selling Price (Rs.)
-                      </label>
-                      <input
+                  {/* Price Negotiation & Add to Cart */}
+                  <div className="flex items-center gap-3 pt-1">
+                    <div className="w-48">
+                      <Input
+                        label="Negotiated Price"
+                        unit={currency}
                         type="number"
                         step="0.01"
+                        placeholder="Enter agreed selling price"
                         value={negotiatedPriceInput}
                         onChange={(e) => setNegotiatedPriceInput(e.target.value)}
-                        placeholder="Negotiated Price"
-                        className="w-full text-sm font-black px-3 py-1.5 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#0D3826]/30"
                       />
                     </div>
-                    <button
-                      type="button"
-                      onClick={handleAddItemToInvoice}
-                      disabled={isLoadingInvoice}
-                      className="mt-5 px-5 py-2 bg-[#D4AF37] hover:bg-[#BA9225] text-[#0D3826] font-black text-xs rounded-xl transition shadow-sm"
-                    >
-                      Add To Sale
-                    </button>
+                    <div className="pt-5">
+                      <Button
+                        variant="primary"
+                        size="md"
+                        onClick={handleAddToCart}
+                        leftIcon={<Plus className="w-4 h-4" />}
+                      >
+                        Add to Invoice
+                      </Button>
+                    </div>
                   </div>
                 </div>
               )}
             </div>
 
-            {/* 3. Invoice Items Cart Table */}
-            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-              <div className="p-4 border-b border-gray-100 flex items-center justify-between">
-                <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
-                  <ShoppingCart className="w-3.5 h-3.5" /> Cart Items ({currentInvoice?.lines.length || 0})
-                </span>
-                {currentInvoice && (
-                  <span className="text-xs font-mono font-bold text-gray-600">
-                    Draft: {currentInvoice.invoiceNumber}
-                  </span>
-                )}
+            {/* Cart Items Table */}
+            <div className="bg-white rounded-xl border border-[#E2E6E3] shadow-xs overflow-hidden">
+              <div className="p-4 border-b border-[#E2E6E3] bg-[#F8F7F4]/60 flex items-center justify-between">
+                <div>
+                  <h3 className="text-xs font-bold text-[#123B32] uppercase tracking-wider">
+                    Invoice Items ({currentInvoice?.lines.length || 0})
+                  </h3>
+                  {currentInvoice && (
+                    <p className="text-[11px] font-mono text-[#69736E] mt-0.5">
+                      Draft #{currentInvoice.invoiceNumber}
+                    </p>
+                  )}
+                </div>
               </div>
 
               {!currentInvoice || currentInvoice.lines.length === 0 ? (
-                <div className="p-8 text-center text-gray-400 text-xs">
-                  No items added to current sale yet. Scan a barcode or lookup a tag to begin.
+                <div className="p-8 text-center text-xs text-[#69736E]">
+                  Cart is currently empty. Scan a barcode above to add jewellery items.
                 </div>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs">
-                    <thead className="bg-gray-50 text-[10px] font-bold uppercase text-gray-500 border-b border-gray-200">
-                      <tr>
-                        <th className="p-3">Item / Tag</th>
-                        <th className="p-3">Net Wt</th>
-                        <th className="p-3 text-right">Reference</th>
-                        <th className="p-3 text-right">Negotiated Price</th>
-                        <th className="p-3 text-center">Action</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
-                      {currentInvoice.lines.map((l) => (
-                        <tr key={l.id} className="hover:bg-gray-50/50">
-                          <td className="p-3">
-                            <p className="font-bold text-gray-900">{l.itemName}</p>
-                            <p className="text-[11px] font-mono text-gray-400">{l.tagNumber}</p>
-                          </td>
-                          <td className="p-3 font-mono text-gray-600">{l.netWeight.toFixed(3)}g</td>
-                          <td className="p-3 text-right font-mono text-gray-400">
-                            Rs. {l.referencePrice.toLocaleString()}
-                          </td>
-                          <td className="p-3 text-right font-mono font-black text-gray-900">
-                            Rs. {l.unitPrice.toLocaleString()}
-                          </td>
-                          <td className="p-3 text-center space-x-2">
+                <table className="w-full text-xs text-left">
+                  <thead>
+                    <tr className="border-b border-[#E2E6E3] bg-[#F8F7F4] text-[#69736E] uppercase tracking-wider font-semibold">
+                      <th className="py-2.5 px-3.5">Item</th>
+                      <th className="py-2.5 px-3.5">Weight</th>
+                      <th className="py-2.5 px-3.5 text-right">Ref Price</th>
+                      <th className="py-2.5 px-3.5 text-right">Negotiated</th>
+                      <th className="py-2.5 px-3.5 text-center">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#E2E6E3]">
+                    {currentInvoice.lines.map((l) => (
+                      <tr key={l.id} className="hover:bg-[#F8F7F4]/60 transition-colors">
+                        <td className="py-3 px-3.5">
+                          <p className="font-bold text-[#123B32]">{l.itemName}</p>
+                          <p className="font-mono text-[10px] text-[#69736E]">{l.tagNumber}</p>
+                        </td>
+                        <td className="py-3 px-3.5 font-mono text-[#202824]">
+                          {l.grossWeight.toFixed(3)}g
+                        </td>
+                        <td className="py-3 px-3.5 text-right font-mono text-[#69736E] tabular-nums">
+                          {currency} {l.referencePrice.toFixed(2)}
+                        </td>
+                        <td className="py-3 px-3.5 text-right font-mono font-bold text-[#123B32] tabular-nums">
+                          {currency} {l.unitPrice.toFixed(2)}
+                        </td>
+                        <td className="py-3 px-3.5 text-center">
+                          <div className="flex items-center justify-center gap-1">
                             <button
-                              type="button"
                               onClick={() => {
                                 setEditingLineId(l.id);
-                                setEditPriceValue(String(l.unitPrice));
+                                setEditPriceValue(l.unitPrice.toFixed(2));
                               }}
-                              className="text-gray-400 hover:text-emerald-700 font-bold"
-                              title="Edit Price"
+                              className="p-1 rounded text-[#69736E] hover:text-[#123B32] hover:bg-gray-100"
+                              title="Edit Negotiated Price"
                             >
-                              <Edit2 className="w-3.5 h-3.5 inline" />
+                              <Edit2 className="w-3.5 h-3.5" />
                             </button>
                             <button
-                              type="button"
                               onClick={() => handleRemoveLine(l.id)}
-                              className="text-gray-400 hover:text-rose-600 font-bold"
-                              title="Remove Item"
+                              className="p-1 rounded text-rose-600 hover:bg-rose-50"
+                              title="Remove Line"
                             >
-                              <Trash2 className="w-3.5 h-3.5 inline" />
+                              <Trash2 className="w-3.5 h-3.5" />
                             </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               )}
             </div>
           </div>
 
-          {/* Right Column (5 cols): Invoice Summary & Split Payments */}
+          {/* Right Column: Checkout & Split Tender Panel (5 cols) */}
           <div className="lg:col-span-5 space-y-5">
-            <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm space-y-5">
-              <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider">
-                Invoice Settlement & Split Payments
+            <div className="bg-white rounded-xl border border-[#E2E6E3] p-5 shadow-xs space-y-4">
+              <h3 className="text-xs font-bold text-[#123B32] uppercase tracking-wider pb-3 border-b border-[#E2E6E3]">
+                Payment Allocation & Checkout
               </h3>
 
-              {/* Summary Financial Figures */}
-              <div className="space-y-2 bg-slate-50 p-4 rounded-xl border border-slate-200 text-xs">
-                <div className="flex justify-between text-gray-600">
-                  <span>Subtotal ({currentInvoice?.lines.length || 0} items)</span>
-                  <span className="font-mono font-bold">Rs. {invoiceSubtotal.toLocaleString()}</span>
-                </div>
-
-                <div className="flex justify-between items-center text-gray-600">
-                  <span>Overall Discount (Rs.)</span>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={discountAmount || ''}
-                    onChange={(e) => setDiscountAmount(Math.max(0, parseFloat(e.target.value) || 0))}
-                    placeholder="0.00"
-                    className="w-28 text-right font-mono text-xs px-2 py-1 rounded border border-gray-300"
-                  />
-                </div>
-
-                <div className="flex justify-between text-gray-400 text-[11px]">
-                  <span>VAT Rate (Flat %)</span>
-                  <span>0% (Exempt/Disabled)</span>
-                </div>
-
-                <div className="pt-2 border-t border-gray-200 flex justify-between text-sm font-black text-[#0D3826]">
-                  <span>Total Amount Due</span>
-                  <span className="font-mono text-base text-emerald-800">
-                    Rs. {invoiceTotal.toLocaleString()}
+              {/* Summary Totals */}
+              <div className="space-y-2 text-xs">
+                <div className="flex justify-between text-[#69736E]">
+                  <span>Items Subtotal</span>
+                  <span className="font-mono font-semibold text-[#202824] tabular-nums">
+                    {currency} {linesTotal.toFixed(2)}
                   </span>
                 </div>
-              </div>
 
-              {/* Split Payments Container */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">
-                    Accepted Payments
-                  </span>
-                  <button
-                    type="button"
-                    onClick={addPaymentRow}
-                    className="text-xs font-bold text-[#0D3826] hover:underline"
-                  >
-                    + Add Payment Method
-                  </button>
-                </div>
-
-                {payments.map((p, idx) => (
-                  <div key={idx} className="p-3 bg-gray-50 border border-gray-200 rounded-xl space-y-2">
-                    <div className="flex items-center justify-between gap-2">
-                      <select
-                        value={p.method}
-                        onChange={(e) => updatePaymentRow(idx, { method: Number(e.target.value) })}
-                        className="text-xs font-bold bg-white px-2.5 py-1.5 rounded-lg border border-gray-300 focus:outline-none"
-                      >
-                        <option value={1}>💵 Cash</option>
-                        <option value={2}>💳 Card</option>
-                        <option value={3}>🏦 Bank Transfer</option>
-                      </select>
-
-                      <div className="flex-1">
-                        <input
-                          type="number"
-                          step="0.01"
-                          value={p.amount || ''}
-                          onChange={(e) => updatePaymentRow(idx, { amount: parseFloat(e.target.value) || 0 })}
-                          placeholder="Amount"
-                          className="w-full text-right font-mono font-black text-xs px-2.5 py-1.5 rounded-lg border border-gray-300"
-                        />
-                      </div>
-
-                      {payments.length > 1 && (
-                        <button
-                          type="button"
-                          onClick={() => removePaymentRow(idx)}
-                          className="text-gray-400 hover:text-rose-600 font-bold text-xs"
-                        >
-                          ✕
-                        </button>
-                      )}
-                    </div>
-
-                    {/* Method-Specific Inputs */}
-                    {p.method === 1 && (
-                      <div className="flex items-center justify-between text-[11px] bg-white p-2 rounded-lg border border-gray-100">
-                        <span className="text-gray-500 font-medium">Cash Tendered:</span>
-                        <input
-                          type="number"
-                          step="0.01"
-                          value={p.cashTendered || ''}
-                          onChange={(e) => updatePaymentRow(idx, { cashTendered: parseFloat(e.target.value) || 0 })}
-                          placeholder="Tendered"
-                          className="w-24 text-right font-mono text-xs px-1.5 py-0.5 rounded border border-gray-300"
-                        />
-                        <span className="text-gray-500 ml-2">
-                          Change Due: <strong className="text-emerald-800 font-mono">Rs. {Math.max(0, (p.cashTendered || 0) - (p.amount || 0)).toLocaleString()}</strong>
-                        </span>
-                      </div>
-                    )}
-
-                    {p.method === 2 && (
-                      <div className="grid grid-cols-3 gap-2 text-[11px]">
-                        <input
-                          type="text"
-                          value={p.cardType || ''}
-                          onChange={(e) => updatePaymentRow(idx, { cardType: e.target.value })}
-                          placeholder="Card Type (Visa)"
-                          className="px-2 py-1 rounded border border-gray-300 text-xs"
-                        />
-                        <input
-                          type="text"
-                          maxLength={4}
-                          value={p.cardLast4 || ''}
-                          onChange={(e) => updatePaymentRow(idx, { cardLast4: e.target.value })}
-                          placeholder="Last 4 Digits"
-                          className="px-2 py-1 rounded border border-gray-300 text-xs font-mono"
-                        />
-                        <input
-                          type="text"
-                          value={p.referenceNumber || ''}
-                          onChange={(e) => updatePaymentRow(idx, { referenceNumber: e.target.value })}
-                          placeholder="Approval Code"
-                          className="px-2 py-1 rounded border border-gray-300 text-xs font-mono"
-                        />
-                      </div>
-                    )}
-
-                    {p.method === 3 && (
-                      <div className="grid grid-cols-2 gap-2 text-[11px]">
-                        <input
-                          type="text"
-                          value={p.bankName || ''}
-                          onChange={(e) => updatePaymentRow(idx, { bankName: e.target.value })}
-                          placeholder="Bank Name (BOC/Commercial)"
-                          className="px-2 py-1 rounded border border-gray-300 text-xs"
-                        />
-                        <input
-                          type="text"
-                          value={p.referenceNumber || ''}
-                          onChange={(e) => updatePaymentRow(idx, { referenceNumber: e.target.value })}
-                          placeholder="Transaction Ref #"
-                          className="px-2 py-1 rounded border border-gray-300 text-xs font-mono"
-                        />
-                      </div>
-                    )}
+                <div className="flex justify-between items-center text-[#69736E]">
+                  <span>Overall Discount</span>
+                  <div className="w-28">
+                    <input
+                      type="number"
+                      step="0.01"
+                      placeholder="e.g. 0.00"
+                      value={discountAmount || ''}
+                      onChange={(e) => setDiscountAmount(parseFloat(e.target.value) || 0)}
+                      className="w-full text-right py-1 px-2 text-xs rounded border border-[#E2E6E3] font-mono focus:outline-none focus:border-[#123B32]"
+                    />
                   </div>
-                ))}
-
-                {/* Balance Status */}
-                <div className="pt-2 flex items-center justify-between text-xs">
-                  <span className="text-gray-500 font-medium">Total Payments Accepted:</span>
-                  <span className="font-mono font-bold text-gray-800">Rs. {totalPaid.toLocaleString()}</span>
                 </div>
 
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-gray-500 font-medium">Remaining Balance Due:</span>
-                  <span className={`font-mono font-black ${balanceDue > 0 ? 'text-rose-600' : 'text-emerald-700'}`}>
-                    Rs. {balanceDue.toLocaleString()}
+                {/* Prominent Payable Box */}
+                <div className="mt-3 p-4 rounded-xl bg-[#0B2822] text-white flex justify-between items-center shadow-xs">
+                  <div>
+                    <span className="text-[10px] font-bold text-[#B89A60] uppercase tracking-widest block">
+                      Total Payable
+                    </span>
+                    <span className="text-xs text-gray-300">Net Amount Due</span>
+                  </div>
+                  <span className="text-2xl font-bold font-mono text-[#B89A60] tabular-nums">
+                    {currency} {netPayable.toFixed(2)}
                   </span>
                 </div>
               </div>
 
-              {/* Notes Input */}
-              <div>
-                <label className="block text-[11px] font-bold text-gray-600 mb-1">Invoice Notes</label>
-                <input
-                  type="text"
-                  value={invoiceNotes}
-                  onChange={(e) => setInvoiceNotes(e.target.value)}
-                  placeholder="Optional notes or remarks..."
-                  className="w-full text-xs px-3 py-2 rounded-xl border border-gray-300"
-                />
+              {/* Tender Allocation Inputs */}
+              <div className="pt-2 border-t border-[#E2E6E3] space-y-3">
+                <span className="text-xs font-bold text-[#202824] uppercase tracking-wider block">
+                  Payment Methods (Split Tender)
+                </span>
+
+                {/* 1. Cash Tender */}
+                <div className="p-3 rounded-lg border border-[#E2E6E3] bg-[#F8F7F4]/50 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-[#123B32] flex items-center gap-1.5">
+                      <Banknote className="w-4 h-4 text-emerald-700" />
+                      <span>Physical Cash</span>
+                    </span>
+                    <div className="w-32">
+                      <input
+                        type="number"
+                        step="0.01"
+                        placeholder="Amount to pay"
+                        value={cashRow?.amount || ''}
+                        onChange={(e) => {
+                          const val = parseFloat(e.target.value) || 0;
+                          const updated = [...payments];
+                          const idx = updated.findIndex((p) => p.method === 1);
+                          if (idx >= 0) {
+                            updated[idx].amount = val;
+                            if (!updated[idx].cashTendered || updated[idx].cashTendered < val) {
+                              updated[idx].cashTendered = val;
+                            }
+                          }
+                          setPayments(updated);
+                        }}
+                        className="w-full text-right py-1 px-2 text-xs font-mono rounded border border-[#E2E6E3] focus:outline-none focus:border-[#123B32]"
+                      />
+                    </div>
+                  </div>
+
+                  {(cashRow?.amount || 0) > 0 && (
+                    <div className="flex items-center justify-between pt-2 border-t border-[#E2E6E3]/60 text-xs">
+                      <span className="text-[#69736E]">Cash Received from Customer:</span>
+                      <div className="w-32">
+                        <input
+                          type="number"
+                          step="0.01"
+                          placeholder="e.g. 50000.00"
+                          value={cashRow?.cashTendered || ''}
+                          onChange={(e) => {
+                            const val = parseFloat(e.target.value) || 0;
+                            const updated = [...payments];
+                            const idx = updated.findIndex((p) => p.method === 1);
+                            if (idx >= 0) {
+                              updated[idx].cashTendered = val;
+                            }
+                            setPayments(updated);
+                          }}
+                          className="w-full text-right py-1 px-2 text-xs font-mono rounded border border-[#E2E6E3] text-[#123B32] font-semibold focus:outline-none focus:border-[#123B32]"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {changeDue > 0 && (
+                    <div className="p-2 rounded bg-emerald-50 border border-emerald-200 text-xs flex justify-between font-bold text-emerald-800">
+                      <span>Change to Return:</span>
+                      <span className="font-mono tabular-nums">
+                        {currency} {changeDue.toFixed(2)}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {/* 2. Card Payment */}
+                <div className="p-3 rounded-lg border border-[#E2E6E3] bg-[#F8F7F4]/50 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-[#123B32] flex items-center gap-1.5">
+                      <CreditCard className="w-4 h-4 text-blue-700" />
+                      <span>Card Payment</span>
+                    </span>
+                    <div className="w-32">
+                      <input
+                        type="number"
+                        step="0.01"
+                        placeholder="Amount to pay"
+                        value={payments.find((p) => p.method === 2)?.amount || ''}
+                        onChange={(e) => {
+                          const val = parseFloat(e.target.value) || 0;
+                          const updated = [...payments];
+                          const idx = updated.findIndex((p) => p.method === 2);
+                          if (idx >= 0) {
+                            updated[idx].amount = val;
+                          } else if (val > 0) {
+                            updated.push({ method: 2, amount: val });
+                          }
+                          setPayments(updated);
+                        }}
+                        className="w-full text-right py-1 px-2 text-xs font-mono rounded border border-[#E2E6E3] focus:outline-none focus:border-[#123B32]"
+                      />
+                    </div>
+                  </div>
+
+                  {(payments.find((p) => p.method === 2)?.amount || 0) > 0 && (
+                    <div className="grid grid-cols-2 gap-2 pt-2 border-t border-[#E2E6E3]/60">
+                      <input
+                        type="text"
+                        maxLength={4}
+                        placeholder="Last 4 (e.g. 4821)"
+                        value={payments.find((p) => p.method === 2)?.cardLast4 || ''}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          const updated = [...payments];
+                          const idx = updated.findIndex((p) => p.method === 2);
+                          if (idx >= 0) updated[idx].cardLast4 = val;
+                          setPayments(updated);
+                        }}
+                        className="py-1 px-2 text-xs font-mono rounded border border-[#E2E6E3]"
+                      />
+                      <input
+                        type="text"
+                        placeholder="Approval Code"
+                        value={payments.find((p) => p.method === 2)?.referenceNumber || ''}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          const updated = [...payments];
+                          const idx = updated.findIndex((p) => p.method === 2);
+                          if (idx >= 0) updated[idx].referenceNumber = val;
+                          setPayments(updated);
+                        }}
+                        className="py-1 px-2 text-xs font-mono rounded border border-[#E2E6E3]"
+                      />
+                    </div>
+                  )}
+                </div>
+
+                {/* 3. Bank Transfer */}
+                <div className="p-3 rounded-lg border border-[#E2E6E3] bg-[#F8F7F4]/50 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-[#123B32] flex items-center gap-1.5">
+                      <Building className="w-4 h-4 text-purple-700" />
+                      <span>Bank Transfer</span>
+                    </span>
+                    <div className="w-32">
+                      <input
+                        type="number"
+                        step="0.01"
+                        placeholder="Amount to pay"
+                        value={payments.find((p) => p.method === 3)?.amount || ''}
+                        onChange={(e) => {
+                          const val = parseFloat(e.target.value) || 0;
+                          const updated = [...payments];
+                          const idx = updated.findIndex((p) => p.method === 3);
+                          if (idx >= 0) {
+                            updated[idx].amount = val;
+                          } else if (val > 0) {
+                            updated.push({ method: 3, amount: val });
+                          }
+                          setPayments(updated);
+                        }}
+                        className="w-full text-right py-1 px-2 text-xs font-mono rounded border border-[#E2E6E3] focus:outline-none focus:border-[#123B32]"
+                      />
+                    </div>
+                  </div>
+
+                  {(payments.find((p) => p.method === 3)?.amount || 0) > 0 && (
+                    <div className="grid grid-cols-2 gap-2 pt-2 border-t border-[#E2E6E3]/60">
+                      <input
+                        type="text"
+                        placeholder="Bank Name (e.g. BOC)"
+                        value={payments.find((p) => p.method === 3)?.bankName || ''}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          const updated = [...payments];
+                          const idx = updated.findIndex((p) => p.method === 3);
+                          if (idx >= 0) updated[idx].bankName = val;
+                          setPayments(updated);
+                        }}
+                        className="py-1 px-2 text-xs rounded border border-[#E2E6E3]"
+                      />
+                      <input
+                        type="text"
+                        placeholder="Transfer Ref #"
+                        value={payments.find((p) => p.method === 3)?.referenceNumber || ''}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          const updated = [...payments];
+                          const idx = updated.findIndex((p) => p.method === 3);
+                          if (idx >= 0) updated[idx].referenceNumber = val;
+                          setPayments(updated);
+                        }}
+                        className="py-1 px-2 text-xs font-mono rounded border border-[#E2E6E3]"
+                      />
+                    </div>
+                  )}
+                </div>
               </div>
 
-              {/* Finalize Button */}
-              <button
-                type="button"
-                onClick={handleFinalize}
-                disabled={!isFullyPaid || isFinalizing || !currentInvoice || currentInvoice.lines.length === 0}
-                className="w-full py-3.5 bg-gradient-to-r from-[#0D3826] to-[#1B6543] hover:from-[#114630] hover:to-[#227a52] text-white font-black text-sm rounded-xl transition shadow-md disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
-              >
-                {isFinalizing ? (
-                  <span>Finalizing & Posting Cash Ledger...</span>
-                ) : (
-                  <>
-                    <CheckCircle2 className="w-4 h-4 text-[#D4AF37]" />
-                    <span>Complete Sale & Issue Invoice</span>
-                  </>
-                )}
-              </button>
+              {/* Checkout Action Button */}
+              <div className="pt-3">
+                <Button
+                  variant="primary"
+                  size="lg"
+                  className="w-full"
+                  disabled={
+                    !currentInvoice ||
+                    currentInvoice.lines.length === 0 ||
+                    !activeShift ||
+                    totalPaidAllocation < netPayable ||
+                    isFinalizing
+                  }
+                  isLoading={isFinalizing}
+                  onClick={handleCheckout}
+                >
+                  Confirm & Finalize Invoice
+                </Button>
+              </div>
             </div>
           </div>
         </div>
+      )}
 
-        {/* Quick Add Walk-in Customer Modal */}
-        {showQuickAddModal && (
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl border border-gray-200 animate-scaleIn">
-              <div className="flex items-center justify-between pb-3 border-b border-gray-100">
-                <h3 className="text-sm font-bold text-[#0D3826]">Quick Register Walk-in Customer</h3>
-                <button
-                  type="button"
-                  onClick={() => setShowQuickAddModal(false)}
-                  className="text-gray-400 hover:text-gray-600 font-bold"
-                >
-                  ✕
-                </button>
-              </div>
+      {/* Quick Add Customer Modal */}
+      <Modal
+        isOpen={showQuickAddModal}
+        onClose={() => setShowQuickAddModal(false)}
+        title="Quick Walk-in Customer"
+        description="Register a walk-in customer with canonical phone normalization."
+        footer={
+          <>
+            <Button variant="secondary" size="sm" onClick={() => setShowQuickAddModal(false)}>
+              Cancel
+            </Button>
+            <Button variant="primary" size="sm" onClick={handleQuickCreateCustomer}>
+              Register Customer
+            </Button>
+          </>
+        }
+      >
+        <form onSubmit={handleQuickCreateCustomer} className="space-y-3">
+          <Input
+            label="Full Name"
+            requiredIndicator
+            placeholder="e.g. Arjun Rajan"
+            value={quickCustomer.fullName}
+            onChange={(e) => setQuickCustomer({ ...quickCustomer, fullName: e.target.value })}
+            required
+          />
+          <Input
+            label="Primary Phone"
+            requiredIndicator
+            placeholder="e.g. 077 123 4567"
+            value={quickCustomer.primaryPhone}
+            onChange={(e) => setQuickCustomer({ ...quickCustomer, primaryPhone: e.target.value })}
+            helperText="Normalized to canonical E.164 (+94...)"
+            required
+          />
+          <Input
+            label="City"
+            placeholder="e.g. Jaffna"
+            value={quickCustomer.city}
+            onChange={(e) => setQuickCustomer({ ...quickCustomer, city: e.target.value })}
+          />
+          <Input
+            label="Customer Notes"
+            placeholder="Relevant customer preferences or additional information"
+            value={quickCustomer.notes}
+            onChange={(e) => setQuickCustomer({ ...quickCustomer, notes: e.target.value })}
+          />
+        </form>
+      </Modal>
 
-              <form onSubmit={handleQuickCustomerSubmit} className="space-y-4 pt-4 text-xs">
-                <div>
-                  <label className="block font-bold text-gray-700 mb-1">Full Name *</label>
-                  <input
-                    type="text"
-                    required
-                    value={quickCustomer.fullName}
-                    onChange={(e) => setQuickCustomer({ ...quickCustomer, fullName: e.target.value })}
-                    placeholder="e.g. Kasun Perera"
-                    className="w-full px-3 py-2 rounded-xl border border-gray-300"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-bold text-gray-700 mb-1">Primary Phone *</label>
-                  <input
-                    type="text"
-                    required
-                    value={quickCustomer.primaryPhone}
-                    onChange={(e) => setQuickCustomer({ ...quickCustomer, primaryPhone: e.target.value })}
-                    placeholder="e.g. 077 123 4567"
-                    className="w-full px-3 py-2 rounded-xl border border-gray-300 font-mono"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block font-bold text-gray-700 mb-1">Email (Optional)</label>
-                    <input
-                      type="email"
-                      value={quickCustomer.email}
-                      onChange={(e) => setQuickCustomer({ ...quickCustomer, email: e.target.value })}
-                      placeholder="kasun@example.com"
-                      className="w-full px-3 py-2 rounded-xl border border-gray-300"
-                    />
-                  </div>
-                  <div>
-                    <label className="block font-bold text-gray-700 mb-1">City (Optional)</label>
-                    <input
-                      type="text"
-                      value={quickCustomer.city}
-                      onChange={(e) => setQuickCustomer({ ...quickCustomer, city: e.target.value })}
-                      placeholder="Colombo"
-                      className="w-full px-3 py-2 rounded-xl border border-gray-300"
-                    />
-                  </div>
-                </div>
-
-                <div className="pt-3 border-t border-gray-100 flex justify-end space-x-2">
-                  <button
-                    type="button"
-                    onClick={() => setShowQuickAddModal(false)}
-                    className="px-4 py-2 border border-gray-300 rounded-xl text-gray-700 font-bold"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="px-5 py-2 bg-[#0D3826] hover:bg-[#1B6543] text-white font-bold rounded-xl"
-                  >
-                    Register & Start Sale
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
-
-        {/* Edit Price Modal */}
-        {editingLineId && (
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-2xl max-w-sm w-full p-5 shadow-xl border border-gray-200 space-y-4">
-              <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider">
-                Adjust Negotiated Price
-              </h4>
-              <input
-                type="number"
-                step="0.01"
-                value={editPriceValue}
-                onChange={(e) => setEditPriceValue(e.target.value)}
-                className="w-full text-base font-black px-3 py-2 rounded-xl border border-gray-300 font-mono"
-              />
-              <div className="flex justify-end space-x-2 text-xs">
-                <button
-                  type="button"
-                  onClick={() => setEditingLineId(null)}
-                  className="px-3 py-1.5 border border-gray-300 rounded-lg font-bold text-gray-600"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleUpdateLinePrice}
-                  className="px-4 py-1.5 bg-[#0D3826] text-white rounded-lg font-bold"
-                >
-                  Save Price
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
+      {/* Edit Line Negotiated Price Modal */}
+      <Modal
+        isOpen={editingLineId !== null}
+        onClose={() => setEditingLineId(null)}
+        title="Adjust Negotiated Selling Price"
+        description="Modify the agreed selling price for this jewellery piece."
+        footer={
+          <>
+            <Button variant="secondary" size="sm" onClick={() => setEditingLineId(null)}>
+              Cancel
+            </Button>
+            <Button variant="primary" size="sm" onClick={handleUpdateLinePrice}>
+              Update Price
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          <Input
+            label="Negotiated Selling Price"
+            unit={currency}
+            type="number"
+            step="0.01"
+            placeholder="Enter the agreed selling price"
+            value={editPriceValue}
+            onChange={(e) => setEditPriceValue(e.target.value)}
+            requiredIndicator
+            required
+          />
+        </div>
+      </Modal>
     </AppLayout>
   );
 }

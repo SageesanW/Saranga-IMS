@@ -68,7 +68,7 @@ export default function BulkImportPage() {
               You do not have the required permission (<code>INVENTORY_BULK_IMPORT</code>) to access bulk inventory import.
             </p>
             <div className="mt-4">
-              <Link href="/inventory" className="text-sm text-[#0D3826] font-semibold underline">
+              <Link href="/inventory" className="text-sm text-[#123B32] font-semibold underline">
                 Return to Inventory
               </Link>
             </div>
@@ -161,13 +161,13 @@ export default function BulkImportPage() {
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-gray-200 pb-4">
           <div>
             <div className="flex items-center space-x-2 text-xs text-gray-500 mb-1">
-              <Link href="/inventory" className="hover:text-[#0D3826] transition">Inventory</Link>
+              <Link href="/inventory" className="hover:text-[#123B32] transition">Inventory</Link>
               <span>/</span>
               <span className="text-gray-900 font-medium">Bulk Import</span>
             </div>
-            <h1 className="text-2xl font-serif font-bold text-[#0D3826] flex items-center gap-2">
+            <h1 className="text-2xl font-serif font-bold text-[#123B32] flex items-center gap-2">
               <span>Bulk Inventory Import</span>
-              <span className="text-xs bg-[#D4AF37]/20 text-[#0D3826] font-semibold px-2 py-0.5 rounded-full border border-[#D4AF37]/40">
+              <span className="text-xs bg-[#B89A60]/20 text-[#123B32] font-semibold px-2 py-0.5 rounded-full border border-[#B89A60]/40">
                 Excel & CSV
               </span>
             </h1>
@@ -191,7 +191,7 @@ export default function BulkImportPage() {
           <div className="flex items-center justify-between max-w-3xl mx-auto">
             <div className="flex items-center space-x-2">
               <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${
-                currentStep === 'branch_template' ? 'bg-[#0D3826] text-white ring-4 ring-[#0D3826]/10' : 'bg-green-100 text-[#0D3826]'
+                currentStep === 'branch_template' ? 'bg-[#123B32] text-white ring-4 ring-[#123B32]/10' : 'bg-green-100 text-[#123B32]'
               }`}>
                 1
               </div>
@@ -201,8 +201,8 @@ export default function BulkImportPage() {
 
             <div className="flex items-center space-x-2">
               <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${
-                currentStep === 'upload' ? 'bg-[#0D3826] text-white ring-4 ring-[#0D3826]/10' :
-                currentStep === 'branch_template' ? 'bg-gray-100 text-gray-500' : 'bg-green-100 text-[#0D3826]'
+                currentStep === 'upload' ? 'bg-[#123B32] text-white ring-4 ring-[#123B32]/10' :
+                currentStep === 'branch_template' ? 'bg-gray-100 text-gray-500' : 'bg-green-100 text-[#123B32]'
               }`}>
                 2
               </div>
@@ -212,8 +212,8 @@ export default function BulkImportPage() {
 
             <div className="flex items-center space-x-2">
               <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${
-                currentStep === 'validation' ? 'bg-[#0D3826] text-white ring-4 ring-[#0D3826]/10' :
-                (currentStep === 'confirm' || currentStep === 'summary') ? 'bg-green-100 text-[#0D3826]' : 'bg-gray-100 text-gray-500'
+                currentStep === 'validation' ? 'bg-[#123B32] text-white ring-4 ring-[#123B32]/10' :
+                (currentStep === 'confirm' || currentStep === 'summary') ? 'bg-green-100 text-[#123B32]' : 'bg-gray-100 text-gray-500'
               }`}>
                 3
               </div>
@@ -223,8 +223,8 @@ export default function BulkImportPage() {
 
             <div className="flex items-center space-x-2">
               <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${
-                currentStep === 'confirm' ? 'bg-[#0D3826] text-white ring-4 ring-[#0D3826]/10' :
-                currentStep === 'summary' ? 'bg-green-100 text-[#0D3826]' : 'bg-gray-100 text-gray-500'
+                currentStep === 'confirm' ? 'bg-[#123B32] text-white ring-4 ring-[#123B32]/10' :
+                currentStep === 'summary' ? 'bg-green-100 text-[#123B32]' : 'bg-gray-100 text-gray-500'
               }`}>
                 4
               </div>
@@ -234,7 +234,7 @@ export default function BulkImportPage() {
 
             <div className="flex items-center space-x-2">
               <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${
-                currentStep === 'summary' ? 'bg-[#0D3826] text-white ring-4 ring-[#0D3826]/10' : 'bg-gray-100 text-gray-500'
+                currentStep === 'summary' ? 'bg-[#123B32] text-white ring-4 ring-[#123B32]/10' : 'bg-gray-100 text-gray-500'
               }`}>
                 5
               </div>
@@ -247,7 +247,7 @@ export default function BulkImportPage() {
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-800 p-4 rounded-xl text-xs flex items-start justify-between shadow-sm">
             <div className="flex items-start gap-2">
-              <span className="text-base">⚠️</span>
+              
               <div>
                 <strong className="font-semibold">Import Error: </strong>
                 <span>{error}</span>
@@ -262,7 +262,7 @@ export default function BulkImportPage() {
           <div className="space-y-6">
             <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm space-y-4">
               <h2 className="text-sm font-bold text-gray-900 uppercase tracking-wider flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-[#0D3826]" />
+                <span className="w-2.5 h-2.5 rounded-full bg-[#123B32]" />
                 Step 1: Select Target Branch
               </h2>
               <p className="text-xs text-gray-600">
@@ -274,7 +274,7 @@ export default function BulkImportPage() {
                 <select
                   value={selectedBranchId}
                   onChange={(e) => setSelectedBranchId(e.target.value)}
-                  className="w-full text-xs border border-gray-300 rounded-lg p-2.5 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-[#0D3826] focus:border-transparent outline-none transition"
+                  className="w-full text-xs border border-gray-300 rounded-lg p-2.5 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-[#123B32] focus:border-transparent outline-none transition"
                 >
                   <option value="">-- Select Branch --</option>
                   {branches.map(b => (
@@ -289,7 +289,7 @@ export default function BulkImportPage() {
             {/* Template Download Cards */}
             <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm space-y-4">
               <h2 className="text-sm font-bold text-gray-900 uppercase tracking-wider flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-[#D4AF37]" />
+                <span className="w-2.5 h-2.5 rounded-full bg-[#B89A60]" />
                 Download Import Templates
               </h2>
               <p className="text-xs text-gray-600">
@@ -297,12 +297,12 @@ export default function BulkImportPage() {
               </p>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="border border-green-200 bg-green-50/40 rounded-xl p-4 flex flex-col justify-between hover:border-[#0D3826] transition">
+                <div className="border border-green-200 bg-green-50/40 rounded-xl p-4 flex flex-col justify-between hover:border-[#123B32] transition">
                   <div>
                     <div className="flex items-center space-x-2">
-                      <span className="text-xl">📊</span>
-                      <h3 className="text-sm font-bold text-[#0D3826]">Excel Template (.xlsx)</h3>
-                      <span className="text-[10px] bg-[#0D3826] text-white px-1.5 py-0.5 rounded font-semibold">Recommended</span>
+                      
+                      <h3 className="text-sm font-bold text-[#123B32]">Excel Template (.xlsx)</h3>
+                      <span className="text-[10px] bg-[#123B32] text-white px-1.5 py-0.5 rounded font-semibold">Recommended</span>
                     </div>
                     <p className="text-xs text-gray-600 mt-2">
                       Includes formatted columns, sample jewellery items, and a dedicated Instructions sheet explaining codes and units.
@@ -310,7 +310,7 @@ export default function BulkImportPage() {
                   </div>
                   <button
                     onClick={() => handleDownloadTemplate('xlsx')}
-                    className="mt-4 w-full bg-[#0D3826] hover:bg-[#124b33] text-white text-xs font-semibold py-2.5 px-4 rounded-lg shadow-sm transition flex items-center justify-center gap-2"
+                    className="mt-4 w-full bg-[#123B32] hover:bg-[#124b33] text-white text-xs font-semibold py-2.5 px-4 rounded-lg shadow-sm transition flex items-center justify-center gap-2"
                   >
                     <span>⬇</span>
                     <span>Download Saranga_Inventory_Import_Template.xlsx</span>
@@ -320,7 +320,7 @@ export default function BulkImportPage() {
                 <div className="border border-gray-200 bg-gray-50/50 rounded-xl p-4 flex flex-col justify-between hover:border-gray-400 transition">
                   <div>
                     <div className="flex items-center space-x-2">
-                      <span className="text-xl">📄</span>
+                      
                       <h3 className="text-sm font-bold text-gray-800">CSV Template (.csv)</h3>
                       <span className="text-[10px] bg-gray-200 text-gray-700 px-1.5 py-0.5 rounded font-semibold">Standard</span>
                     </div>
@@ -357,7 +357,7 @@ export default function BulkImportPage() {
                   onClick={() => setCurrentStep('upload')}
                   className={`text-xs font-bold py-2.5 px-6 rounded-lg shadow-sm transition flex items-center gap-2 ${
                     selectedBranchId
-                      ? 'bg-[#0D3826] hover:bg-[#124b33] text-white'
+                      ? 'bg-[#123B32] hover:bg-[#124b33] text-white'
                       : 'bg-gray-300 text-gray-500 cursor-not-allowed'
                   }`}
                 >
@@ -375,7 +375,7 @@ export default function BulkImportPage() {
             <div className="flex justify-between items-center border-b border-gray-100 pb-3">
               <div>
                 <h2 className="text-sm font-bold text-gray-900 uppercase tracking-wider flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-full bg-[#0D3826]" />
+                  <span className="w-2.5 h-2.5 rounded-full bg-[#123B32]" />
                   Step 2: Upload Excel or CSV File
                 </h2>
                 <p className="text-xs text-gray-500 mt-0.5">
@@ -395,8 +395,8 @@ export default function BulkImportPage() {
               onClick={() => fileInputRef.current?.click()}
               className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition ${
                 selectedFile
-                  ? 'border-[#0D3826] bg-green-50/20'
-                  : 'border-gray-300 hover:border-[#0D3826] hover:bg-gray-50/50'
+                  ? 'border-[#123B32] bg-green-50/20'
+                  : 'border-gray-300 hover:border-[#123B32] hover:bg-gray-50/50'
               }`}
             >
               <input
@@ -407,14 +407,14 @@ export default function BulkImportPage() {
                 className="hidden"
               />
 
-              <div className="text-4xl mb-3">📁</div>
+              
               {selectedFile ? (
                 <div>
-                  <p className="text-sm font-bold text-[#0D3826]">{selectedFile.name}</p>
+                  <p className="text-sm font-bold text-[#123B32]">{selectedFile.name}</p>
                   <p className="text-xs text-gray-500 mt-1">
                     Size: {(selectedFile.size / 1024).toFixed(1)} KB • Type: {selectedFile.name.endsWith('.xlsx') ? 'Excel' : 'CSV'}
                   </p>
-                  <span className="inline-block mt-3 text-xs bg-[#0D3826] text-white px-3 py-1 rounded-full font-medium">
+                  <span className="inline-block mt-3 text-xs bg-[#123B32] text-white px-3 py-1 rounded-full font-medium">
                     Click to replace file
                   </span>
                 </div>
@@ -443,7 +443,7 @@ export default function BulkImportPage() {
                 onClick={handleValidateFile}
                 className={`text-xs font-bold py-2.5 px-6 rounded-lg shadow-sm transition flex items-center gap-2 ${
                   selectedFile && !isLoading
-                    ? 'bg-[#0D3826] hover:bg-[#124b33] text-white'
+                    ? 'bg-[#123B32] hover:bg-[#124b33] text-white'
                     : 'bg-gray-300 text-gray-500 cursor-not-allowed'
                 }`}
               >
@@ -473,7 +473,7 @@ export default function BulkImportPage() {
                 : 'bg-red-50 border-red-200 text-red-900'
             }`}>
               <div className="flex items-start gap-3">
-                <span className="text-2xl">{validationResult.isAllValid ? '✅' : '⚠️'}</span>
+                <span className="text-2xl">{validationResult.isAllValid ? '' : ''}</span>
                 <div>
                   <h3 className="text-base font-bold">
                     {validationResult.isAllValid
@@ -526,7 +526,7 @@ export default function BulkImportPage() {
                   onClick={() => setActiveTab('valid')}
                   className={`text-xs font-bold px-4 py-2 border-b-2 transition ${
                     activeTab === 'valid'
-                      ? 'border-[#0D3826] text-[#0D3826] bg-white rounded-t-lg'
+                      ? 'border-[#123B32] text-[#123B32] bg-white rounded-t-lg'
                       : 'border-transparent text-gray-500 hover:text-gray-800'
                   }`}
                 >
@@ -591,7 +591,7 @@ export default function BulkImportPage() {
                           <td className="py-2.5 px-3 text-gray-700">{row.purityCode}</td>
                           <td className="py-2.5 px-3 text-right font-mono">{row.grossWeight.toFixed(4)}</td>
                           <td className="py-2.5 px-3 text-right font-mono text-gray-500">{row.stoneWeight.toFixed(4)}</td>
-                          <td className="py-2.5 px-3 text-right font-mono font-semibold text-[#0D3826]">{row.netWeight.toFixed(4)}</td>
+                          <td className="py-2.5 px-3 text-right font-mono font-semibold text-[#123B32]">{row.netWeight.toFixed(4)}</td>
                           <td className="py-2.5 px-3">
                             <span className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded text-[11px] font-mono">
                               {row.stockLocationCode}
@@ -624,7 +624,7 @@ export default function BulkImportPage() {
               {validationResult.isAllValid ? (
                 <button
                   onClick={() => setCurrentStep('confirm')}
-                  className="bg-[#0D3826] hover:bg-[#124b33] text-white text-xs font-bold py-2.5 px-6 rounded-lg shadow-sm transition flex items-center gap-2"
+                  className="bg-[#123B32] hover:bg-[#124b33] text-white text-xs font-bold py-2.5 px-6 rounded-lg shadow-sm transition flex items-center gap-2"
                 >
                   <span>Proceed to Confirmation</span>
                   <span>→</span>
@@ -650,7 +650,7 @@ export default function BulkImportPage() {
         {currentStep === 'confirm' && validationResult && (
           <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm space-y-6">
             <h2 className="text-sm font-bold text-gray-900 uppercase tracking-wider flex items-center gap-2 border-b border-gray-100 pb-3">
-              <span className="w-2.5 h-2.5 rounded-full bg-[#0D3826]" />
+              <span className="w-2.5 h-2.5 rounded-full bg-[#123B32]" />
               Step 4: Confirm Atomic Stock Creation
             </h2>
 
@@ -665,13 +665,13 @@ export default function BulkImportPage() {
               </div>
               <div className="border border-gray-200 rounded-lg p-3 bg-gray-50">
                 <span className="text-xs text-gray-500">Items to Digitize</span>
-                <p className="text-sm font-bold text-[#0D3826] mt-1">{validationResult.validRows} Physical Jewellery Items</p>
+                <p className="text-sm font-bold text-[#123B32] mt-1">{validationResult.validRows} Physical Jewellery Items</p>
               </div>
             </div>
 
             <div className="bg-amber-50/70 border border-amber-200 rounded-lg p-4 text-xs text-amber-900 space-y-2">
               <div className="font-bold flex items-center gap-2">
-                <span>🛡️</span> Transactional Safety & Idempotency:
+                 Transactional Safety & Idempotency:
               </div>
               <p>
                 Clicking confirm will commit all <strong>{validationResult.validRows}</strong> jewellery items inside a single atomic database transaction.
@@ -696,7 +696,7 @@ export default function BulkImportPage() {
                 onClick={handleConfirmImport}
                 className={`text-xs font-bold py-3 px-8 rounded-lg shadow-sm transition flex items-center gap-2 ${
                   !isSubmitting
-                    ? 'bg-[#0D3826] hover:bg-[#124b33] text-white ring-2 ring-[#D4AF37]/50'
+                    ? 'bg-[#123B32] hover:bg-[#124b33] text-white ring-2 ring-[#B89A60]/50'
                     : 'bg-gray-400 text-white cursor-not-allowed'
                 }`}
               >
@@ -708,7 +708,7 @@ export default function BulkImportPage() {
                 ) : (
                   <>
                     <span>Confirm & Digitize {validationResult.validRows} Items</span>
-                    <span>✓</span>
+                    ✓
                   </>
                 )}
               </button>
@@ -720,10 +720,10 @@ export default function BulkImportPage() {
         {currentStep === 'summary' && importResult && (
           <div className="space-y-6">
             <div className="bg-green-50 border border-green-200 rounded-xl p-6 text-center space-y-3 shadow-sm">
-              <div className="w-12 h-12 bg-[#0D3826] text-white rounded-full flex items-center justify-center text-xl mx-auto shadow-md">
+              <div className="w-12 h-12 bg-[#123B32] text-white rounded-full flex items-center justify-center text-xl mx-auto shadow-md">
                 ✓
               </div>
-              <h2 className="text-xl font-serif font-bold text-[#0D3826]">
+              <h2 className="text-xl font-serif font-bold text-[#123B32]">
                 Bulk Import Completed Successfully!
               </h2>
               <p className="text-xs text-gray-700 max-w-lg mx-auto">
@@ -747,7 +747,7 @@ export default function BulkImportPage() {
                 </h3>
                 <Link
                   href="/inventory"
-                  className="text-xs text-[#0D3826] hover:underline font-semibold"
+                  className="text-xs text-[#123B32] hover:underline font-semibold"
                 >
                   View in Inventory List →
                 </Link>
@@ -769,10 +769,10 @@ export default function BulkImportPage() {
                     {importResult.createdItems.map((item) => (
                       <tr key={item.id} className="hover:bg-gray-50/50 transition">
                         <td className="py-2.5 px-3 font-medium text-gray-900">{item.itemName}</td>
-                        <td className="py-2.5 px-3 font-mono font-bold text-[#0D3826]">{item.tagNumber}</td>
+                        <td className="py-2.5 px-3 font-mono font-bold text-[#123B32]">{item.tagNumber}</td>
                         <td className="py-2.5 px-3 font-mono text-gray-600">{item.barcode}</td>
                         <td className="py-2.5 px-3 text-right font-mono">{item.grossWeight.toFixed(4)}</td>
-                        <td className="py-2.5 px-3 text-right font-mono font-semibold text-[#0D3826]">{item.netWeight.toFixed(4)}</td>
+                        <td className="py-2.5 px-3 text-right font-mono font-semibold text-[#123B32]">{item.netWeight.toFixed(4)}</td>
                         <td className="py-2.5 px-3">
                           <span className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded text-[11px] font-mono">
                             {item.stockLocationCode}
@@ -801,7 +801,7 @@ export default function BulkImportPage() {
 
               <Link
                 href="/inventory"
-                className="bg-[#0D3826] hover:bg-[#124b33] text-white text-xs font-bold py-2.5 px-6 rounded-lg shadow-sm transition"
+                className="bg-[#123B32] hover:bg-[#124b33] text-white text-xs font-bold py-2.5 px-6 rounded-lg shadow-sm transition"
               >
                 Go to Inventory Management
               </Link>

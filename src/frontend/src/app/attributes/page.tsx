@@ -344,7 +344,7 @@ export default function AttributesPage() {
           <div>
             <h1 className="text-2xl font-bold tracking-tight text-gray-900 flex items-center space-x-2">
               <span>Attributes Master</span>
-              <span className="text-xs px-2.5 py-0.5 rounded-full font-semibold bg-[#0D3826]/10 text-[#0D3826] border border-[#0D3826]/20">
+              <span className="text-xs px-2.5 py-0.5 rounded-full font-semibold bg-[#123B32]/10 text-[#123B32] border border-[#123B32]/20">
                 Module 3
               </span>
             </h1>
@@ -356,7 +356,7 @@ export default function AttributesPage() {
           {activeTab !== 'methods' && canCreate && (
             <button
               onClick={handleOpenCreateModal}
-              className="inline-flex items-center space-x-2 px-4 py-2 bg-[#0D3826] hover:bg-[#1B6543] text-white text-sm font-semibold rounded-lg shadow-sm border border-[#D4AF37]/50 transition"
+              className="inline-flex items-center space-x-2 px-4 py-2 bg-[#123B32] hover:bg-[#1B6543] text-white text-sm font-semibold rounded-lg shadow-sm border border-[#B89A60]/50 transition"
             >
               <span>+</span>
               <span>
@@ -393,12 +393,12 @@ export default function AttributesPage() {
         <div className="border-b border-gray-200">
           <nav className="-mb-px flex space-x-6 overflow-x-auto">
             {[
-              { id: 'materials', label: 'Materials', icon: '🪙' },
-              { id: 'categories', label: 'Categories', icon: '🏷️' },
-              { id: 'purities', label: 'Purities / Karats', icon: '✨' },
-              { id: 'specifications', label: 'Specifications & Options', icon: '⚙️' },
-              { id: 'locations', label: 'Stock & Display Locations', icon: '📍' },
-              { id: 'methods', label: 'Making Charge Methods', icon: '📐' },
+              { id: 'materials', label: 'Materials', icon: '' },
+              { id: 'categories', label: 'Categories', icon: '' },
+              { id: 'purities', label: 'Purities / Karats', icon: '' },
+              { id: 'specifications', label: 'Specifications & Options', icon: '' },
+              { id: 'locations', label: 'Stock & Display Locations', icon: '' },
+              { id: 'methods', label: 'Making Charge Methods', icon: '' },
             ].map((tab) => (
               <button
                 key={tab.id}
@@ -409,7 +409,7 @@ export default function AttributesPage() {
                 }}
                 className={`whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm flex items-center space-x-2 transition ${
                   activeTab === tab.id
-                    ? 'border-[#0D3826] text-[#0D3826] font-bold'
+                    ? 'border-[#123B32] text-[#123B32] font-bold'
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                 }`}
               >
@@ -426,10 +426,10 @@ export default function AttributesPage() {
             <div className="flex flex-1 items-center space-x-3 w-full sm:w-auto">
               <input
                 type="text"
-                placeholder="Search by name or code..."
+                placeholder="Search by name, code or reference"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="w-full sm:w-72 px-3 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-1 focus:ring-[#0D3826] focus:border-[#0D3826]"
+                className="w-full sm:w-72 px-3 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-1 focus:ring-[#123B32] focus:border-[#123B32]"
               />
 
               {activeTab === 'locations' && (
@@ -438,7 +438,7 @@ export default function AttributesPage() {
                   <select
                     value={selectedBranchId}
                     onChange={(e) => setSelectedBranchId(e.target.value)}
-                    className="px-2 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-1 focus:ring-[#0D3826] bg-white font-medium"
+                    className="px-2 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-1 focus:ring-[#123B32] bg-white font-medium"
                   >
                     {user?.isGlobalAdmin && <option value="">All Branches</option>}
                     {branches.map((b) => (
@@ -457,7 +457,7 @@ export default function AttributesPage() {
                   type="checkbox"
                   checked={showInactive}
                   onChange={(e) => setShowInactive(e.target.checked)}
-                  className="rounded border-gray-300 text-[#0D3826] focus:ring-[#0D3826]"
+                  className="rounded border-gray-300 text-[#123B32] focus:ring-[#123B32]"
                 />
                 <span>Show Inactive</span>
               </label>
@@ -476,7 +476,7 @@ export default function AttributesPage() {
         {activeTab === 'materials' && (
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
             <table className="min-w-full divide-y divide-gray-200 text-left text-xs">
-              <thead className="bg-[#0D3826]/5 text-gray-700 font-bold uppercase tracking-wider">
+              <thead className="bg-[#123B32]/5 text-gray-700 font-bold uppercase tracking-wider">
                 <tr>
                   <th className="px-4 py-3">Material Name</th>
                   <th className="px-4 py-3">Code</th>
@@ -496,7 +496,7 @@ export default function AttributesPage() {
                   .map((m) => (
                     <tr key={m.id} className="hover:bg-gray-50/80 transition">
                       <td className="px-4 py-3 font-semibold text-gray-900">{m.name}</td>
-                      <td className="px-4 py-3 font-mono font-bold text-[#0D3826]">{m.code}</td>
+                      <td className="px-4 py-3 font-mono font-bold text-[#123B32]">{m.code}</td>
                       <td className="px-4 py-3 text-gray-500">{m.description || '—'}</td>
                       <td className="px-4 py-3 text-center text-gray-600 font-mono">{m.sortOrder}</td>
                       <td className="px-4 py-3 text-center">
@@ -512,7 +512,7 @@ export default function AttributesPage() {
                         {canEdit && (
                           <button
                             onClick={() => handleOpenEditModal(m)}
-                            className="text-[#0D3826] hover:underline font-semibold"
+                            className="text-[#123B32] hover:underline font-semibold"
                           >
                             Edit
                           </button>
@@ -544,7 +544,7 @@ export default function AttributesPage() {
         {activeTab === 'categories' && (
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
             <table className="min-w-full divide-y divide-gray-200 text-left text-xs">
-              <thead className="bg-[#0D3826]/5 text-gray-700 font-bold uppercase tracking-wider">
+              <thead className="bg-[#123B32]/5 text-gray-700 font-bold uppercase tracking-wider">
                 <tr>
                   <th className="px-4 py-3">Category Name</th>
                   <th className="px-4 py-3">Code</th>
@@ -564,7 +564,7 @@ export default function AttributesPage() {
                   .map((c) => (
                     <tr key={c.id} className="hover:bg-gray-50/80 transition">
                       <td className="px-4 py-3 font-semibold text-gray-900">{c.name}</td>
-                      <td className="px-4 py-3 font-mono font-bold text-[#0D3826]">{c.code}</td>
+                      <td className="px-4 py-3 font-mono font-bold text-[#123B32]">{c.code}</td>
                       <td className="px-4 py-3 text-gray-500">{c.description || '—'}</td>
                       <td className="px-4 py-3 text-center text-gray-600 font-mono">{c.sortOrder}</td>
                       <td className="px-4 py-3 text-center">
@@ -580,7 +580,7 @@ export default function AttributesPage() {
                         {canEdit && (
                           <button
                             onClick={() => handleOpenEditModal(c)}
-                            className="text-[#0D3826] hover:underline font-semibold"
+                            className="text-[#123B32] hover:underline font-semibold"
                           >
                             Edit
                           </button>
@@ -612,7 +612,7 @@ export default function AttributesPage() {
         {activeTab === 'purities' && (
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
             <table className="min-w-full divide-y divide-gray-200 text-left text-xs">
-              <thead className="bg-[#0D3826]/5 text-gray-700 font-bold uppercase tracking-wider">
+              <thead className="bg-[#123B32]/5 text-gray-700 font-bold uppercase tracking-wider">
                 <tr>
                   <th className="px-4 py-3">Purity / Display Name</th>
                   <th className="px-4 py-3">Code</th>
@@ -633,7 +633,7 @@ export default function AttributesPage() {
                   .map((p) => (
                     <tr key={p.id} className="hover:bg-gray-50/80 transition">
                       <td className="px-4 py-3 font-semibold text-gray-900">{p.name}</td>
-                      <td className="px-4 py-3 font-mono font-bold text-[#0D3826]">{p.code}</td>
+                      <td className="px-4 py-3 font-mono font-bold text-[#123B32]">{p.code}</td>
                       <td className="px-4 py-3 text-center font-mono font-bold text-amber-700">
                         {p.karatValue.toFixed(1)}K
                       </td>
@@ -654,7 +654,7 @@ export default function AttributesPage() {
                         {canEdit && (
                           <button
                             onClick={() => handleOpenEditModal(p)}
-                            className="text-[#0D3826] hover:underline font-semibold"
+                            className="text-[#123B32] hover:underline font-semibold"
                           >
                             Edit
                           </button>
@@ -693,10 +693,10 @@ export default function AttributesPage() {
               )
               .map((s) => (
                 <div key={s.id} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                  <div className="bg-[#0D3826]/5 px-4 py-3 flex items-center justify-between border-b border-gray-200">
+                  <div className="bg-[#123B32]/5 px-4 py-3 flex items-center justify-between border-b border-gray-200">
                     <div className="flex items-center space-x-3">
                       <span className="font-bold text-gray-900 text-sm">{s.name}</span>
-                      <span className="font-mono text-xs font-bold text-[#0D3826] bg-[#0D3826]/10 px-2 py-0.5 rounded">
+                      <span className="font-mono text-xs font-bold text-[#123B32] bg-[#123B32]/10 px-2 py-0.5 rounded">
                         {s.code}
                       </span>
                       <span
@@ -720,7 +720,7 @@ export default function AttributesPage() {
                             setOptionSortOrder('0');
                             setIsOptionModalOpen(true);
                           }}
-                          className="px-2.5 py-1 text-xs bg-[#D4AF37] hover:bg-[#b89528] text-white font-semibold rounded shadow-sm transition"
+                          className="px-2.5 py-1 text-xs bg-[#B89A60] hover:bg-[#b89528] text-white font-semibold rounded shadow-sm transition"
                         >
                           + Add Option
                         </button>
@@ -728,7 +728,7 @@ export default function AttributesPage() {
                       {canEdit && (
                         <button
                           onClick={() => handleOpenEditModal(s)}
-                          className="text-xs text-[#0D3826] hover:underline font-semibold"
+                          className="text-xs text-[#123B32] hover:underline font-semibold"
                         >
                           Edit
                         </button>
@@ -800,7 +800,7 @@ export default function AttributesPage() {
         {activeTab === 'locations' && (
           <div className="space-y-3">
             <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800 flex items-start space-x-2">
-              <span className="text-sm">🛡️</span>
+              
               <div>
                 <span className="font-bold">Branch Isolation Enforced:</span> Display and stock locations belong strictly to their parent branch. Items stored in a location can only be accessed or transacted within that branch.
               </div>
@@ -808,7 +808,7 @@ export default function AttributesPage() {
 
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
               <table className="min-w-full divide-y divide-gray-200 text-left text-xs">
-                <thead className="bg-[#0D3826]/5 text-gray-700 font-bold uppercase tracking-wider">
+                <thead className="bg-[#123B32]/5 text-gray-700 font-bold uppercase tracking-wider">
                   <tr>
                     <th className="px-4 py-3">Location Name</th>
                     <th className="px-4 py-3">Code</th>
@@ -829,7 +829,7 @@ export default function AttributesPage() {
                     .map((l) => (
                       <tr key={l.id} className="hover:bg-gray-50/80 transition">
                         <td className="px-4 py-3 font-semibold text-gray-900">{l.name}</td>
-                        <td className="px-4 py-3 font-mono font-bold text-[#0D3826]">{l.code}</td>
+                        <td className="px-4 py-3 font-mono font-bold text-[#123B32]">{l.code}</td>
                         <td className="px-4 py-3 font-semibold text-gray-700">
                           {l.branchCode} - {l.branchName}
                         </td>
@@ -862,7 +862,7 @@ export default function AttributesPage() {
                           {canEdit && (
                             <button
                               onClick={() => handleOpenEditModal(l)}
-                              className="text-[#0D3826] hover:underline font-semibold"
+                              className="text-[#123B32] hover:underline font-semibold"
                             >
                               Edit
                             </button>
@@ -895,7 +895,7 @@ export default function AttributesPage() {
         {activeTab === 'methods' && (
           <div className="space-y-4">
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-              <div className="bg-[#0D3826]/5 px-4 py-3 border-b border-gray-200">
+              <div className="bg-[#123B32]/5 px-4 py-3 border-b border-gray-200">
                 <h3 className="font-bold text-gray-900 text-sm">Supported Making Charge Methods</h3>
                 <p className="text-xs text-gray-500 mt-0.5">
                   Saranga Jewellery System calculates making charges using the confirmed methods below. Charge rates and VAT calculation are configured under Module 9.
@@ -923,7 +923,7 @@ export default function AttributesPage() {
                           </span>
                         )}
                       </td>
-                      <td className="px-4 py-3 font-mono font-bold text-[#0D3826]">{m.code}</td>
+                      <td className="px-4 py-3 font-mono font-bold text-[#123B32]">{m.code}</td>
                       <td className="px-4 py-3 text-gray-700 font-medium">
                         {m.code === 'PER_GRAM' ? 'Standard Jewellery (Gold/Silver)' : 'Custom/Artistic Pieces'}
                       </td>
@@ -945,7 +945,7 @@ export default function AttributesPage() {
         {isModalOpen && (
           <div className="fixed inset-0 z-50 overflow-y-auto bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
             <div className="bg-white rounded-xl shadow-xl max-w-md w-full overflow-hidden border border-gray-200 animate-in fade-in zoom-in-95 duration-150">
-              <div className="bg-[#0D3826] px-6 py-4 text-white flex items-center justify-between">
+              <div className="bg-[#123B32] px-6 py-4 text-white flex items-center justify-between">
                 <h3 className="font-bold text-sm tracking-wide">
                   {editingItem ? 'Edit' : 'Create'}{' '}
                   {activeTab === 'materials'
@@ -972,7 +972,7 @@ export default function AttributesPage() {
                       value={formBranchId}
                       onChange={(e) => setFormBranchId(e.target.value)}
                       required
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-1 focus:ring-[#0D3826]"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-1 focus:ring-[#123B32]"
                     >
                       <option value="">Select a branch...</option>
                       {branches.map((b) => (
@@ -991,8 +991,8 @@ export default function AttributesPage() {
                     required
                     value={formName}
                     onChange={(e) => setFormName(e.target.value)}
-                    placeholder="e.g. 22K Gold, Necklaces, Diamond Clarity..."
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-1 focus:ring-[#0D3826]"
+                    placeholder="e.g. 22K Yellow Gold, Traditional Necklaces"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-1 focus:ring-[#123B32]"
                   />
                 </div>
 
@@ -1004,8 +1004,8 @@ export default function AttributesPage() {
                       required
                       value={formCode}
                       onChange={(e) => setFormCode(e.target.value)}
-                      placeholder="e.g. GOLD-22K, NECK, DISP-01..."
-                      className="w-full px-3 py-2 font-mono border border-gray-300 rounded-lg uppercase focus:ring-1 focus:ring-[#0D3826]"
+                      placeholder="e.g. GOLD-22K, NKL, DISP-01"
+                      className="w-full px-3 py-2 font-mono border border-gray-300 rounded-lg uppercase focus:ring-1 focus:ring-[#123B32]"
                     />
                     <p className="text-[10px] text-gray-400 mt-1">Codes must be unique and cannot be changed once created.</p>
                   </div>
@@ -1023,7 +1023,7 @@ export default function AttributesPage() {
                         value={formKaratValue}
                         onChange={(e) => setFormKaratValue(e.target.value)}
                         placeholder="22.0"
-                        className="w-full px-3 py-2 font-mono border border-gray-300 rounded-lg focus:ring-1 focus:ring-[#0D3826]"
+                        className="w-full px-3 py-2 font-mono border border-gray-300 rounded-lg focus:ring-1 focus:ring-[#123B32]"
                       />
                     </div>
                     <div>
@@ -1035,7 +1035,7 @@ export default function AttributesPage() {
                         value={formPurityPercentage}
                         onChange={(e) => setFormPurityPercentage(e.target.value)}
                         placeholder="91.67"
-                        className="w-full px-3 py-2 font-mono border border-gray-300 rounded-lg focus:ring-1 focus:ring-[#0D3826]"
+                        className="w-full px-3 py-2 font-mono border border-gray-300 rounded-lg focus:ring-1 focus:ring-[#123B32]"
                       />
                     </div>
                   </div>
@@ -1048,7 +1048,7 @@ export default function AttributesPage() {
                     <select
                       value={formLocationType}
                       onChange={(e) => setFormLocationType(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-1 focus:ring-[#0D3826]"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-1 focus:ring-[#123B32]"
                     >
                       <option value="DISPLAY">Display Showcase (Default)</option>
                       <option value="VAULT">Vault / Safe</option>
@@ -1065,8 +1065,8 @@ export default function AttributesPage() {
                     rows={2}
                     value={formDesc}
                     onChange={(e) => setFormDesc(e.target.value)}
-                    placeholder="Optional description or operational notes..."
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-1 focus:ring-[#0D3826]"
+                    placeholder="Describe the attribute or operational purpose"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-1 focus:ring-[#123B32]"
                   />
                 </div>
 
@@ -1077,7 +1077,7 @@ export default function AttributesPage() {
                       type="number"
                       value={formSortOrder}
                       onChange={(e) => setFormSortOrder(e.target.value)}
-                      className="w-full px-3 py-2 font-mono border border-gray-300 rounded-lg focus:ring-1 focus:ring-[#0D3826]"
+                      className="w-full px-3 py-2 font-mono border border-gray-300 rounded-lg focus:ring-1 focus:ring-[#123B32]"
                     />
                   </div>
 
@@ -1087,7 +1087,7 @@ export default function AttributesPage() {
                         type="checkbox"
                         checked={formIsActive}
                         onChange={(e) => setFormIsActive(e.target.checked)}
-                        className="rounded border-gray-300 text-[#0D3826] focus:ring-[#0D3826]"
+                        className="rounded border-gray-300 text-[#123B32] focus:ring-[#123B32]"
                       />
                       <span>Active for selection</span>
                     </label>
@@ -1104,7 +1104,7 @@ export default function AttributesPage() {
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 bg-[#0D3826] hover:bg-[#1B6543] text-white rounded-lg font-semibold shadow-sm border border-[#D4AF37]/50"
+                    className="px-4 py-2 bg-[#123B32] hover:bg-[#1B6543] text-white rounded-lg font-semibold shadow-sm border border-[#B89A60]/50"
                   >
                     {editingItem ? 'Save Changes' : 'Create'}
                   </button>
@@ -1118,7 +1118,7 @@ export default function AttributesPage() {
         {isOptionModalOpen && activeSpecForOption && (
           <div className="fixed inset-0 z-50 overflow-y-auto bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
             <div className="bg-white rounded-xl shadow-xl max-w-sm w-full overflow-hidden border border-gray-200 animate-in fade-in zoom-in-95 duration-150">
-              <div className="bg-[#0D3826] px-5 py-3 text-white flex items-center justify-between">
+              <div className="bg-[#123B32] px-5 py-3 text-white flex items-center justify-between">
                 <div>
                   <h3 className="font-bold text-xs tracking-wide">Add Specification Option</h3>
                   <p className="text-[10px] text-gray-300">Spec: {activeSpecForOption.name}</p>
@@ -1137,7 +1137,7 @@ export default function AttributesPage() {
                     value={optionValue}
                     onChange={(e) => setOptionValue(e.target.value)}
                     placeholder="e.g. VVS1, Round Brilliant, Size 7..."
-                    className="w-full px-3 py-1.5 border border-gray-300 rounded-lg focus:ring-1 focus:ring-[#0D3826]"
+                    className="w-full px-3 py-1.5 border border-gray-300 rounded-lg focus:ring-1 focus:ring-[#123B32]"
                   />
                 </div>
 
@@ -1149,7 +1149,7 @@ export default function AttributesPage() {
                     value={optionCode}
                     onChange={(e) => setOptionCode(e.target.value)}
                     placeholder="e.g. VVS1, RND, SZ-07..."
-                    className="w-full px-3 py-1.5 font-mono uppercase border border-gray-300 rounded-lg focus:ring-1 focus:ring-[#0D3826]"
+                    className="w-full px-3 py-1.5 font-mono uppercase border border-gray-300 rounded-lg focus:ring-1 focus:ring-[#123B32]"
                   />
                 </div>
 
@@ -1159,8 +1159,8 @@ export default function AttributesPage() {
                     type="text"
                     value={optionDesc}
                     onChange={(e) => setOptionDesc(e.target.value)}
-                    placeholder="Optional details..."
-                    className="w-full px-3 py-1.5 border border-gray-300 rounded-lg focus:ring-1 focus:ring-[#0D3826]"
+                    placeholder="Describe the option or operational purpose"
+                    className="w-full px-3 py-1.5 border border-gray-300 rounded-lg focus:ring-1 focus:ring-[#123B32]"
                   />
                 </div>
 
@@ -1170,7 +1170,7 @@ export default function AttributesPage() {
                     type="number"
                     value={optionSortOrder}
                     onChange={(e) => setOptionSortOrder(e.target.value)}
-                    className="w-full px-3 py-1.5 font-mono border border-gray-300 rounded-lg focus:ring-1 focus:ring-[#0D3826]"
+                    className="w-full px-3 py-1.5 font-mono border border-gray-300 rounded-lg focus:ring-1 focus:ring-[#123B32]"
                   />
                 </div>
 
@@ -1184,7 +1184,7 @@ export default function AttributesPage() {
                   </button>
                   <button
                     type="submit"
-                    className="px-3 py-1.5 bg-[#0D3826] hover:bg-[#1B6543] text-white rounded-lg font-semibold shadow-sm"
+                    className="px-3 py-1.5 bg-[#123B32] hover:bg-[#1B6543] text-white rounded-lg font-semibold shadow-sm"
                   >
                     Add Option
                   </button>

@@ -1,13 +1,48 @@
 'use client';
 
-import React, { useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { useBranch } from '@/lib/branch-context';
+import {
+  LayoutDashboard,
+  Receipt,
+  Users,
+  Gem,
+  Layers,
+  UploadCloud,
+  ClipboardCheck,
+  Sliders,
+  Wallet,
+  Coins,
+  TrendingUp,
+  Percent,
+  Building2,
+  UserCheck,
+  ShieldCheck,
+  LogOut,
+  ChevronDown,
+  Menu,
+  X,
+  CreditCard,
+  Store,
+  Clock,
+} from 'lucide-react';
+import { shiftApi, Shift } from '@/lib/api';
 
 interface AppLayoutProps {
   children: React.ReactNode;
+}
+
+interface NavSection {
+  title: string;
+  items: {
+    name: string;
+    href: string;
+    icon: React.ElementType;
+    permission?: string;
+  }[];
 }
 
 export default function AppLayout({ children }: AppLayoutProps) {
@@ -16,18 +51,36 @@ export default function AppLayout({ children }: AppLayoutProps) {
   const pathname = usePathname();
   const router = useRouter();
 
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [activeShift, setActiveShift] = useState<Shift | null>(null);
+  const [shiftLoading, setShiftLoading] = useState(false);
+
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
       router.push('/login');
     }
   }, [authLoading, isAuthenticated, router]);
 
+  // Load active shift status for top bar context
+  useEffect(() => {
+    if (isAuthenticated) {
+      setShiftLoading(true);
+      shiftApi
+        .getActiveCashierShift()
+        .then((shift: Shift | null) => setActiveShift(shift))
+        .catch(() => setActiveShift(null))
+        .finally(() => setShiftLoading(false));
+    }
+  }, [isAuthenticated, pathname]);
+
   if (authLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="flex flex-col items-center space-y-4">
-          <div className="w-12 h-12 border-4 border-[#0D3826] border-t-[#D4AF37] rounded-full animate-spin"></div>
-          <p className="text-sm font-semibold text-gray-700 tracking-wide uppercase">Loading Saranga Jewellery System...</p>
+      <div className="min-h-screen flex items-center justify-center bg-[#F8F7F4]">
+        <div className="flex flex-col items-center space-y-3.5">
+          <div className="w-10 h-10 border-3 border-[#123B32] border-t-[#B89A60] rounded-full animate-spin" />
+          <p className="text-xs font-semibold text-[#123B32] tracking-wider uppercase">
+            Loading Saranga Jewellery...
+          </p>
         </div>
       </div>
     );
@@ -37,174 +90,253 @@ export default function AppLayout({ children }: AppLayoutProps) {
     return null;
   }
 
-  const primaryRole = user.roles[0] || (user.isGlobalAdmin ? 'Owner / Super Admin' : 'User');
+  const primaryRole = user.roles[0] || (user.isGlobalAdmin ? 'Owner / Super Admin' : 'Staff');
 
-  const navLinks = [
-    { name: 'Dashboard', href: '/dashboard', icon: '📊' },
-    { name: 'Branches', href: '/branches', icon: '🏢' },
-    { name: 'Users', href: '/users', icon: '👥' },
-    { name: 'Roles & Permissions', href: '/roles', icon: '🛡️' },
-    { name: 'Attributes Master', href: '/attributes', icon: '💎' },
-    { name: 'Inventory & Barcode', href: '/inventory', icon: '📦' },
-    { name: 'Inventory Count', href: '/inventory/count', icon: '📋' },
-    { name: 'Metal Rates', href: '/rates', icon: '🪙' },
-    { name: 'VAT Configuration', href: '/vat', icon: '🏷️' },
-    { name: 'Customers', href: '/customers', icon: '👤' },
-    { name: 'Shifts', href: '/shifts', icon: '💵' },
-    { name: 'Cash Ledger', href: '/cash-ledger', icon: '🪙' },
-    { name: 'POS Terminal', href: '/pos', icon: '🧾' },
-  ];
-
-  const upcomingModules = [
-    { name: 'Sales Verification', icon: '🔍' },
-    { name: 'Audit Logs', icon: '📜' },
+  const navSections: NavSection[] = [
+    {
+      title: 'Overview',
+      items: [
+        { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+      ],
+    },
+    {
+      title: 'Sales & Customers',
+      items: [
+        { name: 'POS Terminal', href: '/pos', icon: Receipt },
+        { name: 'Customers', href: '/customers', icon: Users },
+      ],
+    },
+    {
+      title: 'Inventory',
+      items: [
+        { name: 'Jewellery Items', href: '/inventory', icon: Gem },
+        { name: 'Assemblies & Sets', href: '/inventory/compositions/new', icon: Layers },
+        { name: 'Bulk Import', href: '/inventory/import', icon: UploadCloud },
+        { name: 'Physical Count', href: '/inventory/count', icon: ClipboardCheck },
+        { name: 'Attributes Master', href: '/attributes', icon: Sliders },
+      ],
+    },
+    {
+      title: 'Cash Operations',
+      items: [
+        { name: 'Shifts & Drawers', href: '/shifts', icon: Wallet },
+        { name: 'Cash Ledger', href: '/cash-ledger', icon: Coins },
+      ],
+    },
+    {
+      title: 'Configuration',
+      items: [
+        { name: 'Metal Rates', href: '/rates', icon: TrendingUp },
+        { name: 'VAT Settings', href: '/vat', icon: Percent },
+        { name: 'Branches', href: '/branches', icon: Building2 },
+        { name: 'Staff Users', href: '/users', icon: UserCheck },
+        { name: 'Roles & Permissions', href: '/roles', icon: ShieldCheck },
+      ],
+    },
   ];
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
-      {/* Top Header Bar */}
-      <header className="bg-[#0D3826] text-white border-b border-[#D4AF37]/30 shadow-md sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          {/* Logo & Brand */}
-          <div className="flex items-center space-x-3">
-            <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-[#D4AF37] to-[#946E1E] flex items-center justify-center text-white font-bold text-lg shadow">
+    <div className="min-h-screen bg-[#F8F7F4] flex">
+      {/* Mobile Sidebar Overlay */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm lg:hidden transition-opacity"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
+      {/* Sidebar Navigation */}
+      <aside
+        className={`
+          fixed top-0 bottom-0 left-0 z-50 w-64 bg-[#0B2822] text-white flex flex-col border-r border-[#123B32] transition-transform duration-200 ease-in-out
+          lg:translate-x-0 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
+        `}
+      >
+        {/* Brand Header */}
+        <div className="h-16 flex items-center justify-between px-5 border-b border-[#123B32]/80 bg-[#061713]">
+          <Link href="/dashboard" className="flex items-center space-x-2.5">
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#B89A60] to-[#7D6336] flex items-center justify-center text-white font-bold text-sm shadow-sm">
               S
             </div>
             <div>
-              <div className="flex items-center space-x-2">
-                <span className="text-lg font-bold tracking-tight text-white">SARANGA</span>
-                <span className="text-xs px-1.5 py-0.5 rounded bg-[#D4AF37]/20 text-[#D4AF37] border border-[#D4AF37]/40 font-medium">
+              <div className="flex items-center space-x-1.5">
+                <span className="text-sm font-bold tracking-wider text-white">SARANGA</span>
+                <span className="text-[10px] px-1.5 py-0.2 rounded bg-[#B89A60]/20 text-[#B89A60] font-semibold border border-[#B89A60]/30">
                   JEWELLERY
                 </span>
               </div>
-              <p className="text-[10px] text-gray-300 tracking-wider uppercase">Enterprise Management System</p>
+              <p className="text-[9px] text-gray-400 tracking-wider uppercase">Enterprise Management</p>
             </div>
-          </div>
+          </Link>
 
-          {/* Right Section: Branch Switcher & User Profile */}
-          <div className="flex items-center space-x-4">
-            {/* Active Branch Selector */}
-            <div className="flex items-center space-x-2 bg-[#1B6543]/60 px-3 py-1.5 rounded-lg border border-[#D4AF37]/30">
-              <span className="text-sm">📍</span>
-              <div className="flex flex-col">
-                <span className="text-[10px] uppercase font-bold text-[#D4AF37] tracking-wider leading-none">Branch Context</span>
-                <select
-                  value={activeBranchId || ''}
-                  onChange={(e) => setActiveBranch(e.target.value || null)}
-                  className="bg-transparent text-xs text-white font-medium focus:outline-none cursor-pointer pr-2"
-                >
-                  {branches.length === 0 && <option value="" className="text-gray-800">No branches</option>}
-                  {branches.map((b) => (
-                    <option key={b.id} value={b.id} className="text-gray-900">
-                      {b.code} - {b.name} ({b.currencyCode}){!b.isActive ? ' [Inactive]' : ''}
-                    </option>
-                  ))}
-                  {user.isGlobalAdmin && (
-                    <option value="" className="text-gray-900">🌐 All Branches (Global Oversight)</option>
-                  )}
-                </select>
+          <button
+            onClick={() => setSidebarOpen(false)}
+            className="lg:hidden p-1 text-gray-400 hover:text-white rounded-md"
+            aria-label="Close menu"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Navigation Sections */}
+        <div className="flex-1 overflow-y-auto px-3.5 py-4 space-y-5">
+          {navSections.map((section, idx) => (
+            <div key={idx}>
+              <p className="px-2.5 mb-1.5 text-[10px] font-semibold tracking-wider text-[#B89A60] uppercase">
+                {section.title}
+              </p>
+              <nav className="space-y-0.5">
+                {section.items.map((item) => {
+                  const Icon = item.icon;
+                  const isActive =
+                    pathname === item.href ||
+                    (item.href !== '/dashboard' && pathname.startsWith(item.href));
+
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      onClick={() => setSidebarOpen(false)}
+                      className={`
+                        flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs font-medium transition-colors select-none
+                        ${
+                          isActive
+                            ? 'bg-[#123B32] text-white shadow-sm border border-[#B89A60]/30 font-semibold'
+                            : 'text-gray-300 hover:bg-white/5 hover:text-white'
+                        }
+                      `}
+                    >
+                      <Icon
+                        className={`w-4 h-4 flex-shrink-0 ${
+                          isActive ? 'text-[#B89A60]' : 'text-gray-400'
+                        }`}
+                      />
+                      <span className="truncate">{item.name}</span>
+                    </Link>
+                  );
+                })}
+              </nav>
+            </div>
+          ))}
+        </div>
+
+        {/* Sidebar Footer: Active User & Logout */}
+        <div className="p-3.5 border-t border-[#123B32] bg-[#061713]/80">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2.5 min-w-0">
+              <div className="w-8 h-8 rounded-full bg-[#123B32] border border-[#B89A60]/40 flex items-center justify-center text-xs font-bold text-[#B89A60] flex-shrink-0">
+                {user.fullName.charAt(0)}
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-semibold text-white truncate">{user.fullName}</p>
+                <p className="text-[10px] text-gray-400 truncate">{primaryRole}</p>
               </div>
             </div>
 
-            {/* User Profile Pill */}
-            <div className="hidden md:flex items-center space-x-3 pl-2 border-l border-white/20">
-              <div className="text-right">
-                <div className="text-xs font-semibold text-white">{user.fullName || user.username}</div>
-                <div className="flex items-center justify-end space-x-1">
-                  <span className="text-[10px] px-1.5 py-0.2 rounded font-medium bg-[#D4AF37] text-[#0D3826]">
-                    {primaryRole}
-                  </span>
-                  {user.isGlobalAdmin && (
-                    <span className="text-[10px] px-1.5 py-0.2 rounded font-medium bg-emerald-500 text-white">
-                      Global
-                    </span>
-                  )}
-                </div>
-              </div>
-              <div className="w-8 h-8 rounded-full bg-[#1B6543] border border-[#D4AF37]/50 flex items-center justify-center text-xs font-bold text-[#D4AF37]">
-                {(user.fullName || user.username).substring(0, 2).toUpperCase()}
-              </div>
-            </div>
-
-            {/* Logout Button */}
             <button
-              onClick={() => {
-                logout();
-                router.push('/login');
-              }}
+              onClick={() => logout()}
               title="Sign Out"
-              className="text-xs bg-red-950/60 hover:bg-red-900 text-red-200 border border-red-800/60 px-3 py-1.5 rounded-md font-medium transition"
+              className="p-1.5 rounded-md text-gray-400 hover:text-rose-400 hover:bg-rose-950/30 transition-colors"
             >
-              Sign Out
+              <LogOut className="w-4 h-4" />
             </button>
           </div>
         </div>
-      </header>
+      </aside>
 
-      {/* Main Body with Sidebar */}
-      <div className="flex-1 flex max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 gap-6">
-        {/* Sidebar */}
-        <aside className="w-64 flex-shrink-0">
-          <nav className="bg-white rounded-xl shadow-sm border border-gray-200 p-3 space-y-6">
-            <div>
-              <p className="px-3 text-[11px] font-bold uppercase tracking-wider text-gray-400 mb-2">Core Modules</p>
-              <ul className="space-y-1">
-                {navLinks.map((link) => {
-                  const isActive = pathname === link.href || pathname.startsWith(link.href + '/');
-                  return (
-                    <li key={link.href}>
-                      <Link
-                        href={link.href}
-                        className={`flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-semibold transition ${
-                          isActive
-                            ? 'bg-[#0D3826] text-white shadow-sm'
-                            : 'text-gray-700 hover:bg-gray-100 hover:text-gray-900'
-                        }`}
-                      >
-                        <span className="text-base">{link.icon}</span>
-                        <span>{link.name}</span>
-                      </Link>
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
+      {/* Main Content Area */}
+      <div className="flex-1 flex flex-col lg:pl-64 min-w-0">
+        {/* Top Header Bar */}
+        <header className="h-16 bg-white border-b border-[#E2E6E3] sticky top-0 z-30 flex items-center justify-between px-4 sm:px-6 shadow-xs">
+          {/* Left: Mobile Menu Toggle & Branch Context */}
+          <div className="flex items-center space-x-3 sm:space-x-4">
+            <button
+              onClick={() => setSidebarOpen(true)}
+              className="lg:hidden p-2 rounded-lg text-gray-600 hover:bg-gray-100 focus:outline-none"
+              aria-label="Open menu"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
 
-            <div>
-              <p className="px-3 text-[11px] font-bold uppercase tracking-wider text-gray-400 mb-2">Upcoming Modules</p>
-              <ul className="space-y-1">
-                {upcomingModules.map((mod) => (
-                  <li key={mod.name}>
-                    <div className="flex items-center justify-between px-3 py-1.5 rounded-lg text-xs font-medium text-gray-400 cursor-not-allowed">
-                      <span className="flex items-center space-x-2">
-                        <span>{mod.icon}</span>
-                        <span>{mod.name}</span>
-                      </span>
-                      <span className="text-[9px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded border border-gray-200">
-                        Upcoming
-                      </span>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            {/* Current Active Context Footer */}
-            <div className="pt-3 border-t border-gray-100 px-2 text-[11px] text-gray-500">
-              <div className="flex justify-between items-center mb-1">
-                <span className="font-semibold text-gray-700">Currency:</span>
-                <span className="font-bold text-[#0D3826]">{activeBranch?.currencyCode || 'LKR (Rs.)'}</span>
+            {/* Active Branch Selector */}
+            <div className="flex items-center space-x-2 bg-[#F8F7F4] px-3 py-1.5 rounded-lg border border-[#E2E6E3]">
+              <Store className="w-4 h-4 text-[#123B32] flex-shrink-0" />
+              <div className="flex flex-col">
+                <span className="text-[9px] uppercase font-bold text-[#69736E] tracking-wider leading-none">
+                  Branch
+                </span>
+                <select
+                  value={activeBranchId || ''}
+                  onChange={(e) => setActiveBranch(e.target.value || null)}
+                  className="bg-transparent text-xs text-[#202824] font-semibold focus:outline-none cursor-pointer pr-1"
+                >
+                  {branches.length === 0 && <option value="">No branches</option>}
+                  {branches.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.code} - {b.name} ({b.currencyCode})
+                    </option>
+                  ))}
+                </select>
               </div>
-              <div className="flex justify-between items-center">
-                <span className="font-semibold text-gray-700">Time Zone:</span>
-                <span className="text-gray-600">{activeBranch?.timeZone || 'Asia/Colombo'}</span>
+              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#123B32]/10 text-[#123B32] border border-[#123B32]/20">
+                {activeBranch?.currencyCode || 'LKR'}
+              </span>
+            </div>
+          </div>
+
+          {/* Right: Active Shift Badge & Staff Profile */}
+          <div className="flex items-center space-x-3 sm:space-x-4">
+            {/* Contextual Active Shift Indicator */}
+            {activeShift ? (
+              <Link
+                href="/shifts"
+                className="flex items-center space-x-2 px-3 py-1.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 hover:bg-emerald-100 transition-colors"
+                title={`Active Shift #${activeShift.shiftNumber} in ${activeShift.cashDrawerName}`}
+              >
+                <span className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse" />
+                <div className="text-left hidden sm:block">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-900 leading-none">
+                    Shift Active
+                  </p>
+                  <p className="text-xs font-semibold text-emerald-700 leading-tight">
+                    {activeShift.cashDrawerCode || activeShift.cashDrawerName}
+                  </p>
+                </div>
+              </Link>
+            ) : (
+              <Link
+                href="/shifts"
+                className="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 hover:bg-amber-100 transition-colors text-xs font-medium"
+              >
+                <Clock className="w-3.5 h-3.5 text-amber-700" />
+                <span className="hidden sm:inline">No Active Shift</span>
+              </Link>
+            )}
+
+            {/* Quick POS Action */}
+            <Link
+              href="/pos"
+              className="hidden md:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#123B32] hover:bg-[#0B2822] text-white text-xs font-semibold shadow-xs transition-colors"
+            >
+              <CreditCard className="w-3.5 h-3.5 text-[#B89A60]" />
+              <span>Open POS</span>
+            </Link>
+
+            {/* User Profile Chip */}
+            <div className="flex items-center space-x-2 pl-2 border-l border-[#E2E6E3]">
+              <div className="w-8 h-8 rounded-full bg-[#123B32] text-white flex items-center justify-center text-xs font-bold border border-[#B89A60]/30">
+                {user.fullName.charAt(0)}
+              </div>
+              <div className="hidden sm:block text-left">
+                <p className="text-xs font-semibold text-[#202824] leading-tight">{user.fullName}</p>
+                <p className="text-[10px] text-[#69736E] leading-tight">{primaryRole}</p>
               </div>
             </div>
-          </nav>
-        </aside>
+          </div>
+        </header>
 
-        {/* Content Area */}
-        <main className="flex-1 min-w-0">
+        {/* Content Body Container */}
+        <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto">
           {children}
         </main>
       </div>

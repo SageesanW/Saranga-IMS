@@ -157,9 +157,9 @@ export default function UsersPage() {
               setSuccessMsg(null);
               setIsAddModalOpen(true);
             }}
-            className="inline-flex items-center justify-center space-x-2 bg-[#0D3826] hover:bg-[#1B6543] text-white px-4 py-2.5 rounded-lg text-sm font-semibold shadow-sm transition border border-[#D4AF37]/50"
+            className="inline-flex items-center justify-center space-x-2 bg-[#123B32] hover:bg-[#1B6543] text-white px-4 py-2.5 rounded-lg text-sm font-semibold shadow-sm transition border border-[#B89A60]/50"
           >
-            <span>➕</span>
+            
             <span>Create User</span>
           </button>
         </div>
@@ -178,10 +178,10 @@ export default function UsersPage() {
             <label className="block text-[11px] font-semibold text-gray-500 uppercase mb-1">Search</label>
             <input
               type="text"
-              placeholder="Username, email, name..."
+              placeholder="Search by name, username or email"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full px-3 py-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-[#0D3826]"
+              className="w-full px-3 py-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-[#123B32]"
             />
           </div>
           <div>
@@ -189,7 +189,7 @@ export default function UsersPage() {
             <select
               value={selectedBranchId}
               onChange={(e) => setSelectedBranchId(e.target.value)}
-              className="w-full px-3 py-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-[#0D3826]"
+              className="w-full px-3 py-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-[#123B32]"
             >
               <option value="">All Branches</option>
               {branches.map((b) => (
@@ -202,7 +202,7 @@ export default function UsersPage() {
             <select
               value={selectedRoleId}
               onChange={(e) => setSelectedRoleId(e.target.value)}
-              className="w-full px-3 py-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-[#0D3826]"
+              className="w-full px-3 py-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-[#123B32]"
             >
               <option value="">All Roles</option>
               {roles.map((r) => (
@@ -215,7 +215,7 @@ export default function UsersPage() {
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="w-full px-3 py-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-[#0D3826]"
+              className="w-full px-3 py-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-[#123B32]"
             >
               <option value="">All Statuses</option>
               <option value="true">Active</option>
@@ -250,7 +250,7 @@ export default function UsersPage() {
                       <tr key={u.id} className="hover:bg-gray-50/80 transition">
                         <td className="px-6 py-4">
                           <div className="flex items-center space-x-3">
-                            <div className="w-8 h-8 rounded-full bg-[#0D3826] text-[#D4AF37] font-bold text-xs flex items-center justify-center">
+                            <div className="w-8 h-8 rounded-full bg-[#123B32] text-[#B89A60] font-bold text-xs flex items-center justify-center">
                               {u.username.substring(0, 2).toUpperCase()}
                             </div>
                             <div>
@@ -393,10 +393,10 @@ export default function UsersPage() {
                   <input
                     type="text"
                     required
-                    placeholder="e.g. jaffna_cashier1"
+                    placeholder="e.g. cashier.jaffna"
                     value={newUser.username}
                     onChange={(e) => setNewUser({ ...newUser, username: e.target.value })}
-                    className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-[#0D3826] outline-none"
+                    className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-[#123B32] outline-none"
                   />
                 </div>
                 <div>
@@ -404,10 +404,10 @@ export default function UsersPage() {
                   <input
                     type="text"
                     required
-                    placeholder="e.g. Sivanathan Raman"
+                    placeholder="Enter the staff member's full name"
                     value={newUser.fullName}
                     onChange={(e) => setNewUser({ ...newUser, fullName: e.target.value })}
-                    className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-[#0D3826] outline-none"
+                    className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-[#123B32] outline-none"
                   />
                 </div>
               </div>
@@ -418,10 +418,10 @@ export default function UsersPage() {
                   <input
                     type="email"
                     required
-                    placeholder="staff@sarangajewellery.lk"
+                    placeholder="e.g. staff@example.com"
                     value={newUser.email}
                     onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
-                    className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-[#0D3826] outline-none"
+                    className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-[#123B32] outline-none"
                   />
                 </div>
                 <div>
@@ -430,10 +430,10 @@ export default function UsersPage() {
                     type="password"
                     required
                     minLength={8}
-                    placeholder="Min 8 characters"
+                    placeholder="Enter a secure password (min 8 characters)"
                     value={newUser.password}
                     onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
-                    className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-[#0D3826] outline-none"
+                    className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-[#123B32] outline-none"
                   />
                 </div>
               </div>
@@ -456,7 +456,7 @@ export default function UsersPage() {
                               setNewUser({ ...newUser, roleIds: newUser.roleIds.filter((id) => id !== r.id) });
                             }
                           }}
-                          className="rounded text-[#0D3826]"
+                          className="rounded text-[#123B32]"
                         />
                         <span className="font-medium">{r.name}</span>
                       </label>
@@ -487,7 +487,7 @@ export default function UsersPage() {
                               });
                             }
                           }}
-                          className="rounded text-[#0D3826]"
+                          className="rounded text-[#123B32]"
                         />
                         <span className="font-mono font-bold text-gray-900">{b.code}</span>
                         <span className="text-gray-600 truncate">{b.name}</span>
@@ -503,7 +503,7 @@ export default function UsersPage() {
                 <select
                   value={newUser.defaultBranchId}
                   onChange={(e) => setNewUser({ ...newUser, defaultBranchId: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-[#0D3826] outline-none"
+                  className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-[#123B32] outline-none"
                 >
                   <option value="">Select Default Branch</option>
                   {branches
@@ -522,7 +522,7 @@ export default function UsersPage() {
                     id="isGlobalAdmin"
                     checked={newUser.isGlobalAdmin}
                     onChange={(e) => setNewUser({ ...newUser, isGlobalAdmin: e.target.checked })}
-                    className="w-4 h-4 text-[#0D3826] rounded"
+                    className="w-4 h-4 text-[#123B32] rounded"
                   />
                   <div>
                     <label htmlFor="isGlobalAdmin" className="text-xs font-bold text-amber-900 cursor-pointer">
@@ -544,7 +544,7 @@ export default function UsersPage() {
                 <button
                   type="submit"
                   disabled={createMutation.isPending}
-                  className="px-4 py-2 text-xs font-semibold text-white bg-[#0D3826] hover:bg-[#1B6543] rounded-lg shadow-sm border border-[#D4AF37]/50"
+                  className="px-4 py-2 text-xs font-semibold text-white bg-[#123B32] hover:bg-[#1B6543] rounded-lg shadow-sm border border-[#B89A60]/50"
                 >
                   {createMutation.isPending ? 'Creating...' : 'Create User'}
                 </button>
@@ -591,7 +591,7 @@ export default function UsersPage() {
                   required
                   value={editingUser.fullName}
                   onChange={(e) => setEditingUser({ ...editingUser, fullName: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-[#0D3826] outline-none"
+                  className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-[#123B32] outline-none"
                 />
               </div>
 
@@ -602,7 +602,7 @@ export default function UsersPage() {
                   required
                   value={editingUser.email}
                   onChange={(e) => setEditingUser({ ...editingUser, email: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-[#0D3826] outline-none"
+                  className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-[#123B32] outline-none"
                 />
               </div>
 
@@ -611,7 +611,7 @@ export default function UsersPage() {
                 <select
                   value={editingUser.defaultBranchId || ''}
                   onChange={(e) => setEditingUser({ ...editingUser, defaultBranchId: e.target.value || null })}
-                  className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-[#0D3826] outline-none"
+                  className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-[#123B32] outline-none"
                 >
                   <option value="">None</option>
                   {branches
@@ -633,7 +633,7 @@ export default function UsersPage() {
                 <button
                   type="submit"
                   disabled={updateMutation.isPending}
-                  className="px-4 py-2 text-xs font-semibold text-white bg-[#0D3826] hover:bg-[#1B6543] rounded-lg shadow-sm border border-[#D4AF37]/50"
+                  className="px-4 py-2 text-xs font-semibold text-white bg-[#123B32] hover:bg-[#1B6543] rounded-lg shadow-sm border border-[#B89A60]/50"
                 >
                   {updateMutation.isPending ? 'Saving...' : 'Save Changes'}
                 </button>
@@ -671,7 +671,7 @@ export default function UsersPage() {
                             const targetRoleIds = roles.filter((role) => newRoles.includes(role.name)).map((role) => role.id);
                             assignRolesMutation.mutate({ id: accessModalUser.id, roleIds: targetRoleIds });
                           }}
-                          className="rounded text-[#0D3826]"
+                          className="rounded text-[#123B32]"
                         />
                         <span className="font-semibold text-gray-900">{r.name}</span>
                         <span className="text-[11px] text-gray-400 truncate">{r.description}</span>
@@ -702,7 +702,7 @@ export default function UsersPage() {
                               defaultBranchId: accessModalUser.defaultBranchId,
                             });
                           }}
-                          className="rounded text-[#0D3826]"
+                          className="rounded text-[#123B32]"
                         />
                         <span className="font-mono font-bold text-gray-900">{b.code}</span>
                         <span className="text-gray-700 font-medium">{b.name}</span>
@@ -716,7 +716,7 @@ export default function UsersPage() {
                 <button
                   type="button"
                   onClick={() => setAccessModalUser(null)}
-                  className="px-4 py-2 text-xs font-semibold text-white bg-[#0D3826] rounded-lg"
+                  className="px-4 py-2 text-xs font-semibold text-white bg-[#123B32] rounded-lg"
                 >
                   Done
                 </button>
@@ -762,10 +762,10 @@ export default function UsersPage() {
                   type="password"
                   required
                   minLength={8}
-                  placeholder="Min 8 characters"
+                  placeholder="Enter a secure password (min 8 characters)"
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
-                  className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-[#0D3826] outline-none"
+                  className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-[#123B32] outline-none"
                 />
               </div>
 

@@ -7,8 +7,34 @@ import {
   CreateCustomerRequest,
   UpdateCustomerRequest,
   customerApi,
-  CustomerDuplicateCheckResult
+  CustomerDuplicateCheckResult,
 } from '@/lib/api';
+import { PageHeader } from '@/components/ui/PageHeader';
+import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
+import { Select } from '@/components/ui/Select';
+import { Textarea } from '@/components/ui/Textarea';
+import { Modal } from '@/components/ui/Modal';
+import { Table } from '@/components/ui/Table';
+import { Badge } from '@/components/ui/Badge';
+import { Pagination } from '@/components/ui/Pagination';
+import { EmptyState } from '@/components/ui/EmptyState';
+import {
+  UserPlus,
+  Search,
+  Users,
+  Edit,
+  Power,
+  Eye,
+  CheckCircle2,
+  AlertTriangle,
+  X,
+  Phone,
+  Mail,
+  MapPin,
+  Calendar,
+  FileText,
+} from 'lucide-react';
 
 export default function CustomersPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -31,7 +57,7 @@ export default function CustomersPage() {
 
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [statusReason, setStatusReason] = useState('');
-  const [detailTab, setDetailTab] = useState<'profile' | 'purchases' | 'orders' | 'repairs' | 'oldGold' | 'payments'>('profile');
+  const [detailTab, setDetailTab] = useState<'profile' | 'purchases' | 'orders' | 'repairs' | 'payments'>('profile');
 
   // Add Form State
   const [formData, setFormData] = useState<CreateCustomerRequest>({
@@ -101,65 +127,47 @@ export default function CustomersPage() {
     return () => clearTimeout(handler);
   }, [fetchCustomers]);
 
-  // Duplicate check on phone / email blur
-  const handleCheckDuplicate = async (phone: string, email?: string | null, excludeId?: string | null) => {
-    if (!phone || phone.trim().length < 6) {
-      setDuplicateWarning(null);
-      return;
-    }
+  // Automatic duplicate check on phone blur
+  const checkDuplicatePhone = async (phone: string, excludeId?: string) => {
+    if (!phone || phone.length < 9) return;
     setIsCheckingDuplicate(true);
     try {
-      const res = await customerApi.checkDuplicate(phone.trim(), email?.trim() || null, excludeId);
+      const res = await customerApi.checkDuplicate(phone, undefined, excludeId);
       if (res.isDuplicate) {
         setDuplicateWarning(res);
       } else {
         setDuplicateWarning(null);
       }
-    } catch {
-      // Ignore background check errors
+    } catch (err) {
+      console.error('Duplicate check error:', err);
     } finally {
       setIsCheckingDuplicate(false);
     }
   };
 
-  // Open Add Modal
-  const handleOpenAdd = () => {
-    setFormData({
-      fullName: '',
-      primaryPhone: '',
-      secondaryPhone: '',
-      email: '',
-      addressLine1: '',
-      addressLine2: '',
-      city: '',
-      districtProvince: '',
-      postalCode: '',
-      country: 'Sri Lanka',
-      dateOfBirth: '',
-      notes: '',
-    });
-    setDuplicateWarning(null);
-    setIsAddModalOpen(true);
-  };
-
-  // Submit Add Customer
   const handleCreateCustomer = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.fullName.trim()) {
-      setError('Customer Full Name is required.');
-      return;
-    }
-    if (!formData.primaryPhone.trim()) {
-      setError('Primary Phone is required.');
-      return;
-    }
-
     setSubmitting(true);
     setError(null);
     try {
-      const created = await customerApi.createCustomer(formData);
-      setSuccessMessage(`Customer ${created.fullName} (${created.customerCode}) created successfully.`);
+      await customerApi.createCustomer(formData);
       setIsAddModalOpen(false);
+      setFormData({
+        fullName: '',
+        primaryPhone: '',
+        secondaryPhone: '',
+        email: '',
+        addressLine1: '',
+        addressLine2: '',
+        city: '',
+        districtProvince: '',
+        postalCode: '',
+        country: 'Sri Lanka',
+        dateOfBirth: '',
+        notes: '',
+      });
+      setDuplicateWarning(null);
+      setSuccessMessage('Customer created successfully.');
       fetchCustomers();
     } catch (err: any) {
       setError(err.message || 'Failed to create customer');
@@ -168,7 +176,6 @@ export default function CustomersPage() {
     }
   };
 
-  // Open Edit Modal
   const handleOpenEdit = (c: Customer) => {
     setSelectedCustomer(c);
     setEditFormData({
@@ -182,7 +189,7 @@ export default function CustomersPage() {
       districtProvince: c.districtProvince || '',
       postalCode: c.postalCode || '',
       country: c.country || 'Sri Lanka',
-      dateOfBirth: c.dateOfBirth ? c.dateOfBirth.split('T')[0] : '',
+      dateOfBirth: c.dateOfBirth ? c.dateOfBirth.substring(0, 10) : '',
       notes: c.notes || '',
       rowVersion: c.rowVersion,
     });
@@ -190,1072 +197,649 @@ export default function CustomersPage() {
     setIsEditModalOpen(true);
   };
 
-  // Submit Edit Customer
   const handleUpdateCustomer = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedCustomer) return;
-
     setSubmitting(true);
     setError(null);
     try {
-      const updated = await customerApi.updateCustomer(selectedCustomer.id, editFormData);
-      setSuccessMessage(`Customer ${updated.fullName} updated successfully.`);
+      await customerApi.updateCustomer(selectedCustomer.id, editFormData);
       setIsEditModalOpen(false);
-      if (selectedCustomer.id === updated.id) {
-        setSelectedCustomer(updated);
-      }
+      setSuccessMessage('Customer details updated successfully.');
       fetchCustomers();
     } catch (err: any) {
-      if (err.message && err.message.includes('modified by another user')) {
-        setError('Concurrency Conflict: This record was modified by another user. Please refresh and review.');
-      } else {
-        setError(err.message || 'Failed to update customer');
-      }
+      setError(err.message || 'Failed to update customer');
     } finally {
       setSubmitting(false);
     }
   };
 
-  // Open Detail Drawer
-  const handleOpenDetail = (c: Customer) => {
-    setSelectedCustomer(c);
-    setDetailTab('profile');
-    setIsDetailDrawerOpen(true);
-  };
-
-  // Open Status Modal
   const handleOpenStatusModal = (c: Customer) => {
     setSelectedCustomer(c);
     setStatusReason('');
     setIsStatusModalOpen(true);
   };
 
-  // Toggle Status
   const handleToggleStatus = async () => {
     if (!selectedCustomer) return;
-
+    if (!statusReason.trim()) {
+      setError('A mandatory reason is required to modify customer status.');
+      return;
+    }
     setSubmitting(true);
     setError(null);
     try {
-      const newStatus = !selectedCustomer.isActive;
-      const updated = await customerApi.updateCustomerStatus(selectedCustomer.id, {
-        isActive: newStatus,
-        reason: statusReason.trim() || undefined,
+      await customerApi.updateCustomerStatus(selectedCustomer.id, {
+        isActive: !selectedCustomer.isActive,
+        reason: statusReason,
       });
-      setSuccessMessage(
-        `Customer ${updated.fullName} is now ${newStatus ? 'Active' : 'Inactive'}.`
-      );
+      setSuccessMessage(`Customer ${selectedCustomer.fullName} status updated.`);
       setIsStatusModalOpen(false);
-      setSelectedCustomer(updated);
       fetchCustomers();
     } catch (err: any) {
-      setError(err.message || 'Failed to update customer status');
+      setError(err.message || 'Failed to toggle customer status');
     } finally {
       setSubmitting(false);
     }
   };
 
-  const totalPages = Math.ceil(totalCount / pageSize) || 1;
+  const handleViewDetail = (c: Customer) => {
+    setSelectedCustomer(c);
+    setDetailTab('profile');
+    setIsDetailDrawerOpen(true);
+  };
 
   return (
     <AppLayout>
-      <div className="p-6 max-w-7xl mx-auto space-y-6">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b border-gray-200">
-          <div>
-            <h1 className="text-2xl font-bold text-[#0D3826] flex items-center gap-2">
-              <span>👤</span> Customer Directory
-            </h1>
-            <p className="text-sm text-gray-600 mt-1">
-              Centralized customer registry for POS sales, custom orders, repairs, and transaction history.
-            </p>
+      <PageHeader
+        title="Customer Directory"
+        description="Manage customer profiles, E.164 canonical contact records, and transactional purchase history."
+        actions={
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={() => {
+              setDuplicateWarning(null);
+              setIsAddModalOpen(true);
+            }}
+            leftIcon={<UserPlus className="w-4 h-4" />}
+          >
+            Add Customer
+          </Button>
+        }
+      />
+
+      {/* Notifications */}
+      {successMessage && (
+        <div className="mb-4 p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+            <span>{successMessage}</span>
           </div>
-          <div className="flex items-center gap-3">
-            <button
-              onClick={handleOpenAdd}
-              className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#0D3826] hover:bg-[#134e35] text-white text-sm font-semibold rounded-lg shadow-sm transition border border-[#D4AF37]/40"
-            >
-              <span>+</span> Add Customer
-            </button>
+          <button onClick={() => setSuccessMessage(null)} className="text-emerald-700 hover:text-emerald-900">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {error && (
+        <div className="mb-4 p-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-rose-600 flex-shrink-0" />
+            <span>{error}</span>
           </div>
+          <button onClick={() => setError(null)} className="text-rose-700 hover:text-rose-900">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {/* Search & Filter Toolbar */}
+      <div className="bg-white p-4 rounded-xl border border-[#E2E6E3] shadow-xs mb-5 flex flex-col sm:flex-row items-center justify-between gap-3">
+        <div className="w-full sm:w-96 relative">
+          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-[#69736E]">
+            <Search className="w-4 h-4" />
+          </div>
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="Search by name, phone or customer code"
+            className="w-full pl-9 pr-3.5 py-1.5 text-xs rounded-lg border border-[#E2E6E3] focus:outline-none focus:ring-1 focus:ring-[#123B32] focus:border-[#123B32] text-[#202824] placeholder-gray-400"
+          />
         </div>
 
-        {/* Alerts */}
-        {error && (
-          <div className="p-4 bg-red-50 border-l-4 border-red-500 rounded-md flex items-start justify-between">
-            <div className="flex items-center gap-2 text-sm text-red-700">
-              <span className="font-bold">Error:</span> {error}
-            </div>
-            <button
-              onClick={() => setError(null)}
-              className="text-red-500 hover:text-red-700 font-bold ml-4"
-            >
-              ×
-            </button>
-          </div>
-        )}
-
-        {successMessage && (
-          <div className="p-4 bg-green-50 border-l-4 border-green-500 rounded-md flex items-start justify-between">
-            <div className="flex items-center gap-2 text-sm text-green-700">
-              <span className="font-bold">Success:</span> {successMessage}
-            </div>
-            <button
-              onClick={() => setSuccessMessage(null)}
-              className="text-green-500 hover:text-green-700 font-bold ml-4"
-            >
-              ×
-            </button>
-          </div>
-        )}
-
-        {/* Search & Filters */}
-        <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex flex-col md:flex-row gap-4 items-center justify-between">
-          <div className="w-full md:w-96 relative">
-            <input
-              type="text"
-              placeholder="Search by code (CUS-000001), name, phone, email..."
-              value={searchTerm}
-              onChange={(e) => {
-                setSearchTerm(e.target.value);
-                setPage(1);
-              }}
-              className="w-full pl-9 pr-4 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0D3826] focus:border-transparent"
-            />
-            <span className="absolute left-3 top-2.5 text-gray-400 text-sm">🔍</span>
-          </div>
-
-          <div className="flex items-center gap-2 w-full md:w-auto">
-            <span className="text-xs font-semibold uppercase text-gray-500 tracking-wider">Status:</span>
-            <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-1 text-xs font-medium">
+        <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+          <span className="text-xs font-semibold text-[#69736E]">Status:</span>
+          <div className="inline-flex rounded-lg border border-[#E2E6E3] p-0.5 bg-[#F8F7F4]">
+            {(['active', 'all', 'inactive'] as const).map((filter) => (
               <button
+                key={filter}
                 onClick={() => {
-                  setActiveFilter('all');
+                  setActiveFilter(filter);
                   setPage(1);
                 }}
-                className={`px-3 py-1.5 rounded-md transition ${
-                  activeFilter === 'all'
-                    ? 'bg-white shadow text-[#0D3826] font-bold'
-                    : 'text-gray-600 hover:text-gray-900'
+                className={`px-3 py-1 text-xs font-medium rounded-md capitalize transition-colors ${
+                  activeFilter === filter
+                    ? 'bg-white text-[#123B32] font-semibold shadow-xs'
+                    : 'text-[#69736E] hover:text-[#202824]'
                 }`}
               >
-                All
+                {filter}
               </button>
-              <button
-                onClick={() => {
-                  setActiveFilter('active');
-                  setPage(1);
-                }}
-                className={`px-3 py-1.5 rounded-md transition ${
-                  activeFilter === 'active'
-                    ? 'bg-white shadow text-[#0D3826] font-bold'
-                    : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                Active
-              </button>
-              <button
-                onClick={() => {
-                  setActiveFilter('inactive');
-                  setPage(1);
-                }}
-                className={`px-3 py-1.5 rounded-md transition ${
-                  activeFilter === 'inactive'
-                    ? 'bg-white shadow text-[#0D3826] font-bold'
-                    : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                Inactive
-              </button>
-            </div>
+            ))}
           </div>
         </div>
+      </div>
 
-        {/* Customer Table */}
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm text-gray-600">
-              <thead className="bg-[#0D3826]/5 text-[#0D3826] font-semibold text-xs uppercase tracking-wider border-b border-gray-200">
-                <tr>
-                  <th className="py-3.5 px-4">Customer Code</th>
-                  <th className="py-3.5 px-4">Full Name</th>
-                  <th className="py-3.5 px-4">Primary Phone</th>
-                  <th className="py-3.5 px-4">Email</th>
-                  <th className="py-3.5 px-4">Location</th>
-                  <th className="py-3.5 px-4">Status</th>
-                  <th className="py-3.5 px-4">Created Date</th>
-                  <th className="py-3.5 px-4 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {loading ? (
-                  <tr>
-                    <td colSpan={8} className="text-center py-12 text-gray-500">
-                      <div className="inline-block w-6 h-6 border-2 border-[#0D3826] border-t-transparent rounded-full animate-spin mr-2"></div>
-                      Loading customers...
-                    </td>
-                  </tr>
-                ) : customers.length === 0 ? (
-                  <tr>
-                    <td colSpan={8} className="text-center py-12">
-                      <p className="text-gray-500 font-medium">No customers found</p>
-                      <p className="text-xs text-gray-400 mt-1">
-                        Try adjusting your search query or add your first customer.
-                      </p>
-                    </td>
-                  </tr>
-                ) : (
-                  customers.map((c) => (
-                    <tr key={c.id} className="hover:bg-gray-50/80 transition">
-                      <td className="py-3 px-4 font-mono font-bold text-[#0D3826]">
-                        <span className="bg-[#D4AF37]/15 text-[#0D3826] px-2 py-0.5 rounded text-xs border border-[#D4AF37]/30">
-                          {c.customerCode}
-                        </span>
-                      </td>
-                      <td className="py-3 px-4 font-medium text-gray-900">
-                        {c.fullName}
-                      </td>
-                      <td className="py-3 px-4 font-mono text-xs text-gray-700">
-                        {c.primaryPhone}
-                      </td>
-                      <td className="py-3 px-4 text-xs text-gray-500">
-                        {c.email || '—'}
-                      </td>
-                      <td className="py-3 px-4 text-xs text-gray-600">
-                        {[c.city, c.country].filter(Boolean).join(', ') || '—'}
-                      </td>
-                      <td className="py-3 px-4">
-                        {c.isActive ? (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                            Active
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-600 border border-gray-200">
-                            Inactive
-                          </span>
-                        )}
-                      </td>
-                      <td className="py-3 px-4 text-xs text-gray-500">
-                        {new Date(c.createdAt).toLocaleDateString()}
-                      </td>
-                      <td className="py-3 px-4 text-right space-x-2">
-                        <button
-                          onClick={() => handleOpenDetail(c)}
-                          className="px-2.5 py-1 text-xs font-medium text-[#0D3826] bg-[#0D3826]/10 hover:bg-[#0D3826]/20 rounded transition"
-                        >
-                          View
-                        </button>
-                        <button
-                          onClick={() => handleOpenEdit(c)}
-                          className="px-2.5 py-1 text-xs font-medium text-amber-800 bg-amber-50 hover:bg-amber-100 rounded transition"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => handleOpenStatusModal(c)}
-                          className={`px-2.5 py-1 text-xs font-medium rounded transition ${
-                            c.isActive
-                              ? 'text-red-700 bg-red-50 hover:bg-red-100'
-                              : 'text-emerald-700 bg-emerald-50 hover:bg-emerald-100'
-                          }`}
-                        >
-                          {c.isActive ? 'Deactivate' : 'Activate'}
-                        </button>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Pagination */}
-          <div className="p-4 bg-gray-50 border-t border-gray-200 flex flex-col sm:flex-row items-center justify-between text-xs text-gray-500 gap-3">
-            <div>
-              Showing {customers.length > 0 ? (page - 1) * pageSize + 1 : 0} to{' '}
-              {Math.min(page * pageSize, totalCount)} of {totalCount} customers
-            </div>
-            <div className="flex items-center gap-1">
-              <button
-                disabled={page <= 1}
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                className="px-3 py-1.5 border border-gray-300 rounded hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                Previous
-              </button>
-              <span className="px-2 font-semibold text-gray-700">
-                Page {page} of {totalPages}
-              </span>
-              <button
-                disabled={page >= totalPages}
-                onClick={() => setPage((p) => p + 1)}
-                className="px-3 py-1.5 border border-gray-300 rounded hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                Next
-              </button>
-            </div>
-          </div>
+      {/* Customer Data Table */}
+      {loading ? (
+        <div className="bg-white p-12 rounded-xl border border-[#E2E6E3] text-center">
+          <div className="w-8 h-8 border-2 border-[#123B32] border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+          <p className="text-xs text-[#69736E]">Loading customer records...</p>
         </div>
-
-        {/* ----------------- ADD CUSTOMER MODAL ----------------- */}
-        {isAddModalOpen && (
-          <div className="fixed inset-0 z-50 overflow-y-auto bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl max-w-2xl w-full shadow-2xl overflow-hidden border border-[#D4AF37]/30 my-8">
-              <div className="bg-[#0D3826] text-white px-6 py-4 flex items-center justify-between">
-                <div>
-                  <h3 className="text-lg font-bold">Add New Customer</h3>
-                  <p className="text-xs text-gray-300 mt-0.5">
-                    Customer Code will be generated automatically as CUS-XXXXXX
-                  </p>
-                </div>
-                <button
-                  onClick={() => setIsAddModalOpen(false)}
-                  className="text-gray-300 hover:text-white font-bold text-xl"
-                >
-                  ×
-                </button>
-              </div>
-
-              <form onSubmit={handleCreateCustomer} className="p-6 space-y-6">
-                {/* Duplicate Warning Banner */}
-                {duplicateWarning && (
-                  <div className="p-3 bg-amber-50 border-l-4 border-amber-500 rounded-md">
-                    <p className="text-xs font-semibold text-amber-800">
-                      ⚠️ Duplicate Alert: {duplicateWarning.duplicateReason}
-                    </p>
-                    <p className="text-xs text-amber-700 mt-0.5">
-                      Please verify before proceeding to prevent duplicate profiles.
-                    </p>
-                  </div>
-                )}
-
-                {/* Section 1: Basic Identity */}
-                <div className="space-y-4">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-[#0D3826] border-b pb-1">
-                    Basic Identity & Contact (Required)
-                  </h4>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="md:col-span-2">
-                      <label className="block text-xs font-semibold text-gray-700 mb-1">
-                        Full Name <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        placeholder="e.g. Priyantha Jayawardena"
-                        value={formData.fullName}
-                        onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
-                        className="w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-[#0D3826] focus:outline-none"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-700 mb-1">
-                        Primary Phone <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="tel"
-                        required
-                        placeholder="e.g. 077 123 4567 or +94771234567"
-                        value={formData.primaryPhone}
-                        onChange={(e) => setFormData({ ...formData, primaryPhone: e.target.value })}
-                        onBlur={() => handleCheckDuplicate(formData.primaryPhone, formData.email)}
-                        className="w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-[#0D3826] focus:outline-none"
-                      />
-                      {isCheckingDuplicate && (
-                        <p className="text-[10px] text-gray-400 mt-0.5">Checking phone duplicates...</p>
-                      )}
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-700 mb-1">
-                        Secondary Phone (Optional)
-                      </label>
-                      <input
-                        type="tel"
-                        placeholder="e.g. 011 234 5678"
-                        value={formData.secondaryPhone || ''}
-                        onChange={(e) => setFormData({ ...formData, secondaryPhone: e.target.value })}
-                        className="w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-[#0D3826] focus:outline-none"
-                      />
-                    </div>
-
-                    <div className="md:col-span-2">
-                      <label className="block text-xs font-semibold text-gray-700 mb-1">
-                        Email Address (Optional)
-                      </label>
-                      <input
-                        type="email"
-                        placeholder="e.g. priyantha@example.com"
-                        value={formData.email || ''}
-                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                        onBlur={() => handleCheckDuplicate(formData.primaryPhone, formData.email)}
-                        className="w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-[#0D3826] focus:outline-none"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Section 2: Address Information */}
-                <div className="space-y-4">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-[#0D3826] border-b pb-1">
-                    Address Details (Optional)
-                  </h4>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="md:col-span-2">
-                      <label className="block text-xs font-semibold text-gray-700 mb-1">
-                        Address Line 1
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="Street or Building"
-                        value={formData.addressLine1 || ''}
-                        onChange={(e) => setFormData({ ...formData, addressLine1: e.target.value })}
-                        className="w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-[#0D3826] focus:outline-none"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-700 mb-1">
-                        Address Line 2
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="Apartment, suite, unit"
-                        value={formData.addressLine2 || ''}
-                        onChange={(e) => setFormData({ ...formData, addressLine2: e.target.value })}
-                        className="w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-[#0D3826] focus:outline-none"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-700 mb-1">City</label>
-                      <input
-                        type="text"
-                        placeholder="e.g. Jaffna, Colombo"
-                        value={formData.city || ''}
-                        onChange={(e) => setFormData({ ...formData, city: e.target.value })}
-                        className="w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-[#0D3826] focus:outline-none"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-700 mb-1">
-                        District / Province
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="e.g. Northern Province"
-                        value={formData.districtProvince || ''}
-                        onChange={(e) =>
-                          setFormData({ ...formData, districtProvince: e.target.value })
-                        }
-                        className="w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-[#0D3826] focus:outline-none"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-700 mb-1">
-                        Postal Code
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="e.g. 40000"
-                        value={formData.postalCode || ''}
-                        onChange={(e) => setFormData({ ...formData, postalCode: e.target.value })}
-                        className="w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-[#0D3826] focus:outline-none"
-                      />
-                    </div>
-
-                    <div className="md:col-span-2">
-                      <label className="block text-xs font-semibold text-gray-700 mb-1">Country</label>
-                      <input
-                        type="text"
-                        value={formData.country || 'Sri Lanka'}
-                        onChange={(e) => setFormData({ ...formData, country: e.target.value })}
-                        className="w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-[#0D3826] focus:outline-none"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Section 3: Personal & Notes */}
-                <div className="space-y-4">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-[#0D3826] border-b pb-1">
-                    Optional Profile & Notes
-                  </h4>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-700 mb-1">
-                        Date of Birth
-                      </label>
-                      <input
-                        type="date"
-                        value={formData.dateOfBirth || ''}
-                        onChange={(e) => setFormData({ ...formData, dateOfBirth: e.target.value })}
-                        className="w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-[#0D3826] focus:outline-none"
-                      />
-                    </div>
-
-                    <div className="md:col-span-2">
-                      <label className="block text-xs font-semibold text-gray-700 mb-1">
-                        Internal Customer Notes
-                      </label>
-                      <textarea
-                        rows={2}
-                        placeholder="Preferences, family relationships, special requests..."
-                        value={formData.notes || ''}
-                        onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                        className="w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-[#0D3826] focus:outline-none"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Actions */}
-                <div className="pt-4 border-t flex items-center justify-end gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setIsAddModalOpen(false)}
-                    className="px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-100 rounded-lg transition"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={submitting}
-                    className="px-6 py-2 bg-[#0D3826] hover:bg-[#134e35] text-white text-sm font-semibold rounded-lg shadow transition disabled:opacity-50"
-                  >
-                    {submitting ? 'Saving...' : 'Save Customer'}
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
-
-        {/* ----------------- EDIT CUSTOMER MODAL ----------------- */}
-        {isEditModalOpen && selectedCustomer && (
-          <div className="fixed inset-0 z-50 overflow-y-auto bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl max-w-2xl w-full shadow-2xl overflow-hidden border border-[#D4AF37]/30 my-8">
-              <div className="bg-[#0D3826] text-white px-6 py-4 flex items-center justify-between">
-                <div>
-                  <h3 className="text-lg font-bold">Edit Customer</h3>
-                  <p className="text-xs text-amber-300 font-mono mt-0.5">
-                    {selectedCustomer.customerCode} (Immutable Identifier)
-                  </p>
-                </div>
-                <button
-                  onClick={() => setIsEditModalOpen(false)}
-                  className="text-gray-300 hover:text-white font-bold text-xl"
-                >
-                  ×
-                </button>
-              </div>
-
-              <form onSubmit={handleUpdateCustomer} className="p-6 space-y-6">
-                {/* Section 1: Basic Identity */}
-                <div className="space-y-4">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-[#0D3826] border-b pb-1">
-                    Customer Information
-                  </h4>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="md:col-span-2">
-                      <label className="block text-xs font-semibold text-gray-700 mb-1">
-                        Full Name <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        value={editFormData.fullName}
-                        onChange={(e) => setEditFormData({ ...editFormData, fullName: e.target.value })}
-                        className="w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-[#0D3826] focus:outline-none"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-700 mb-1">
-                        Primary Phone <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="tel"
-                        required
-                        value={editFormData.primaryPhone}
-                        onChange={(e) =>
-                          setEditFormData({ ...editFormData, primaryPhone: e.target.value })
-                        }
-                        onBlur={() =>
-                          handleCheckDuplicate(
-                            editFormData.primaryPhone,
-                            editFormData.email,
-                            selectedCustomer.id
-                          )
-                        }
-                        className="w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-[#0D3826] focus:outline-none"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-700 mb-1">
-                        Secondary Phone (Optional)
-                      </label>
-                      <input
-                        type="tel"
-                        value={editFormData.secondaryPhone || ''}
-                        onChange={(e) =>
-                          setEditFormData({ ...editFormData, secondaryPhone: e.target.value })
-                        }
-                        className="w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-[#0D3826] focus:outline-none"
-                      />
-                    </div>
-
-                    <div className="md:col-span-2">
-                      <label className="block text-xs font-semibold text-gray-700 mb-1">
-                        Email Address (Optional)
-                      </label>
-                      <input
-                        type="email"
-                        value={editFormData.email || ''}
-                        onChange={(e) => setEditFormData({ ...editFormData, email: e.target.value })}
-                        className="w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-[#0D3826] focus:outline-none"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Section 2: Address */}
-                <div className="space-y-4">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-[#0D3826] border-b pb-1">
-                    Address Details
-                  </h4>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="md:col-span-2">
-                      <label className="block text-xs font-semibold text-gray-700 mb-1">
-                        Address Line 1
-                      </label>
-                      <input
-                        type="text"
-                        value={editFormData.addressLine1 || ''}
-                        onChange={(e) =>
-                          setEditFormData({ ...editFormData, addressLine1: e.target.value })
-                        }
-                        className="w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-[#0D3826] focus:outline-none"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-700 mb-1">
-                        Address Line 2
-                      </label>
-                      <input
-                        type="text"
-                        value={editFormData.addressLine2 || ''}
-                        onChange={(e) =>
-                          setEditFormData({ ...editFormData, addressLine2: e.target.value })
-                        }
-                        className="w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-[#0D3826] focus:outline-none"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-700 mb-1">City</label>
-                      <input
-                        type="text"
-                        value={editFormData.city || ''}
-                        onChange={(e) => setEditFormData({ ...editFormData, city: e.target.value })}
-                        className="w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-[#0D3826] focus:outline-none"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-700 mb-1">
-                        District / Province
-                      </label>
-                      <input
-                        type="text"
-                        value={editFormData.districtProvince || ''}
-                        onChange={(e) =>
-                          setEditFormData({ ...editFormData, districtProvince: e.target.value })
-                        }
-                        className="w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-[#0D3826] focus:outline-none"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-700 mb-1">
-                        Postal Code
-                      </label>
-                      <input
-                        type="text"
-                        value={editFormData.postalCode || ''}
-                        onChange={(e) =>
-                          setEditFormData({ ...editFormData, postalCode: e.target.value })
-                        }
-                        className="w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-[#0D3826] focus:outline-none"
-                      />
-                    </div>
-
-                    <div className="md:col-span-2">
-                      <label className="block text-xs font-semibold text-gray-700 mb-1">Country</label>
-                      <input
-                        type="text"
-                        value={editFormData.country || 'Sri Lanka'}
-                        onChange={(e) => setEditFormData({ ...editFormData, country: e.target.value })}
-                        className="w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-[#0D3826] focus:outline-none"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Section 3: Personal & Notes */}
-                <div className="space-y-4">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-[#0D3826] border-b pb-1">
-                    Profile & Notes
-                  </h4>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-700 mb-1">
-                        Date of Birth
-                      </label>
-                      <input
-                        type="date"
-                        value={editFormData.dateOfBirth || ''}
-                        onChange={(e) =>
-                          setEditFormData({ ...editFormData, dateOfBirth: e.target.value })
-                        }
-                        className="w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-[#0D3826] focus:outline-none"
-                      />
-                    </div>
-
-                    <div className="md:col-span-2">
-                      <label className="block text-xs font-semibold text-gray-700 mb-1">
-                        Internal Notes
-                      </label>
-                      <textarea
-                        rows={2}
-                        value={editFormData.notes || ''}
-                        onChange={(e) => setEditFormData({ ...editFormData, notes: e.target.value })}
-                        className="w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-[#0D3826] focus:outline-none"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Actions */}
-                <div className="pt-4 border-t flex items-center justify-end gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setIsEditModalOpen(false)}
-                    className="px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-100 rounded-lg transition"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={submitting}
-                    className="px-6 py-2 bg-[#0D3826] hover:bg-[#134e35] text-white text-sm font-semibold rounded-lg shadow transition disabled:opacity-50"
-                  >
-                    {submitting ? 'Updating...' : 'Save Changes'}
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
-
-        {/* ----------------- CUSTOMER DETAIL DRAWER / SLIDE-OVER ----------------- */}
-        {isDetailDrawerOpen && selectedCustomer && (
-          <div className="fixed inset-0 z-50 overflow-hidden bg-black/50 backdrop-blur-sm flex justify-end">
-            <div className="w-full max-w-2xl bg-white shadow-2xl h-full flex flex-col overflow-hidden">
-              {/* Drawer Header */}
-              <div className="bg-[#0D3826] text-white p-6 flex items-start justify-between">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="bg-[#D4AF37] text-[#0D3826] text-xs font-mono font-bold px-2 py-0.5 rounded">
-                      {selectedCustomer.customerCode}
-                    </span>
-                    <span
-                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                        selectedCustomer.isActive
-                          ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
-                          : 'bg-gray-500/20 text-gray-300 border border-gray-500/40'
+      ) : customers.length === 0 ? (
+        <EmptyState
+          title="No Customers Found"
+          description={
+            searchTerm
+              ? `No customer profiles matching "${searchTerm}". Try a different name, phone or code.`
+              : 'No customer profiles are registered yet. Add your first customer to begin.'
+          }
+          icon={<Users className="w-6 h-6 text-[#69736E]" />}
+          actionLabel="Add Customer"
+          onAction={() => setIsAddModalOpen(true)}
+        />
+      ) : (
+        <div className="space-y-4">
+          <Table
+            headers={[
+              'Customer Code',
+              'Full Name',
+              'Primary Phone',
+              'City / Region',
+              'Registered Date',
+              'Status',
+              'Actions',
+            ]}
+          >
+            {customers.map((c) => (
+              <tr key={c.id} className="hover:bg-[#F8F7F4]/60 transition-colors">
+                <td className="px-4 py-3 font-mono font-medium text-xs text-[#202824]">
+                  {c.customerCode}
+                </td>
+                <td className="px-4 py-3 font-semibold text-xs text-[#123B32]">
+                  {c.fullName}
+                </td>
+                <td className="px-4 py-3 text-xs font-mono text-[#202824] tabular-nums">
+                  {c.primaryPhone}
+                </td>
+                <td className="px-4 py-3 text-xs text-[#69736E]">
+                  {c.city || '—'}
+                  {c.districtProvince ? `, ${c.districtProvince}` : ''}
+                </td>
+                <td className="px-4 py-3 text-xs text-[#69736E] tabular-nums">
+                  {new Date(c.createdAt).toLocaleDateString('en-US', {
+                    year: 'numeric',
+                    month: 'short',
+                    day: 'numeric',
+                  })}
+                </td>
+                <td className="px-4 py-3">
+                  <Badge variant={c.isActive ? 'success' : 'neutral'} size="sm">
+                    {c.isActive ? 'Active' : 'Inactive'}
+                  </Badge>
+                </td>
+                <td className="px-4 py-3">
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={() => handleViewDetail(c)}
+                      title="View Profile & History"
+                      className="p-1 rounded text-[#69736E] hover:text-[#123B32] hover:bg-[#F8F7F4] transition-colors"
+                    >
+                      <Eye className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => handleOpenEdit(c)}
+                      title="Edit Customer"
+                      className="p-1 rounded text-[#69736E] hover:text-[#123B32] hover:bg-[#F8F7F4] transition-colors"
+                    >
+                      <Edit className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => handleOpenStatusModal(c)}
+                      title={c.isActive ? 'Deactivate Customer' : 'Activate Customer'}
+                      className={`p-1 rounded transition-colors ${
+                        c.isActive
+                          ? 'text-rose-600 hover:bg-rose-50'
+                          : 'text-emerald-700 hover:bg-emerald-50'
                       }`}
                     >
-                      {selectedCustomer.isActive ? 'ACTIVE' : 'INACTIVE'}
-                    </span>
+                      <Power className="w-4 h-4" />
+                    </button>
                   </div>
-                  <h2 className="text-xl font-bold mt-2">{selectedCustomer.fullName}</h2>
-                  <p className="text-xs text-gray-300 mt-1 font-mono">
-                    📞 {selectedCustomer.primaryPhone}
-                    {selectedCustomer.email && ` • ✉️ ${selectedCustomer.email}`}
+                </td>
+              </tr>
+            ))}
+          </Table>
+
+          <Pagination
+            currentPage={page}
+            totalCount={totalCount}
+            pageSize={pageSize}
+            onPageChange={setPage}
+            isLoading={loading}
+          />
+        </div>
+      )}
+
+      {/* Add Customer Modal */}
+      <Modal
+        isOpen={isAddModalOpen}
+        onClose={() => setIsAddModalOpen(false)}
+        title="Register New Customer"
+        description="Add a verified customer record. Primary phone is normalized to canonical E.164 format."
+        maxWidth="2xl"
+        footer={
+          <>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setIsAddModalOpen(false)}
+              disabled={submitting}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={handleCreateCustomer}
+              isLoading={submitting}
+            >
+              Save Customer
+            </Button>
+          </>
+        }
+      >
+        <form onSubmit={handleCreateCustomer} className="space-y-4">
+          {duplicateWarning && duplicateWarning.isDuplicate && (
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800">
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-semibold">Potential Duplicate Contact Identified:</p>
+                  <p className="mt-0.5">
+                    {duplicateWarning.duplicateReason || 'A customer with this phone number already exists in the system.'}
                   </p>
                 </div>
-                <button
-                  onClick={() => setIsDetailDrawerOpen(false)}
-                  className="text-gray-300 hover:text-white text-2xl font-bold"
-                >
-                  ×
-                </button>
+              </div>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Input
+              label="Full Name"
+              requiredIndicator
+              placeholder="e.g. Arjun Rajan"
+              value={formData.fullName}
+              onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
+              required
+            />
+
+            <Input
+              label="Primary Phone"
+              requiredIndicator
+              placeholder="e.g. 077 123 4567"
+              value={formData.primaryPhone}
+              onChange={(e) => setFormData({ ...formData, primaryPhone: e.target.value })}
+              onBlur={() => checkDuplicatePhone(formData.primaryPhone)}
+              helperText="Normalized to canonical E.164 international format (+94...)"
+              required
+            />
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Input
+              label="Secondary Phone"
+              placeholder="Alternative contact number"
+              value={formData.secondaryPhone || ''}
+              onChange={(e) => setFormData({ ...formData, secondaryPhone: e.target.value })}
+            />
+
+            <Input
+              label="Email"
+              type="email"
+              placeholder="e.g. customer@example.com"
+              value={formData.email || ''}
+              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+            />
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Input
+              label="Address Line 1"
+              placeholder="House number, street and locality"
+              value={formData.addressLine1 || ''}
+              onChange={(e) => setFormData({ ...formData, addressLine1: e.target.value })}
+            />
+
+            <Input
+              label="City"
+              placeholder="e.g. Jaffna"
+              value={formData.city || ''}
+              onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+            />
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <Input
+              label="District / Province"
+              placeholder="Select the customer's district"
+              value={formData.districtProvince || ''}
+              onChange={(e) => setFormData({ ...formData, districtProvince: e.target.value })}
+            />
+
+            <Input
+              label="Postal Code"
+              placeholder="e.g. 40000"
+              value={formData.postalCode || ''}
+              onChange={(e) => setFormData({ ...formData, postalCode: e.target.value })}
+            />
+
+            <Input
+              label="Date of Birth"
+              type="date"
+              value={formData.dateOfBirth || ''}
+              onChange={(e) => setFormData({ ...formData, dateOfBirth: e.target.value })}
+            />
+          </div>
+
+          <Textarea
+            label="Customer Notes"
+            placeholder="Relevant customer preferences or additional information"
+            rows={2}
+            value={formData.notes || ''}
+            onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+          />
+        </form>
+      </Modal>
+
+      {/* Edit Customer Modal */}
+      <Modal
+        isOpen={isEditModalOpen}
+        onClose={() => setIsEditModalOpen(false)}
+        title="Edit Customer Profile"
+        description="Update profile details. Concurrency is protected via optimistic row locking."
+        maxWidth="2xl"
+        footer={
+          <>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setIsEditModalOpen(false)}
+              disabled={submitting}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={handleUpdateCustomer}
+              isLoading={submitting}
+            >
+              Save Changes
+            </Button>
+          </>
+        }
+      >
+        <form onSubmit={handleUpdateCustomer} className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Input
+              label="Full Name"
+              requiredIndicator
+              placeholder="e.g. Arjun Rajan"
+              value={editFormData.fullName}
+              onChange={(e) => setEditFormData({ ...editFormData, fullName: e.target.value })}
+              required
+            />
+
+            <Input
+              label="Primary Phone"
+              requiredIndicator
+              placeholder="e.g. 077 123 4567"
+              value={editFormData.primaryPhone}
+              onChange={(e) => setEditFormData({ ...editFormData, primaryPhone: e.target.value })}
+              onBlur={() => checkDuplicatePhone(editFormData.primaryPhone, selectedCustomer?.id)}
+              helperText="Canonical E.164 normalization is applied"
+              required
+            />
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Input
+              label="Secondary Phone"
+              placeholder="Alternative contact number"
+              value={editFormData.secondaryPhone || ''}
+              onChange={(e) => setEditFormData({ ...editFormData, secondaryPhone: e.target.value })}
+            />
+
+            <Input
+              label="Email"
+              type="email"
+              placeholder="e.g. customer@example.com"
+              value={editFormData.email || ''}
+              onChange={(e) => setEditFormData({ ...editFormData, email: e.target.value })}
+            />
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Input
+              label="Address Line 1"
+              placeholder="House number, street and locality"
+              value={editFormData.addressLine1 || ''}
+              onChange={(e) => setEditFormData({ ...editFormData, addressLine1: e.target.value })}
+            />
+
+            <Input
+              label="City"
+              placeholder="e.g. Jaffna"
+              value={editFormData.city || ''}
+              onChange={(e) => setEditFormData({ ...editFormData, city: e.target.value })}
+            />
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <Input
+              label="District / Province"
+              placeholder="Select the customer's district"
+              value={editFormData.districtProvince || ''}
+              onChange={(e) => setEditFormData({ ...editFormData, districtProvince: e.target.value })}
+            />
+
+            <Input
+              label="Postal Code"
+              placeholder="e.g. 40000"
+              value={editFormData.postalCode || ''}
+              onChange={(e) => setEditFormData({ ...editFormData, postalCode: e.target.value })}
+            />
+
+            <Input
+              label="Date of Birth"
+              type="date"
+              value={editFormData.dateOfBirth || ''}
+              onChange={(e) => setEditFormData({ ...editFormData, dateOfBirth: e.target.value })}
+            />
+          </div>
+
+          <Textarea
+            label="Customer Notes"
+            placeholder="Relevant customer preferences or additional information"
+            rows={2}
+            value={editFormData.notes || ''}
+            onChange={(e) => setEditFormData({ ...editFormData, notes: e.target.value })}
+          />
+        </form>
+      </Modal>
+
+      {/* Status Toggle Modal */}
+      <Modal
+        isOpen={isStatusModalOpen}
+        onClose={() => setIsStatusModalOpen(false)}
+        title={selectedCustomer?.isActive ? 'Deactivate Customer Profile' : 'Activate Customer Profile'}
+        description={`Confirming this action will ${selectedCustomer?.isActive ? 'suspend' : 're-enable'} transactional access for this profile.`}
+        footer={
+          <>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setIsStatusModalOpen(false)}
+              disabled={submitting}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant={selectedCustomer?.isActive ? 'danger' : 'primary'}
+              size="sm"
+              onClick={handleToggleStatus}
+              isLoading={submitting}
+            >
+              {selectedCustomer?.isActive ? 'Confirm Deactivation' : 'Confirm Activation'}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          <p className="text-xs text-[#202824]">
+            Customer: <strong className="font-semibold text-[#123B32]">{selectedCustomer?.fullName}</strong> ({selectedCustomer?.customerCode})
+          </p>
+
+          <Textarea
+            label="Action Reason"
+            requiredIndicator
+            placeholder="Explain why this customer account is being activated or deactivated"
+            value={statusReason}
+            onChange={(e) => setStatusReason(e.target.value)}
+            helperText="A mandatory reason is required for audit logs."
+            rows={3}
+            required
+          />
+        </div>
+      </Modal>
+
+      {/* Detail Slide-over / Drawer */}
+      {isDetailDrawerOpen && selectedCustomer && (
+        <div className="fixed inset-0 z-50 overflow-hidden flex justify-end">
+          <div
+            className="fixed inset-0 bg-black/40 backdrop-blur-xs transition-opacity"
+            onClick={() => setIsDetailDrawerOpen(false)}
+          />
+          <div className="relative w-full max-w-lg bg-white shadow-2xl border-l border-[#E2E6E3] z-10 flex flex-col h-full">
+            {/* Header */}
+            <div className="px-6 py-4.5 border-b border-[#E2E6E3] bg-[#F8F7F4] flex items-center justify-between">
+              <div>
+                <span className="text-[10px] font-bold text-[#69736E] uppercase tracking-wider">
+                  {selectedCustomer.customerCode}
+                </span>
+                <h3 className="text-base font-bold text-[#123B32]">{selectedCustomer.fullName}</h3>
+              </div>
+              <button
+                onClick={() => setIsDetailDrawerOpen(false)}
+                className="p-1 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Profile Overview */}
+            <div className="p-6 overflow-y-auto flex-1 space-y-6">
+              <div className="flex items-center justify-between p-3.5 rounded-lg bg-[#F8F7F4] border border-[#E2E6E3]">
+                <div>
+                  <p className="text-[10px] uppercase font-bold text-[#69736E]">Status</p>
+                  <p className="text-xs font-semibold text-[#202824] mt-0.5">
+                    {selectedCustomer.isActive ? 'Active Profile' : 'Suspended Profile'}
+                  </p>
+                </div>
+                <Badge variant={selectedCustomer.isActive ? 'success' : 'neutral'}>
+                  {selectedCustomer.isActive ? 'Active' : 'Inactive'}
+                </Badge>
               </div>
 
-              {/* Tabs */}
-              <div className="border-b border-gray-200 bg-gray-50 px-6 flex space-x-4 overflow-x-auto text-xs font-semibold">
-                <button
-                  onClick={() => setDetailTab('profile')}
-                  className={`py-3 border-b-2 whitespace-nowrap transition ${
-                    detailTab === 'profile'
-                      ? 'border-[#0D3826] text-[#0D3826] font-bold'
-                      : 'border-transparent text-gray-500 hover:text-gray-900'
-                  }`}
-                >
-                  👤 Profile & Info
-                </button>
-                <button
-                  onClick={() => setDetailTab('purchases')}
-                  className={`py-3 border-b-2 whitespace-nowrap transition ${
-                    detailTab === 'purchases'
-                      ? 'border-[#0D3826] text-[#0D3826] font-bold'
-                      : 'border-transparent text-gray-500 hover:text-gray-900'
-                  }`}
-                >
-                  🧾 Purchases (POS)
-                </button>
-                <button
-                  onClick={() => setDetailTab('orders')}
-                  className={`py-3 border-b-2 whitespace-nowrap transition ${
-                    detailTab === 'orders'
-                      ? 'border-[#0D3826] text-[#0D3826] font-bold'
-                      : 'border-transparent text-gray-500 hover:text-gray-900'
-                  }`}
-                >
-                  💍 Custom Orders
-                </button>
-                <button
-                  onClick={() => setDetailTab('repairs')}
-                  className={`py-3 border-b-2 whitespace-nowrap transition ${
-                    detailTab === 'repairs'
-                      ? 'border-[#0D3826] text-[#0D3826] font-bold'
-                      : 'border-transparent text-gray-500 hover:text-gray-900'
-                  }`}
-                >
-                  🔧 Repairs
-                </button>
-                <button
-                  onClick={() => setDetailTab('oldGold')}
-                  className={`py-3 border-b-2 whitespace-nowrap transition ${
-                    detailTab === 'oldGold'
-                      ? 'border-[#0D3826] text-[#0D3826] font-bold'
-                      : 'border-transparent text-gray-500 hover:text-gray-900'
-                  }`}
-                >
-                  🪙 Old Gold
-                </button>
-                <button
-                  onClick={() => setDetailTab('payments')}
-                  className={`py-3 border-b-2 whitespace-nowrap transition ${
-                    detailTab === 'payments'
-                      ? 'border-[#0D3826] text-[#0D3826] font-bold'
-                      : 'border-transparent text-gray-500 hover:text-gray-900'
-                  }`}
-                >
-                  💵 Payments
-                </button>
-              </div>
-
-              {/* Tab Content */}
-              <div className="flex-1 overflow-y-auto p-6 space-y-6">
-                {detailTab === 'profile' && (
-                  <div className="space-y-6">
-                    {/* Identity & Contact Card */}
-                    <div className="bg-gray-50 rounded-xl p-4 border border-gray-200 space-y-3">
-                      <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider">
-                        Contact Details
-                      </h4>
-                      <div className="grid grid-cols-2 gap-4 text-xs">
-                        <div>
-                          <span className="text-gray-500 block">Primary Phone</span>
-                          <span className="font-mono font-medium text-gray-900">
-                            {selectedCustomer.primaryPhone}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="text-gray-500 block">Secondary Phone</span>
-                          <span className="font-mono font-medium text-gray-900">
-                            {selectedCustomer.secondaryPhone || 'None'}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="text-gray-500 block">Email Address</span>
-                          <span className="font-medium text-gray-900">
-                            {selectedCustomer.email || 'None'}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="text-gray-500 block">Date of Birth</span>
-                          <span className="font-medium text-gray-900">
-                            {selectedCustomer.dateOfBirth
-                              ? new Date(selectedCustomer.dateOfBirth).toLocaleDateString()
-                              : 'Not Specified'}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Address Card */}
-                    <div className="bg-gray-50 rounded-xl p-4 border border-gray-200 space-y-3">
-                      <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider">
-                        Address Information
-                      </h4>
-                      <div className="text-xs text-gray-800 space-y-1">
-                        <p>{selectedCustomer.addressLine1 || 'No street address specified'}</p>
-                        {selectedCustomer.addressLine2 && <p>{selectedCustomer.addressLine2}</p>}
-                        <p>
-                          {[
-                            selectedCustomer.city,
-                            selectedCustomer.districtProvince,
-                            selectedCustomer.postalCode,
-                          ]
-                            .filter(Boolean)
-                            .join(', ')}
-                        </p>
-                        <p className="font-semibold">{selectedCustomer.country || 'Sri Lanka'}</p>
-                      </div>
-                    </div>
-
-                    {/* Notes Card */}
-                    {selectedCustomer.notes && (
-                      <div className="bg-amber-50/60 rounded-xl p-4 border border-amber-200 space-y-2">
-                        <h4 className="text-xs font-bold text-amber-900 uppercase tracking-wider">
-                          Internal Notes
-                        </h4>
-                        <p className="text-xs text-amber-900 whitespace-pre-wrap">
-                          {selectedCustomer.notes}
-                        </p>
-                      </div>
-                    )}
-
-                    {/* System Audit Info */}
-                    <div className="text-[11px] text-gray-400 border-t pt-4 space-y-1">
-                      <p>Customer ID: {selectedCustomer.id}</p>
-                      <p>Registered: {new Date(selectedCustomer.createdAt).toLocaleString()}</p>
-                      {selectedCustomer.updatedAt && (
-                        <p>Last Modified: {new Date(selectedCustomer.updatedAt).toLocaleString()}</p>
-                      )}
-                    </div>
+              <div className="space-y-3">
+                <h4 className="text-xs font-bold text-[#123B32] uppercase tracking-wider border-b border-[#E2E6E3] pb-1">
+                  Contact Information
+                </h4>
+                <div className="grid grid-cols-2 gap-3 text-xs">
+                  <div>
+                    <span className="text-[#69736E] block text-[11px]">Primary Phone</span>
+                    <span className="font-mono font-medium text-[#202824]">{selectedCustomer.primaryPhone}</span>
                   </div>
-                )}
-
-                {/* Clean Empty States for Future Transaction Tabs */}
-                {detailTab !== 'profile' && (
-                  <div className="py-16 text-center space-y-3">
-                    <div className="text-4xl">
-                      {detailTab === 'purchases' && '🧾'}
-                      {detailTab === 'orders' && '💍'}
-                      {detailTab === 'repairs' && '🔧'}
-                      {detailTab === 'oldGold' && '🪙'}
-                      {detailTab === 'payments' && '💵'}
-                    </div>
-                    <h3 className="text-sm font-bold text-gray-800">
-                      No {detailTab.charAt(0).toUpperCase() + detailTab.slice(1)} Recorded Yet
-                    </h3>
-                    <p className="text-xs text-gray-500 max-w-sm mx-auto">
-                      Transactions will automatically populate here as POS sales, custom repair orders, and gold purchases are processed for {selectedCustomer.fullName} in future modules.
-                    </p>
+                  <div>
+                    <span className="text-[#69736E] block text-[11px]">Canonical E.164</span>
+                    <span className="font-mono text-[#123B32]">{selectedCustomer.normalizedPrimaryPhone || selectedCustomer.primaryPhone}</span>
                   </div>
-                )}
-              </div>
-
-              {/* Drawer Footer Actions */}
-              <div className="p-4 border-t bg-gray-50 flex items-center justify-between">
-                <button
-                  onClick={() => {
-                    setIsDetailDrawerOpen(false);
-                    handleOpenStatusModal(selectedCustomer);
-                  }}
-                  className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition ${
-                    selectedCustomer.isActive
-                      ? 'text-red-700 bg-red-100 hover:bg-red-200'
-                      : 'text-emerald-700 bg-emerald-100 hover:bg-emerald-200'
-                  }`}
-                >
-                  {selectedCustomer.isActive ? 'Deactivate Customer' : 'Activate Customer'}
-                </button>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => {
-                      setIsDetailDrawerOpen(false);
-                      handleOpenEdit(selectedCustomer);
-                    }}
-                    className="px-4 py-2 bg-[#0D3826] text-white text-xs font-semibold rounded-lg hover:bg-[#134e35] transition"
-                  >
-                    Edit Profile
-                  </button>
+                  <div>
+                    <span className="text-[#69736E] block text-[11px]">Secondary Phone</span>
+                    <span className="font-mono text-[#202824]">{selectedCustomer.secondaryPhone || '—'}</span>
+                  </div>
+                  <div>
+                    <span className="text-[#69736E] block text-[11px]">Email</span>
+                    <span className="text-[#202824]">{selectedCustomer.email || '—'}</span>
+                  </div>
                 </div>
               </div>
-            </div>
-          </div>
-        )}
 
-        {/* ----------------- STATUS TOGGLE MODAL ----------------- */}
-        {isStatusModalOpen && selectedCustomer && (
-          <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl p-6 border border-gray-200 space-y-4">
-              <h3 className="text-lg font-bold text-gray-900">
-                {selectedCustomer.isActive ? 'Deactivate Customer' : 'Activate Customer'}
-              </h3>
-              <p className="text-xs text-gray-600">
-                Are you sure you want to {selectedCustomer.isActive ? 'deactivate' : 'activate'}{' '}
-                <span className="font-semibold text-gray-900">{selectedCustomer.fullName}</span> (
-                {selectedCustomer.customerCode})?
-              </p>
-              {selectedCustomer.isActive && (
-                <p className="text-xs text-amber-700 bg-amber-50 p-2.5 rounded border border-amber-200">
-                  Note: Deactivated customers cannot be selected for new sales or orders in POS, but historical records are permanently preserved.
-                </p>
+              <div className="space-y-3">
+                <h4 className="text-xs font-bold text-[#123B32] uppercase tracking-wider border-b border-[#E2E6E3] pb-1">
+                  Address & Demographics
+                </h4>
+                <div className="space-y-2 text-xs">
+                  <div>
+                    <span className="text-[#69736E] block text-[11px]">Street Address</span>
+                    <span className="text-[#202824]">{selectedCustomer.addressLine1 || '—'}</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div>
+                      <span className="text-[#69736E] block text-[11px]">City</span>
+                      <span className="text-[#202824]">{selectedCustomer.city || '—'}</span>
+                    </div>
+                    <div>
+                      <span className="text-[#69736E] block text-[11px]">District</span>
+                      <span className="text-[#202824]">{selectedCustomer.districtProvince || '—'}</span>
+                    </div>
+                    <div>
+                      <span className="text-[#69736E] block text-[11px]">Postal Code</span>
+                      <span className="text-[#202824]">{selectedCustomer.postalCode || '—'}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {selectedCustomer.notes && (
+                <div className="space-y-1 text-xs">
+                  <span className="text-[#69736E] font-semibold uppercase text-[10px] tracking-wider">Customer Notes</span>
+                  <p className="p-3 bg-[#F8F7F4] border border-[#E2E6E3] rounded-lg text-[#202824]">
+                    {selectedCustomer.notes}
+                  </p>
+                </div>
               )}
+            </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">
-                  Reason (Optional)
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. Customer requested deactivation"
-                  value={statusReason}
-                  onChange={(e) => setStatusReason(e.target.value)}
-                  className="w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-[#0D3826] focus:outline-none"
-                />
-              </div>
-
-              <div className="flex justify-end gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setIsStatusModalOpen(false)}
-                  className="px-4 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-100 rounded-lg"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  disabled={submitting}
-                  onClick={handleToggleStatus}
-                  className={`px-4 py-2 text-xs font-semibold text-white rounded-lg shadow transition ${
-                    selectedCustomer.isActive
-                      ? 'bg-red-600 hover:bg-red-700'
-                      : 'bg-emerald-600 hover:bg-emerald-700'
-                  }`}
-                >
-                  {submitting
-                    ? 'Updating...'
-                    : selectedCustomer.isActive
-                    ? 'Confirm Deactivation'
-                    : 'Confirm Activation'}
-                </button>
-              </div>
+            {/* Footer */}
+            <div className="p-4 border-t border-[#E2E6E3] bg-[#F8F7F4] flex justify-end">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => {
+                  setIsDetailDrawerOpen(false);
+                  handleOpenEdit(selectedCustomer);
+                }}
+              >
+                Edit Customer Profile
+              </Button>
             </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </AppLayout>
   );
 }

@@ -6,6 +6,7 @@ import AppLayout from '@/components/AppLayout';
 import { useAuth } from '@/lib/auth-context';
 import { useBranch } from '@/lib/branch-context';
 import { BarcodeDisplay } from '@/components/BarcodeDisplay';
+import { Gem, Layers, UploadCloud, Scan, Plus, Search, Eye, Edit, Trash2, X } from 'lucide-react';
 import {
   InventoryItem,
   InventoryLookup,
@@ -431,7 +432,7 @@ export default function InventoryPage() {
           <div>
             <h1 className="text-2xl font-bold tracking-tight text-gray-900 flex items-center space-x-2">
               <span>Inventory Core & Barcodes</span>
-              <span className="text-xs px-2.5 py-0.5 rounded-full font-semibold bg-[#0D3826]/10 text-[#0D3826] border border-[#0D3826]/20">
+              <span className="text-xs px-2.5 py-0.5 rounded-full font-semibold bg-[#123B32]/10 text-[#123B32] border border-[#123B32]/20">
                 Module 5
               </span>
             </h1>
@@ -444,10 +445,10 @@ export default function InventoryPage() {
             {canBulkImport && (
               <Link
                 href="/inventory/import"
-                className="inline-flex items-center space-x-1.5 px-3 py-2 bg-white text-[#0D3826] border border-[#0D3826]/30 hover:bg-green-50 text-sm font-semibold rounded-lg shadow-sm transition"
+                className="inline-flex items-center space-x-1.5 px-3 py-2 bg-white text-[#123B32] border border-[#123B32]/30 hover:bg-green-50 text-sm font-semibold rounded-lg shadow-sm transition"
                 title="Bulk import inventory items from Excel or CSV"
               >
-                <span>📥</span>
+                <UploadCloud className="w-4 h-4 mr-1.5" />
                 <span>Bulk Import</span>
               </Link>
             )}
@@ -457,9 +458,9 @@ export default function InventoryPage() {
               type="button"
               onClick={() => setIsAddMenuOpen(!isAddMenuOpen)}
               disabled={!canCreate}
-              className={`inline-flex items-center space-x-2 px-4 py-2 text-white text-sm font-semibold rounded-lg shadow-sm border border-[#D4AF37]/50 transition ${
+              className={`inline-flex items-center space-x-2 px-4 py-2 text-white text-sm font-semibold rounded-lg shadow-sm border border-[#B89A60]/50 transition ${
                 canCreate
-                  ? 'bg-[#0D3826] hover:bg-[#1B6543]'
+                  ? 'bg-[#123B32] hover:bg-[#1B6543]'
                   : 'bg-gray-400 cursor-not-allowed opacity-60'
               }`}
               title={canCreate ? "Create single item, assembly, or group" : "Creation permission required"}
@@ -476,7 +477,7 @@ export default function InventoryPage() {
                   onClick={() => setIsAddMenuOpen(false)}
                   className="flex items-start px-4 py-2.5 hover:bg-gray-50 transition"
                 >
-                  <span className="text-lg mr-3">💍</span>
+                  <Gem className="w-4 h-4 mr-2.5 text-[#123B32]" />
                   <div>
                     <div className="text-xs font-bold text-gray-900">Single Item</div>
                     <div className="text-[11px] text-gray-500">Create one individually tracked jewellery item.</div>
@@ -490,7 +491,7 @@ export default function InventoryPage() {
                   onClick={() => setIsAddMenuOpen(false)}
                   className="flex items-start px-4 py-2.5 hover:bg-gray-50 transition"
                 >
-                  <span className="text-lg mr-3">🪡</span>
+                  <Layers className="w-4 h-4 mr-2.5 text-purple-700" />
                   <div>
                     <div className="text-xs font-bold text-purple-900 flex items-center space-x-1.5">
                       <span>Assembly</span>
@@ -505,7 +506,7 @@ export default function InventoryPage() {
                   onClick={() => setIsAddMenuOpen(false)}
                   className="flex items-start px-4 py-2.5 hover:bg-gray-50 transition"
                 >
-                  <span className="text-lg mr-3">👑</span>
+                  <Layers className="w-4 h-4 mr-2.5 text-[#B89A60]" />
                   <div>
                     <div className="text-xs font-bold text-indigo-900 flex items-center space-x-1.5">
                       <span>Group</span>
@@ -523,9 +524,9 @@ export default function InventoryPage() {
                       onClick={() => setIsAddMenuOpen(false)}
                       className="flex items-start px-4 py-2.5 hover:bg-gray-50 transition"
                     >
-                      <span className="text-lg mr-3">📥</span>
+                      <UploadCloud className="w-4 h-4 mr-2.5 text-[#123B32]" />
                       <div>
-                        <div className="text-xs font-bold text-[#0D3826] flex items-center space-x-1.5">
+                        <div className="text-xs font-bold text-[#123B32] flex items-center space-x-1.5">
                           <span>Bulk Import</span>
                           <span className="text-[9px] bg-green-100 text-green-800 px-1.5 py-0.2 rounded font-semibold">Excel / CSV</span>
                         </div>
@@ -561,11 +562,11 @@ export default function InventoryPage() {
             onClick={() => setViewMode('single')}
             className={`py-3 px-6 text-sm font-bold border-b-2 transition flex items-center space-x-2 ${
               viewMode === 'single'
-                ? 'border-[#0D3826] text-[#0D3826]'
+                ? 'border-[#123B32] text-[#123B32]'
                 : 'border-transparent text-gray-500 hover:text-gray-700'
             }`}
           >
-            <span>💍</span>
+            <Gem className="w-4 h-4 text-[#123B32]" />
             <span>Single Inventory Items ({inventoryResult.totalCount})</span>
           </button>
           <button
@@ -576,14 +577,14 @@ export default function InventoryPage() {
             }}
             className={`py-3 px-6 text-sm font-bold border-b-2 transition flex items-center space-x-2 ${
               viewMode === 'compositions'
-                ? 'border-[#0D3826] text-[#0D3826]'
+                ? 'border-[#123B32] text-[#123B32]'
                 : 'border-transparent text-gray-500 hover:text-gray-700'
             }`}
           >
-            <span>👑</span>
+            <Layers className="w-4 h-4 text-[#B89A60]" />
             <span>Compositions (Assemblies & Groups)</span>
             {compositions.length > 0 && (
-              <span className="text-[10px] bg-[#0D3826]/10 text-[#0D3826] px-1.5 py-0.5 rounded-full font-bold">
+              <span className="text-[10px] bg-[#123B32]/10 text-[#123B32] px-1.5 py-0.5 rounded-full font-bold">
                 {compositions.length}
               </span>
             )}
@@ -593,10 +594,10 @@ export default function InventoryPage() {
         {/* Fast Scanner Bar & Search Controls */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           {/* Fast Barcode / Tag Lookup Bar */}
-          <div className="lg:col-span-1 bg-gradient-to-r from-[#0D3826] to-[#154c34] p-4 rounded-xl text-white shadow-sm flex flex-col justify-between">
+          <div className="lg:col-span-1 bg-gradient-to-r from-[#123B32] to-[#154c34] p-4 rounded-xl text-white shadow-sm flex flex-col justify-between">
             <div>
-              <div className="flex items-center space-x-2 text-[#D4AF37] font-bold text-xs uppercase tracking-wider mb-1">
-                <span>⚡</span>
+              <div className="flex items-center space-x-2 text-[#B89A60] font-bold text-xs uppercase tracking-wider mb-1">
+                <Scan className="w-4 h-4 text-[#B89A60]" />
                 <span>Quick Scanner / POS Lookup</span>
               </div>
               <p className="text-xs text-gray-200 mb-3">
@@ -606,14 +607,14 @@ export default function InventoryPage() {
             <form onSubmit={handleQuickScan} className="flex space-x-2">
               <input
                 type="text"
-                placeholder="Scan Barcode or Tag..."
+                placeholder="Scan or enter jewellery tag or barcode"
                 value={scanInput}
                 onChange={(e) => setScanInput(e.target.value)}
-                className="flex-1 px-3 py-1.5 text-xs text-gray-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#D4AF37]"
+                className="flex-1 px-3 py-1.5 text-xs text-gray-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#B89A60]"
               />
               <button
                 type="submit"
-                className="px-3 py-1.5 bg-[#D4AF37] hover:bg-[#b89528] text-white text-xs font-bold rounded-lg shadow transition"
+                className="px-3 py-1.5 bg-[#B89A60] hover:bg-[#b89528] text-white text-xs font-bold rounded-lg shadow transition"
               >
                 Lookup
               </button>
@@ -627,10 +628,10 @@ export default function InventoryPage() {
                 <label className="block text-[11px] font-semibold text-gray-600 mb-1">Search Keywords</label>
                 <input
                   type="text"
-                  placeholder="Item Name, SKU, Tag, Barcode..."
+                  placeholder="Search by item name, tag, barcode or SKU"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  className="w-full px-3 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-1 focus:ring-[#0D3826]"
+                  className="w-full px-3 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-1 focus:ring-[#123B32]"
                 />
               </div>
 
@@ -639,9 +640,9 @@ export default function InventoryPage() {
                 <select
                   value={selectedBranchId}
                   onChange={(e) => setSelectedBranchId(e.target.value)}
-                  className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-1 focus:ring-[#0D3826] bg-white font-medium"
+                  className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-1 focus:ring-[#123B32] bg-white font-medium"
                 >
-                  {user?.isGlobalAdmin && <option value="">🌐 All Branches (Global)</option>}
+                  {user?.isGlobalAdmin && <option value="">All Branches (Global)</option>}
                   {branches.map((b) => (
                     <option key={b.id} value={b.id}>
                       {b.code} - {b.name}
@@ -655,7 +656,7 @@ export default function InventoryPage() {
                 <select
                   value={selectedLocationId}
                   onChange={(e) => setSelectedLocationId(e.target.value)}
-                  className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-1 focus:ring-[#0D3826] bg-white font-medium"
+                  className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-1 focus:ring-[#123B32] bg-white font-medium"
                 >
                   <option value="">All Locations</option>
                   {branchLocations.map((l) => (
@@ -721,7 +722,7 @@ export default function InventoryPage() {
                     type="checkbox"
                     checked={showInactive}
                     onChange={(e) => setShowInactive(e.target.checked)}
-                    className="rounded border-gray-300 text-[#0D3826] focus:ring-[#0D3826]"
+                    className="rounded border-gray-300 text-[#123B32] focus:ring-[#123B32]"
                   />
                   <span>Show Inactive</span>
                 </label>
@@ -740,7 +741,7 @@ export default function InventoryPage() {
         {/* Inventory Data Table (Single Items) */}
         {viewMode === 'single' && (
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-            <div className="px-4 py-3 bg-[#0D3826]/5 border-b border-gray-200 flex items-center justify-between text-xs">
+            <div className="px-4 py-3 bg-[#123B32]/5 border-b border-gray-200 flex items-center justify-between text-xs">
               <span className="font-bold text-gray-700 uppercase tracking-wider">
                 Tracked Physical Inventory ({inventoryResult.totalCount} items)
               </span>
@@ -767,7 +768,7 @@ export default function InventoryPage() {
                   {inventoryResult.items.map((item) => (
                     <tr key={item.id} className="hover:bg-gray-50/80 transition">
                       <td className="px-4 py-3">
-                        <div className="font-mono font-bold text-[#0D3826] text-xs">{item.tagNumber}</div>
+                        <div className="font-mono font-bold text-[#123B32] text-xs">{item.tagNumber}</div>
                         <div className="font-mono text-[10px] text-gray-400">{item.barcode}</div>
                       </td>
                       <td className="px-4 py-3">
@@ -835,7 +836,7 @@ export default function InventoryPage() {
                         {canEdit && item.status !== 3 && (
                           <button
                             onClick={() => handleOpenEdit(item)}
-                            className="text-[#0D3826] hover:underline font-semibold"
+                            className="text-[#123B32] hover:underline font-semibold"
                           >
                             Edit
                           </button>
@@ -903,15 +904,15 @@ export default function InventoryPage() {
         {/* Compositions Data Table (Module 6: Assemblies & Groups) */}
         {viewMode === 'compositions' && (
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-            <div className="px-4 py-3 bg-[#0D3826]/5 border-b border-gray-200 flex items-center justify-between text-xs">
+            <div className="px-4 py-3 bg-[#123B32]/5 border-b border-gray-200 flex items-center justify-between text-xs">
               <span className="font-bold text-gray-700 uppercase tracking-wider flex items-center space-x-2">
-                <span>👑</span>
+                <Layers className="w-4 h-4 text-[#B89A60]" />
                 <span>Active Compositions ({compositions.length} items)</span>
               </span>
               <button
                 onClick={fetchCompositions}
                 disabled={isLoadingCompositions}
-                className="text-[#0D3826] hover:underline font-semibold"
+                className="text-[#123B32] hover:underline font-semibold"
               >
                 {isLoadingCompositions ? 'Refreshing...' : 'Refresh'}
               </button>
@@ -935,7 +936,7 @@ export default function InventoryPage() {
                   {compositions.map((comp) => (
                     <tr key={comp.id} className="hover:bg-gray-50/80 transition">
                       <td className="px-4 py-3">
-                        <div className="font-mono font-bold text-[#0D3826] text-xs">{comp.tagNumber}</div>
+                        <div className="font-mono font-bold text-[#123B32] text-xs">{comp.tagNumber}</div>
                         <div className="font-mono text-[10px] text-gray-400">{comp.barcode}</div>
                       </td>
                       <td className="px-4 py-3">
@@ -1022,9 +1023,9 @@ export default function InventoryPage() {
         {isScanModalOpen && scannedResult && (
           <div className="fixed inset-0 z-50 overflow-y-auto bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
             <div className="bg-white rounded-xl shadow-xl max-w-md w-full overflow-hidden border border-gray-200 animate-in fade-in zoom-in-95 duration-150">
-              <div className="bg-[#0D3826] px-6 py-4 text-white flex items-center justify-between">
+              <div className="bg-[#123B32] px-6 py-4 text-white flex items-center justify-between">
                 <div className="flex items-center space-x-2">
-                  <span>⚡</span>
+                  <Scan className="w-4 h-4 text-[#B89A60]" />
                   <h3 className="font-bold text-sm tracking-wide">Scanned Item Result</h3>
                 </div>
                 <button onClick={() => setIsScanModalOpen(false)} className="text-gray-300 hover:text-white font-bold">
@@ -1064,7 +1065,7 @@ export default function InventoryPage() {
                   </div>
                   <div>
                     <span className="text-[10px] text-gray-400 uppercase font-semibold">Net Gold Weight</span>
-                    <p className="font-mono font-bold text-[#0D3826] text-sm">{scannedResult.netWeight.toFixed(4)} g</p>
+                    <p className="font-mono font-bold text-[#123B32] text-sm">{scannedResult.netWeight.toFixed(4)} g</p>
                   </div>
                   <div>
                     <span className="text-[10px] text-gray-400 uppercase font-semibold">Location</span>
@@ -1075,7 +1076,7 @@ export default function InventoryPage() {
                 <div className="flex justify-end pt-2">
                   <button
                     onClick={() => setIsScanModalOpen(false)}
-                    className="px-4 py-1.5 bg-[#0D3826] text-white font-semibold rounded-lg"
+                    className="px-4 py-1.5 bg-[#123B32] text-white font-semibold rounded-lg"
                   >
                     Close
                   </button>
@@ -1089,10 +1090,10 @@ export default function InventoryPage() {
         {isDetailsModalOpen && selectedItem && (
           <div className="fixed inset-0 z-50 overflow-y-auto bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
             <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full overflow-hidden border border-gray-200 animate-in fade-in zoom-in-95 duration-150">
-              <div className="bg-[#0D3826] px-6 py-4 text-white flex items-center justify-between">
+              <div className="bg-[#123B32] px-6 py-4 text-white flex items-center justify-between">
                 <div>
                   <h3 className="font-bold text-sm tracking-wide">{selectedItem.name}</h3>
-                  <p className="text-[11px] text-[#D4AF37] font-mono">Tag: {selectedItem.tagNumber} | Barcode: {selectedItem.barcode}</p>
+                  <p className="text-[11px] text-[#B89A60] font-mono">Tag: {selectedItem.tagNumber} | Barcode: {selectedItem.barcode}</p>
                 </div>
                 <button onClick={() => setIsDetailsModalOpen(false)} className="text-gray-300 hover:text-white font-bold">
                   ✕
@@ -1185,7 +1186,7 @@ export default function InventoryPage() {
               <div className="bg-gray-50 px-6 py-3 border-t border-gray-200 flex justify-end">
                 <button
                   onClick={() => setIsDetailsModalOpen(false)}
-                  className="px-4 py-1.5 bg-[#0D3826] text-white font-semibold rounded-lg text-xs"
+                  className="px-4 py-1.5 bg-[#123B32] text-white font-semibold rounded-lg text-xs"
                 >
                   Close
                 </button>
@@ -1198,16 +1199,16 @@ export default function InventoryPage() {
         {isCompositionModalOpen && selectedComposition && (
           <div className="fixed inset-0 z-50 overflow-y-auto bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
             <div className="bg-white rounded-xl shadow-xl max-w-3xl w-full overflow-hidden border border-gray-200 animate-in fade-in zoom-in-95 duration-150">
-              <div className="bg-[#0D3826] px-6 py-4 text-white flex items-center justify-between">
+              <div className="bg-[#123B32] px-6 py-4 text-white flex items-center justify-between">
                 <div>
                   <div className="flex items-center space-x-2">
-                    <span className="text-lg">👑</span>
+                    <Layers className="w-4 h-4 text-[#B89A60]" />
                     <h3 className="font-bold text-sm tracking-wide">{selectedComposition.name}</h3>
-                    <span className="text-xs px-2 py-0.5 rounded-full font-bold bg-[#D4AF37] text-white">
+                    <span className="text-xs px-2 py-0.5 rounded-full font-bold bg-[#B89A60] text-white">
                       {selectedComposition.type === 1 ? 'Assembly' : 'Group'}
                     </span>
                   </div>
-                  <p className="text-[11px] text-[#D4AF37] font-mono mt-0.5">
+                  <p className="text-[11px] text-[#B89A60] font-mono mt-0.5">
                     Parent Tag: {selectedComposition.tagNumber} | Barcode: {selectedComposition.barcode}
                   </p>
                 </div>
@@ -1252,7 +1253,7 @@ export default function InventoryPage() {
                     </div>
                     <div className="bg-white p-2.5 rounded-lg border border-amber-100 shadow-sm">
                       <span className="text-[10px] text-emerald-700 uppercase font-bold">Total Net Wt</span>
-                      <p className="font-mono font-bold text-[#0D3826] text-sm mt-0.5">
+                      <p className="font-mono font-bold text-[#123B32] text-sm mt-0.5">
                         {selectedComposition.totalNetWeight.toFixed(4)} g
                       </p>
                     </div>
@@ -1308,7 +1309,7 @@ export default function InventoryPage() {
                         {selectedComposition.members.map((m) => (
                           <tr key={m.id} className={m.isActive ? 'hover:bg-gray-50' : 'bg-gray-50/50 text-gray-400'}>
                             <td className="px-3 py-2">
-                              <div className="font-mono font-bold text-[#0D3826]">{m.tagNumber}</div>
+                              <div className="font-mono font-bold text-[#123B32]">{m.tagNumber}</div>
                               <div className="font-mono text-[10px] text-gray-400">{m.barcode}</div>
                             </td>
                             <td className="px-3 py-2">
@@ -1355,7 +1356,7 @@ export default function InventoryPage() {
                 ) : <div />}
                 <button
                   onClick={() => setIsCompositionModalOpen(false)}
-                  className="px-4 py-1.5 bg-[#0D3826] text-white font-semibold rounded-lg text-xs"
+                  className="px-4 py-1.5 bg-[#123B32] text-white font-semibold rounded-lg text-xs"
                 >
                   Close
                 </button>
@@ -1366,7 +1367,7 @@ export default function InventoryPage() {
         {isFormModalOpen && (
           <div className="fixed inset-0 z-50 overflow-y-auto bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
             <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full overflow-hidden border border-gray-200 animate-in fade-in zoom-in-95 duration-150">
-              <div className="bg-[#0D3826] px-6 py-4 text-white flex items-center justify-between">
+              <div className="bg-[#123B32] px-6 py-4 text-white flex items-center justify-between">
                 <div>
                   <h3 className="font-bold text-sm tracking-wide">
                     {editingItem ? 'Edit Inventory Item' : 'New Jewellery Inventory Item'}
@@ -1404,7 +1405,7 @@ export default function InventoryPage() {
                       value={formLocationId}
                       onChange={(e) => setFormLocationId(e.target.value)}
                       required
-                      className="w-full px-3 py-1.5 border border-gray-300 rounded-lg bg-white font-semibold text-[#0D3826]"
+                      className="w-full px-3 py-1.5 border border-gray-300 rounded-lg bg-white font-semibold text-[#123B32]"
                     >
                       {branchLocations.map((l) => (
                         <option key={l.id} value={l.id}>
@@ -1425,7 +1426,7 @@ export default function InventoryPage() {
                       value={formName}
                       onChange={(e) => setFormName(e.target.value)}
                       placeholder="e.g. 22K Traditional Peacock Necklace"
-                      className="w-full px-3 py-1.5 border border-gray-300 rounded-lg focus:ring-1 focus:ring-[#0D3826]"
+                      className="w-full px-3 py-1.5 border border-gray-300 rounded-lg focus:ring-1 focus:ring-[#123B32]"
                     />
                   </div>
                   <div>
@@ -1435,7 +1436,7 @@ export default function InventoryPage() {
                       value={formItemCode}
                       onChange={(e) => setFormItemCode(e.target.value)}
                       placeholder="Optional SKU..."
-                      className="w-full px-3 py-1.5 font-mono uppercase border border-gray-300 rounded-lg focus:ring-1 focus:ring-[#0D3826]"
+                      className="w-full px-3 py-1.5 font-mono uppercase border border-gray-300 rounded-lg focus:ring-1 focus:ring-[#123B32]"
                     />
                   </div>
                 </div>
@@ -1523,7 +1524,7 @@ export default function InventoryPage() {
                         type="text"
                         disabled
                         value={`${computedNetWeight} g`}
-                        className="w-full px-3 py-1.5 font-mono font-bold bg-gray-100 text-[#0D3826] border border-gray-200 rounded-lg"
+                        className="w-full px-3 py-1.5 font-mono font-bold bg-gray-100 text-[#123B32] border border-gray-200 rounded-lg"
                       />
                     </div>
                   </div>
@@ -1672,7 +1673,7 @@ export default function InventoryPage() {
                       type="checkbox"
                       checked={formIsActive}
                       onChange={(e) => setFormIsActive(e.target.checked)}
-                      className="rounded border-gray-300 text-[#0D3826] focus:ring-[#0D3826]"
+                      className="rounded border-gray-300 text-[#123B32] focus:ring-[#123B32]"
                     />
                     <span>Active for operational transactions</span>
                   </label>
@@ -1688,7 +1689,7 @@ export default function InventoryPage() {
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 bg-[#0D3826] hover:bg-[#1B6543] text-white rounded-lg font-semibold shadow-sm border border-[#D4AF37]/50"
+                    className="px-4 py-2 bg-[#123B32] hover:bg-[#1B6543] text-white rounded-lg font-semibold shadow-sm border border-[#B89A60]/50"
                   >
                     {editingItem ? 'Save Changes' : 'Create Inventory Item'}
                   </button>

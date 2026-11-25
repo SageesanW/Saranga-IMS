@@ -7,6 +7,7 @@ import AppLayout from '@/components/AppLayout';
 import { useAuth } from '@/lib/auth-context';
 import { useBranch } from '@/lib/branch-context';
 import { BarcodeDisplay } from '@/components/BarcodeDisplay';
+import { Lock } from 'lucide-react';
 import {
   Branch,
   StockLocation,
@@ -279,14 +280,14 @@ function CompositionCreationContent() {
       <AppLayout>
         <div className="max-w-4xl mx-auto py-12 px-4 text-center">
           <div className="bg-red-50 border border-red-200 rounded-xl p-8 shadow-sm">
-            <span className="text-4xl">🔒</span>
+            <div className="w-12 h-12 rounded-xl bg-rose-50 text-rose-700 flex items-center justify-center mx-auto"><Lock className="w-6 h-6" /></div>
             <h2 className="text-xl font-bold text-red-800 mt-3">Access Restricted</h2>
             <p className="text-sm text-red-600 mt-2">
               You do not have permission (<code>INVENTORY_COMPOSITION_CREATE</code>) to create assemblies or groups.
             </p>
             <Link
               href="/inventory"
-              className="inline-block mt-4 px-4 py-2 bg-[#0D3826] text-white text-xs font-semibold rounded-lg hover:bg-[#1B6543]"
+              className="inline-block mt-4 px-4 py-2 bg-[#123B32] text-white text-xs font-semibold rounded-lg hover:bg-[#1B6543]"
             >
               Return to Inventory
             </Link>
@@ -317,7 +318,7 @@ function CompositionCreationContent() {
               <div className="grid grid-cols-2 gap-4 text-left">
                 <div>
                   <span className="text-xs text-gray-500 font-semibold uppercase">Parent Tag Number</span>
-                  <div className="font-mono text-base font-bold text-[#0D3826]">{createdComposition.tagNumber}</div>
+                  <div className="font-mono text-base font-bold text-[#123B32]">{createdComposition.tagNumber}</div>
                 </div>
                 <div>
                   <span className="text-xs text-gray-500 font-semibold uppercase">Composition Type</span>
@@ -371,7 +372,7 @@ function CompositionCreationContent() {
               </button>
               <Link
                 href="/inventory"
-                className="px-6 py-2.5 bg-[#0D3826] hover:bg-[#1B6543] text-white text-sm font-semibold rounded-lg shadow transition"
+                className="px-6 py-2.5 bg-[#123B32] hover:bg-[#1B6543] text-white text-sm font-semibold rounded-lg shadow transition"
               >
                 Go to Inventory List
               </Link>
@@ -387,7 +388,7 @@ function CompositionCreationContent() {
       <div className="max-w-5xl mx-auto py-6 px-4">
         {/* Navigation Breadcrumbs */}
         <div className="flex items-center space-x-2 text-xs text-gray-500 mb-4">
-          <Link href="/inventory" className="hover:text-[#0D3826]">Inventory</Link>
+          <Link href="/inventory" className="hover:text-[#123B32]">Inventory</Link>
           <span>/</span>
           <span className="text-gray-800 font-semibold">
             New {type === 1 ? 'Assembly' : 'Group'} Composition
@@ -426,7 +427,7 @@ function CompositionCreationContent() {
               key={s.step}
               className={`p-3 rounded-xl border text-center transition ${
                 currentStep === s.step
-                  ? 'bg-[#0D3826] text-white border-[#0D3826] shadow-sm'
+                  ? 'bg-[#123B32] text-white border-[#123B32] shadow-sm'
                   : currentStep > s.step
                   ? 'bg-emerald-50 text-emerald-800 border-emerald-300 font-medium'
                   : 'bg-white text-gray-400 border-gray-200'
@@ -466,7 +467,7 @@ function CompositionCreationContent() {
                   <select
                     value={branchId}
                     onChange={(e) => handleBranchChange(e.target.value)}
-                    className="w-full px-3 py-2 text-xs border border-gray-300 rounded-lg focus:ring-1 focus:ring-[#0D3826]"
+                    className="w-full px-3 py-2 text-xs border border-gray-300 rounded-lg focus:ring-1 focus:ring-[#123B32]"
                   >
                     {branches.map((b) => (
                       <option key={b.id} value={b.id}>
@@ -486,7 +487,7 @@ function CompositionCreationContent() {
                       setStockLocationId(e.target.value);
                       setSelectedMembers([]);
                     }}
-                    className="w-full px-3 py-2 text-xs border border-gray-300 rounded-lg focus:ring-1 focus:ring-[#0D3826]"
+                    className="w-full px-3 py-2 text-xs border border-gray-300 rounded-lg focus:ring-1 focus:ring-[#123B32]"
                   >
                     {locations.map((l) => (
                       <option key={l.id} value={l.id}>
@@ -566,10 +567,10 @@ function CompositionCreationContent() {
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g. Royal Sovereign 22K Bangle Pair (Set of 2)"
+                  placeholder="e.g. Bridal Necklace Set"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="w-full px-3 py-2 text-xs border border-gray-300 rounded-lg focus:ring-1 focus:ring-[#0D3826]"
+                  className="w-full px-3 py-2 text-xs border border-gray-300 rounded-lg focus:ring-1 focus:ring-[#123B32]"
                 />
               </div>
 
@@ -577,10 +578,10 @@ function CompositionCreationContent() {
                 <label className="block text-xs font-semibold text-gray-700 mb-1">Description / Notes</label>
                 <textarea
                   rows={3}
-                  placeholder="Optional details regarding composition pairing, display instructions, or packaging..."
+                  placeholder="Describe the jewellery items included in this set"
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  className="w-full px-3 py-2 text-xs border border-gray-300 rounded-lg focus:ring-1 focus:ring-[#0D3826]"
+                  className="w-full px-3 py-2 text-xs border border-gray-300 rounded-lg focus:ring-1 focus:ring-[#123B32]"
                 />
               </div>
             </div>
@@ -601,21 +602,21 @@ function CompositionCreationContent() {
               </div>
 
               {/* Fast Barcode/Tag Scanner Bar */}
-              <div className="bg-gradient-to-r from-[#0D3826] to-[#154c34] p-4 rounded-xl text-white">
-                <div className="text-xs font-bold text-[#D4AF37] uppercase tracking-wider mb-1">
+              <div className="bg-gradient-to-r from-[#123B32] to-[#154c34] p-4 rounded-xl text-white">
+                <div className="text-xs font-bold text-[#B89A60] uppercase tracking-wider mb-1">
                   Scan Physical Barcode or Tag Number
                 </div>
                 <form onSubmit={handleScanSubmit} className="flex space-x-2 mt-2">
                   <input
                     type="text"
-                    placeholder="Scan or enter Barcode / TagNumber..."
+                    placeholder="Scan a barcode or search available jewellery items"
                     value={scanInput}
                     onChange={(e) => setScanInput(e.target.value)}
-                    className="flex-1 px-3 py-2 text-xs text-gray-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#D4AF37]"
+                    className="flex-1 px-3 py-2 text-xs text-gray-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#B89A60]"
                   />
                   <button
                     type="submit"
-                    className="px-4 py-2 bg-[#D4AF37] hover:bg-[#b89528] text-white text-xs font-bold rounded-lg shadow transition"
+                    className="px-4 py-2 bg-[#B89A60] hover:bg-[#b89528] text-white text-xs font-bold rounded-lg shadow transition"
                   >
                     Add Scanned Item
                   </button>
@@ -630,7 +631,7 @@ function CompositionCreationContent() {
                   </h4>
                   {selectedMembers.length < 2 && (
                     <span className="text-[11px] text-amber-700 font-semibold bg-amber-50 px-2 py-0.5 rounded">
-                      ⚠️ Minimum 2 items required
+                      Minimum 2 items required
                     </span>
                   )}
                 </div>
@@ -712,10 +713,10 @@ function CompositionCreationContent() {
                   </h4>
                   <input
                     type="text"
-                    placeholder="Filter by name, tag, or barcode..."
+                    placeholder="Search by item name, tag, barcode or SKU"
                     value={searchFilter}
                     onChange={(e) => setSearchFilter(e.target.value)}
-                    className="w-64 px-3 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-1 focus:ring-[#0D3826]"
+                    className="w-64 px-3 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-1 focus:ring-[#123B32]"
                   />
                 </div>
 
@@ -748,7 +749,7 @@ function CompositionCreationContent() {
                               <button
                                 type="button"
                                 onClick={() => handleAddCandidate(item)}
-                                className="px-2.5 py-1 bg-[#0D3826] hover:bg-[#1B6543] text-white text-xs font-semibold rounded shadow-sm transition"
+                                className="px-2.5 py-1 bg-[#123B32] hover:bg-[#1B6543] text-white text-xs font-semibold rounded shadow-sm transition"
                               >
                                 + Add
                               </button>
@@ -852,7 +853,7 @@ function CompositionCreationContent() {
 
               {/* Automated Tag & Barcode Notification */}
               <div className="bg-emerald-50 border border-emerald-200 p-3.5 rounded-xl flex items-start space-x-3 text-xs">
-                <span className="text-base">🔒</span>
+                
                 <div>
                   <h4 className="font-bold text-emerald-900">Automatic Namespace-Separated Identifiers</h4>
                   <p className="text-emerald-700 mt-0.5">
@@ -883,7 +884,7 @@ function CompositionCreationContent() {
             <button
               type="button"
               onClick={handleNext}
-              className="px-6 py-2 bg-[#0D3826] hover:bg-[#1B6543] text-white text-xs font-bold rounded-lg shadow transition"
+              className="px-6 py-2 bg-[#123B32] hover:bg-[#1B6543] text-white text-xs font-bold rounded-lg shadow transition"
             >
               Continue →
             </button>
@@ -896,7 +897,7 @@ function CompositionCreationContent() {
                 isSubmitting ? 'bg-gray-400 cursor-not-allowed' : 'bg-emerald-700 hover:bg-emerald-800'
               }`}
             >
-              {isSubmitting ? 'Creating Composition...' : '✓ Confirm & Create Composition'}
+              {isSubmitting ? 'Creating Composition...' : 'Confirm & Create Composition'}
             </button>
           )}
         </div>
