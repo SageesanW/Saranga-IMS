@@ -174,6 +174,8 @@ public class DataSeeder : IDataSeeder
             Permissions.RepairManage,
             Permissions.ShiftStart,
             Permissions.ShiftEnd,
+            Permissions.ShiftOverrideClose,
+            Permissions.CashDrawerManage,
             Permissions.CashLedgerView,
             Permissions.CashLedgerAdjust,
             Permissions.SalesVerifyL1,

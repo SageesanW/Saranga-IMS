@@ -33,7 +33,9 @@ export default function ShiftsPage() {
   // Modals
   const [showOpenModal, setShowOpenModal] = useState<boolean>(false);
   const [showCloseModal, setShowCloseModal] = useState<boolean>(false);
+  const [closingShiftTarget, setClosingShiftTarget] = useState<Shift | null>(null);
   const [showAddDrawerModal, setShowAddDrawerModal] = useState<boolean>(false);
+  const [editingDrawer, setEditingDrawer] = useState<CashDrawer | null>(null);
   const [selectedShiftForDetail, setSelectedShiftForDetail] = useState<Shift | null>(null);
 
   // Open Shift Form State
@@ -50,14 +52,15 @@ export default function ShiftsPage() {
   const [actualClosingCash, setActualClosingCash] = useState<string>('');
   const [closingVarianceReason, setClosingVarianceReason] = useState<string>('');
   const [closingNotes, setClosingNotes] = useState<string>('');
+  const [overrideReason, setOverrideReason] = useState<string>('');
   const [closeConfirm, setCloseConfirm] = useState<boolean>(false);
   const [closeSubmitting, setCloseSubmitting] = useState<boolean>(false);
   const [closeError, setCloseError] = useState<string | null>(null);
 
-  // Add Drawer Form State
-  const [newDrawerCode, setNewDrawerCode] = useState<string>('');
-  const [newDrawerName, setNewDrawerName] = useState<string>('');
-  const [newDrawerDesc, setNewDrawerDesc] = useState<string>('');
+  // Add / Edit Drawer Form State
+  const [drawerCodeInput, setDrawerCodeInput] = useState<string>('');
+  const [drawerNameInput, setDrawerNameInput] = useState<string>('');
+  const [drawerDescInput, setDrawerDescInput] = useState<string>('');
   const [drawerSubmitting, setDrawerSubmitting] = useState<boolean>(false);
   const [drawerError, setDrawerError] = useState<string | null>(null);
 
@@ -66,6 +69,8 @@ export default function ShiftsPage() {
 
   const canStartShift = user?.permissions.includes('SHIFT_START') || user?.isGlobalAdmin;
   const canEndShift = user?.permissions.includes('SHIFT_END') || user?.isGlobalAdmin;
+  const canOverrideClose = user?.permissions.includes('SHIFT_OVERRIDE_CLOSE') || user?.isGlobalAdmin;
+  const canManageDrawers = user?.permissions.includes('CASH_DRAWER_MANAGE') || user?.isGlobalAdmin;
 
   // Load Active Shift
   const fetchActiveShift = useCallback(async () => {
@@ -153,7 +158,7 @@ export default function ShiftsPage() {
 
     const floatNum = parseFloat(openingFloat);
     if (isNaN(floatNum) || floatNum < 0) {
-      setOpenError('Please enter a valid positive opening cash amount.');
+      setOpenError('Please enter a valid non-negative opening cash amount.');
       return;
     }
 
@@ -196,10 +201,24 @@ export default function ShiftsPage() {
     setOpenError(null);
   };
 
+  // Prepare Close Modal
+  const initiateCloseShift = (target: Shift) => {
+    setClosingShiftTarget(target);
+    const exp = target.expectedClosingBalance ?? target.openingBalance;
+    setActualClosingCash(exp.toFixed(2));
+    setClosingVarianceReason('');
+    setClosingNotes('');
+    setOverrideReason('');
+    setCloseConfirm(false);
+    setCloseError(null);
+    setShowCloseModal(true);
+  };
+
   // Submit Close Shift
   const handleCloseShift = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!activeShift) return;
+    const target = closingShiftTarget || activeShift;
+    if (!target) return;
 
     const actualCashNum = parseFloat(actualClosingCash);
     if (isNaN(actualCashNum) || actualCashNum < 0) {
@@ -207,7 +226,18 @@ export default function ShiftsPage() {
       return;
     }
 
-    const expectedCash = activeShift.expectedClosingBalance ?? activeShift.openingBalance;
+    const isOverride = target.cashierId !== user?.id;
+    if (isOverride && !canOverrideClose) {
+      setCloseError('You can only close your own active shift unless authorized with management override permission.');
+      return;
+    }
+
+    if (isOverride && !overrideReason.trim()) {
+      setCloseError('A mandatory management explanation reason is required when closing another cashier\'s shift.');
+      return;
+    }
+
+    const expectedCash = target.expectedClosingBalance ?? target.openingBalance;
     const variance = actualCashNum - expectedCash;
     if (variance !== 0 && !closingVarianceReason.trim()) {
       const vType = variance < 0 ? 'Shortage' : 'Surplus';
@@ -223,16 +253,20 @@ export default function ShiftsPage() {
     try {
       setCloseSubmitting(true);
       setCloseError(null);
-      await shiftApi.closeShift(activeShift.id, {
+      await shiftApi.closeShift(target.id, {
         actualClosingBalance: actualCashNum,
         closingVarianceReason: variance !== 0 ? closingVarianceReason.trim() : undefined,
         closingNotes: closingNotes.trim() || undefined,
-        rowVersion: activeShift.version
+        overrideReason: isOverride ? overrideReason.trim() : undefined,
+        rowVersion: target.version
       });
 
-      setAlertMessage({ type: 'success', message: `Shift ${activeShift.shiftNumber} closed and reconciled successfully.` });
+      setAlertMessage({
+        type: 'success',
+        message: `Shift ${target.shiftNumber} closed and reconciled successfully${isOverride ? ' (Management Override)' : ''}.`
+      });
       setShowCloseModal(false);
-      resetCloseForm();
+      setClosingShiftTarget(null);
       await Promise.all([fetchActiveShift(), fetchDrawers(), fetchHistory()]);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to close shift.';
@@ -242,20 +276,12 @@ export default function ShiftsPage() {
     }
   };
 
-  const resetCloseForm = () => {
-    setActualClosingCash('');
-    setClosingVarianceReason('');
-    setClosingNotes('');
-    setCloseConfirm(false);
-    setCloseError(null);
-  };
-
-  // Submit Add Cash Drawer
-  const handleAddDrawer = async (e: React.FormEvent) => {
+  // Submit Create or Edit Cash Drawer
+  const handleSaveDrawer = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!activeBranchId) return;
 
-    if (!newDrawerCode.trim() || !newDrawerName.trim()) {
+    if (!drawerCodeInput.trim() || !drawerNameInput.trim()) {
       setDrawerError('Drawer code and drawer name are required.');
       return;
     }
@@ -263,36 +289,85 @@ export default function ShiftsPage() {
     try {
       setDrawerSubmitting(true);
       setDrawerError(null);
-      await shiftApi.createCashDrawer({
-        branchId: activeBranchId,
-        drawerCode: newDrawerCode.trim().toUpperCase(),
-        name: newDrawerName.trim(),
-        description: newDrawerDesc.trim() || undefined
-      });
 
-      setAlertMessage({ type: 'success', message: 'New cash drawer registered successfully.' });
+      if (editingDrawer) {
+        await shiftApi.updateCashDrawer(editingDrawer.id, {
+          drawerCode: drawerCodeInput.trim().toUpperCase(),
+          name: drawerNameInput.trim(),
+          description: drawerDescInput.trim() || undefined,
+          branchId: activeBranchId
+        });
+        setAlertMessage({ type: 'success', message: `Cash drawer ${drawerCodeInput} updated successfully.` });
+      } else {
+        await shiftApi.createCashDrawer({
+          branchId: activeBranchId,
+          drawerCode: drawerCodeInput.trim().toUpperCase(),
+          name: drawerNameInput.trim(),
+          description: drawerDescInput.trim() || undefined
+        });
+        setAlertMessage({ type: 'success', message: 'New cash drawer registered successfully.' });
+      }
+
       setShowAddDrawerModal(false);
-      setNewDrawerCode('');
-      setNewDrawerName('');
-      setNewDrawerDesc('');
+      setEditingDrawer(null);
+      setDrawerCodeInput('');
+      setDrawerNameInput('');
+      setDrawerDescInput('');
       await fetchDrawers();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to create cash drawer.';
+      const msg = err instanceof Error ? err.message : 'Failed to save cash drawer.';
       setDrawerError(msg);
     } finally {
       setDrawerSubmitting(false);
     }
   };
 
-  // Derived calculations for open modal
+  // Toggle Drawer Active Status
+  const handleToggleDrawerStatus = async (drawer: CashDrawer) => {
+    if (!canManageDrawers) return;
+    try {
+      await shiftApi.updateCashDrawerStatus(drawer.id, {
+        isActive: !drawer.isActive,
+        reason: drawer.isActive ? 'Deactivated by manager' : 'Reactivated by manager'
+      });
+      setAlertMessage({
+        type: 'success',
+        message: `Cash drawer ${drawer.drawerCode} ${drawer.isActive ? 'deactivated' : 'activated'} successfully.`
+      });
+      await fetchDrawers();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to update drawer status.';
+      setAlertMessage({ type: 'error', message: msg });
+    }
+  };
+
+  // Delete Cash Drawer
+  const handleDeleteDrawer = async (drawer: CashDrawer) => {
+    if (!canManageDrawers) return;
+    if (!confirm(`Are you sure you want to delete cash drawer '${drawer.name}' (${drawer.drawerCode})? Drawers with past shift history cannot be deleted.`)) {
+      return;
+    }
+    try {
+      await shiftApi.deleteCashDrawer(drawer.id);
+      setAlertMessage({ type: 'success', message: `Cash drawer ${drawer.drawerCode} deleted successfully.` });
+      await fetchDrawers();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to delete drawer.';
+      setAlertMessage({ type: 'error', message: msg });
+    }
+  };
+
+  // Calculations for open modal
   const openFloatNum = parseFloat(openingFloat) || 0;
   const sysExpectedFloat = openingDefaults?.systemExpectedOpeningBalance ?? 0;
   const openDiscrepancy = openFloatNum - sysExpectedFloat;
 
-  // Derived calculations for close modal
+  // Calculations for close modal
+  const targetShift = closingShiftTarget || activeShift;
   const closeActualNum = parseFloat(actualClosingCash) || 0;
-  const closeExpectedNum = activeShift ? (activeShift.expectedClosingBalance ?? activeShift.openingBalance) : 0;
+  const closeExpectedNum = targetShift ? (targetShift.expectedClosingBalance ?? targetShift.openingBalance) : 0;
   const closeVariance = closeActualNum - closeExpectedNum;
+  const isTargetOverride = targetShift ? targetShift.cashierId !== user?.id : false;
 
   return (
     <AppLayout>
@@ -336,19 +411,27 @@ export default function ShiftsPage() {
           </div>
 
           <div className="flex items-center space-x-3">
-            <button
-              onClick={() => setShowAddDrawerModal(true)}
-              className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-xl hover:bg-gray-50 shadow-sm transition-colors flex items-center space-x-1.5"
-            >
-              <span>➕</span>
-              <span>New Drawer</span>
-            </button>
+            {canManageDrawers && (
+              <button
+                onClick={() => {
+                  setEditingDrawer(null);
+                  setDrawerCodeInput('');
+                  setDrawerNameInput('');
+                  setDrawerDescInput('');
+                  setShowAddDrawerModal(true);
+                }}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-xl hover:bg-gray-50 shadow-sm transition-colors flex items-center space-x-1.5"
+              >
+                <span>➕</span>
+                <span>New Drawer</span>
+              </button>
+            )}
             {!activeShift && canStartShift && (
               <button
                 onClick={() => {
                   setShowOpenModal(true);
                   if (drawers.length > 0 && !selectedDrawerId) {
-                    const firstAvail = drawers.find((d) => !d.hasActiveShift);
+                    const firstAvail = drawers.find((d) => !d.hasActiveShift && d.isActive);
                     if (firstAvail) handleDrawerSelect(firstAvail.id);
                   }
                 }}
@@ -360,10 +443,7 @@ export default function ShiftsPage() {
             )}
             {activeShift && canEndShift && (
               <button
-                onClick={() => {
-                  setActualClosingCash((activeShift.expectedClosingBalance ?? activeShift.openingBalance).toFixed(2));
-                  setShowCloseModal(true);
-                }}
+                onClick={() => initiateCloseShift(activeShift)}
                 className="px-5 py-2.5 text-sm font-semibold text-white bg-gradient-to-r from-[#991b1b] to-[#b91c1c] hover:from-[#7f1d1d] hover:to-[#991b1b] rounded-xl shadow-md transition-all flex items-center space-x-2"
               >
                 <span>🔒</span>
@@ -418,7 +498,7 @@ export default function ShiftsPage() {
                   </p>
                 </div>
                 <div>
-                  <span className="text-xs text-gray-500 uppercase tracking-wider font-semibold">Opening Float</span>
+                  <span className="text-xs text-gray-500 uppercase tracking-wider font-semibold">Opening Float ({activeShift.currencyCode || 'LKR'})</span>
                   <p className="text-lg font-extrabold text-[#0D3826] mt-0.5">
                     Rs. {activeShift.openingBalance.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
                   </p>
@@ -426,10 +506,7 @@ export default function ShiftsPage() {
                 <div className="flex items-center justify-end">
                   {canEndShift && (
                     <button
-                      onClick={() => {
-                        setActualClosingCash((activeShift.expectedClosingBalance ?? activeShift.openingBalance).toFixed(2));
-                        setShowCloseModal(true);
-                      }}
+                      onClick={() => initiateCloseShift(activeShift)}
                       className="w-full md:w-auto px-4 py-2 text-sm font-bold text-white bg-rose-700 hover:bg-rose-800 rounded-xl shadow transition"
                     >
                       Reconcile & Close
@@ -453,7 +530,7 @@ export default function ShiftsPage() {
                     onClick={() => {
                       setShowOpenModal(true);
                       if (drawers.length > 0 && !selectedDrawerId) {
-                        const firstAvail = drawers.find((d) => !d.hasActiveShift);
+                        const firstAvail = drawers.find((d) => !d.hasActiveShift && d.isActive);
                         if (firstAvail) handleDrawerSelect(firstAvail.id);
                       }
                     }}
@@ -476,11 +553,11 @@ export default function ShiftsPage() {
                 <span>Branch Cash Drawers</span>
               </h2>
               <p className="text-xs text-gray-500 mt-0.5">
-                One active cashier shift per drawer is strictly enforced by PostgreSQL database constraints.
+                Physical drawer hardware registry. One active shift per drawer is strictly enforced by PostgreSQL uniqueness.
               </p>
             </div>
             <span className="text-xs font-semibold text-gray-500 bg-gray-100 px-2.5 py-1 rounded-lg">
-              {drawers.length} {drawers.length === 1 ? 'Drawer' : 'Drawers'} Configured
+              {drawers.length} {drawers.length === 1 ? 'Drawer' : 'Drawers'} Registered
             </span>
           </div>
 
@@ -491,12 +568,20 @@ export default function ShiftsPage() {
               <span className="text-3xl">📭</span>
               <p className="text-sm font-semibold text-gray-700 mt-2">No cash drawers configured for this branch</p>
               <p className="text-xs text-gray-500 mt-1">Register your first physical cash drawer to enable shift management.</p>
-              <button
-                onClick={() => setShowAddDrawerModal(true)}
-                className="mt-3 px-3.5 py-1.5 text-xs font-semibold text-white bg-[#0D3826] rounded-lg hover:bg-[#1B6543] transition"
-              >
-                Register Drawer
-              </button>
+              {canManageDrawers && (
+                <button
+                  onClick={() => {
+                    setEditingDrawer(null);
+                    setDrawerCodeInput('');
+                    setDrawerNameInput('');
+                    setDrawerDescInput('');
+                    setShowAddDrawerModal(true);
+                  }}
+                  className="mt-3 px-3.5 py-1.5 text-xs font-semibold text-white bg-[#0D3826] rounded-lg hover:bg-[#1B6543] transition"
+                >
+                  Register Drawer
+                </button>
+              )}
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -504,47 +589,90 @@ export default function ShiftsPage() {
                 <div
                   key={d.id}
                   className={`p-4 rounded-xl border transition-all ${
-                    d.hasActiveShift
+                    !d.isActive
+                      ? 'bg-gray-100/70 border-gray-200 opacity-70'
+                      : d.hasActiveShift
                       ? 'bg-emerald-50/40 border-emerald-200 shadow-sm'
                       : 'bg-white border-gray-200 hover:border-gray-300'
                   }`}
                 >
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-mono font-bold text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
+                    <span className="text-xs font-mono font-bold text-gray-700 bg-gray-100 px-2 py-0.5 rounded">
                       {d.drawerCode}
                     </span>
-                    {d.hasActiveShift ? (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
-                        In Use
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-gray-100 text-gray-600">
-                        Available
-                      </span>
-                    )}
+                    <div className="flex items-center space-x-1.5">
+                      {!d.isActive ? (
+                        <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-gray-200 text-gray-600">
+                          Inactive
+                        </span>
+                      ) : d.hasActiveShift ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                          In Use
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold bg-gray-100 text-gray-600">
+                          Available
+                        </span>
+                      )}
+                    </div>
                   </div>
                   <h3 className="text-sm font-bold text-gray-900 mt-2">{d.name}</h3>
                   {d.description && <p className="text-xs text-gray-500 mt-0.5 line-clamp-1">{d.description}</p>}
 
-                  <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between text-xs text-gray-500">
-                    <span>
+                  <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between text-xs">
+                    <span className="text-gray-500">
                       {d.hasActiveShift ? (
                         <span className="text-emerald-800 font-medium">👤 {d.activeCashierName || 'Cashier in session'}</span>
-                      ) : (
+                      ) : d.isActive ? (
                         <span>Ready for shift</span>
+                      ) : (
+                        <span className="text-gray-400">Drawer disabled</span>
                       )}
                     </span>
-                    {!d.hasActiveShift && !activeShift && canStartShift && (
-                      <button
-                        onClick={() => {
-                          handleDrawerSelect(d.id);
-                          setShowOpenModal(true);
-                        }}
-                        className="text-xs font-bold text-[#0D3826] hover:underline"
-                      >
-                        Open Here →
-                      </button>
-                    )}
+                    <div className="flex items-center space-x-2">
+                      {d.isActive && !d.hasActiveShift && !activeShift && canStartShift && (
+                        <button
+                          onClick={() => {
+                            handleDrawerSelect(d.id);
+                            setShowOpenModal(true);
+                          }}
+                          className="text-xs font-bold text-[#0D3826] hover:underline"
+                        >
+                          Open Here →
+                        </button>
+                      )}
+                      {canManageDrawers && (
+                        <div className="flex items-center space-x-1 ml-1 text-gray-400">
+                          <button
+                            onClick={() => {
+                              setEditingDrawer(d);
+                              setDrawerCodeInput(d.drawerCode);
+                              setDrawerNameInput(d.name);
+                              setDrawerDescInput(d.description || '');
+                              setShowAddDrawerModal(true);
+                            }}
+                            className="p-1 hover:text-gray-700 hover:bg-gray-100 rounded text-xs"
+                            title="Edit Drawer"
+                          >
+                            ✏️
+                          </button>
+                          <button
+                            onClick={() => handleToggleDrawerStatus(d)}
+                            className="p-1 hover:text-gray-700 hover:bg-gray-100 rounded text-xs"
+                            title={d.isActive ? 'Deactivate Drawer' : 'Activate Drawer'}
+                          >
+                            {d.isActive ? '⏸️' : '▶️'}
+                          </button>
+                          <button
+                            onClick={() => handleDeleteDrawer(d)}
+                            className="p-1 hover:text-rose-600 hover:bg-rose-50 rounded text-xs"
+                            title="Delete Drawer"
+                          >
+                            🗑️
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               ))}
@@ -620,6 +748,11 @@ export default function ShiftsPage() {
                       <tr key={s.id} className="hover:bg-gray-50/80 transition-colors">
                         <td className="px-6 py-4 font-mono font-bold text-gray-900">
                           {s.shiftNumber}
+                          {s.isOverrideClose && (
+                            <span className="ml-1.5 text-[10px] font-sans px-1.5 py-0.5 rounded bg-purple-100 text-purple-800 font-semibold" title={s.overrideReason || 'Override Close'}>
+                              Override
+                            </span>
+                          )}
                         </td>
                         <td className="px-6 py-4 text-gray-800 font-medium">
                           {s.cashDrawerName}
@@ -679,13 +812,21 @@ export default function ShiftsPage() {
                             </span>
                           )}
                         </td>
-                        <td className="px-6 py-4 text-center">
+                        <td className="px-6 py-4 text-center space-x-2">
                           <button
                             onClick={() => setSelectedShiftForDetail(s)}
                             className="text-xs font-semibold text-[#0D3826] hover:text-[#1B6543] underline"
                           >
                             Details
                           </button>
+                          {s.status === 0 && canOverrideClose && s.cashierId !== user?.id && (
+                            <button
+                              onClick={() => initiateCloseShift(s)}
+                              className="text-[11px] font-bold text-rose-700 hover:text-rose-900 underline"
+                            >
+                              Override Close
+                            </button>
+                          )}
                         </td>
                       </tr>
                     );
@@ -773,8 +914,8 @@ export default function ShiftsPage() {
                 >
                   <option value="">-- Select Cash Drawer --</option>
                   {drawers.map((d) => (
-                    <option key={d.id} value={d.id} disabled={d.hasActiveShift}>
-                      {d.drawerCode} - {d.name} {d.hasActiveShift ? '(Already In Use)' : '(Available)'}
+                    <option key={d.id} value={d.id} disabled={d.hasActiveShift || !d.isActive}>
+                      {d.drawerCode} - {d.name} {!d.isActive ? '(Disabled)' : d.hasActiveShift ? '(Already In Use)' : '(Available)'}
                     </option>
                   ))}
                 </select>
@@ -888,13 +1029,13 @@ export default function ShiftsPage() {
       {/* ========================================================================= */}
       {/* MODAL 2: CLOSE SHIFT & RECONCILIATION                                     */}
       {/* ========================================================================= */}
-      {showCloseModal && activeShift && (
+      {showCloseModal && targetShift && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto animate-fade-in">
           <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-gray-100 relative">
             <button
               onClick={() => {
                 setShowCloseModal(false);
-                resetCloseForm();
+                setClosingShiftTarget(null);
               }}
               className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-lg font-bold"
             >
@@ -906,10 +1047,22 @@ export default function ShiftsPage() {
                 🔒
               </div>
               <div>
-                <h3 className="text-lg font-bold text-gray-900">Close Shift Reconciliation</h3>
-                <p className="text-xs text-gray-500">Shift #{activeShift.shiftNumber} • {activeShift.cashDrawerName}</p>
+                <h3 className="text-lg font-bold text-gray-900">
+                  {isTargetOverride ? 'Management Override Close' : 'Close Shift Reconciliation'}
+                </h3>
+                <p className="text-xs text-gray-500">
+                  Shift #{targetShift.shiftNumber} • {targetShift.cashDrawerName}
+                  {isTargetOverride && ` (Cashier: ${targetShift.cashierName})`}
+                </p>
               </div>
             </div>
+
+            {isTargetOverride && (
+              <div className="mb-4 p-3 bg-purple-50 border border-purple-200 rounded-xl text-xs text-purple-900">
+                <span className="font-bold">⚠️ Management Override Notice:</span> You are closing a shift owned by{' '}
+                <span className="font-bold">{targetShift.cashierName}</span>. Your user identity will be audited as the closing authority.
+              </div>
+            )}
 
             {closeError && (
               <div className="mb-4 p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-800 flex items-start space-x-2">
@@ -922,9 +1075,9 @@ export default function ShiftsPage() {
               {/* Balances Summary Box */}
               <div className="p-4 bg-gray-50 rounded-xl border border-gray-200 space-y-2">
                 <div className="flex items-center justify-between text-xs text-gray-600">
-                  <span>Opening Float:</span>
+                  <span>Opening Float ({targetShift.currencyCode || 'LKR'}):</span>
                   <span className="font-mono font-semibold text-gray-800">
-                    Rs. {activeShift.openingBalance.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
+                    Rs. {targetShift.openingBalance.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
                   </span>
                 </div>
                 <div className="flex items-center justify-between text-xs text-gray-600 border-t border-gray-200 pt-2">
@@ -934,7 +1087,7 @@ export default function ShiftsPage() {
                   </span>
                 </div>
                 <p className="text-[10px] text-gray-400">
-                  *Calculated by the backend authoritative ledger engine (no artificial balancing movements).
+                  *Authoritative backend expected cash calculation (no artificial movements to conceal discrepancy).
                 </p>
               </div>
 
@@ -995,6 +1148,23 @@ export default function ShiftsPage() {
                 )}
               </div>
 
+              {/* Override Reason (Mandatory when closing another cashier's shift) */}
+              {isTargetOverride && (
+                <div>
+                  <label className="block text-xs font-bold text-purple-900 uppercase tracking-wider mb-1">
+                    Mandatory Management Override Reason <span className="text-rose-600">*</span>
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={overrideReason}
+                    onChange={(e) => setOverrideReason(e.target.value)}
+                    placeholder="Explain why management is closing this shift on behalf of the cashier..."
+                    className="w-full text-xs border border-purple-300 rounded-xl p-2.5 text-gray-900 focus:outline-none focus:ring-1 focus:ring-purple-500"
+                    required
+                  />
+                </div>
+              )}
+
               {/* Closing Notes */}
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">Closing Notes (Optional)</label>
@@ -1028,7 +1198,7 @@ export default function ShiftsPage() {
                   type="button"
                   onClick={() => {
                     setShowCloseModal(false);
-                    resetCloseForm();
+                    setClosingShiftTarget(null);
                   }}
                   className="px-4 py-2 text-xs font-semibold text-gray-600 hover:text-gray-800"
                 >
@@ -1048,7 +1218,7 @@ export default function ShiftsPage() {
       )}
 
       {/* ========================================================================= */}
-      {/* MODAL 3: ADD CASH DRAWER                                                 */}
+      {/* MODAL 3: ADD / EDIT CASH DRAWER                                           */}
       {/* ========================================================================= */}
       {showAddDrawerModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto animate-fade-in">
@@ -1056,6 +1226,7 @@ export default function ShiftsPage() {
             <button
               onClick={() => {
                 setShowAddDrawerModal(false);
+                setEditingDrawer(null);
                 setDrawerError(null);
               }}
               className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-lg font-bold"
@@ -1068,8 +1239,12 @@ export default function ShiftsPage() {
                 🗄️
               </div>
               <div>
-                <h3 className="text-lg font-bold text-gray-900">Register Cash Drawer</h3>
-                <p className="text-xs text-gray-500">Add physical cash drawer to the active branch.</p>
+                <h3 className="text-lg font-bold text-gray-900">
+                  {editingDrawer ? 'Edit Cash Drawer' : 'Register Cash Drawer'}
+                </h3>
+                <p className="text-xs text-gray-500">
+                  {editingDrawer ? `Update details for ${editingDrawer.drawerCode}` : 'Add physical cash drawer to the active branch.'}
+                </p>
               </div>
             </div>
 
@@ -1080,7 +1255,7 @@ export default function ShiftsPage() {
               </div>
             )}
 
-            <form onSubmit={handleAddDrawer} className="space-y-4">
+            <form onSubmit={handleSaveDrawer} className="space-y-4">
               <div>
                 <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">
                   Drawer Code <span className="text-rose-500">*</span>
@@ -1088,8 +1263,8 @@ export default function ShiftsPage() {
                 <input
                   type="text"
                   placeholder="e.g. DRW-01, TILL-1"
-                  value={newDrawerCode}
-                  onChange={(e) => setNewDrawerCode(e.target.value)}
+                  value={drawerCodeInput}
+                  onChange={(e) => setDrawerCodeInput(e.target.value)}
                   className="w-full text-sm font-mono border border-gray-300 rounded-xl px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#0D3826]"
                   required
                 />
@@ -1102,8 +1277,8 @@ export default function ShiftsPage() {
                 <input
                   type="text"
                   placeholder="e.g. Counter 1 Main Cash Drawer"
-                  value={newDrawerName}
-                  onChange={(e) => setNewDrawerName(e.target.value)}
+                  value={drawerNameInput}
+                  onChange={(e) => setDrawerNameInput(e.target.value)}
                   className="w-full text-sm border border-gray-300 rounded-xl px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#0D3826]"
                   required
                 />
@@ -1114,8 +1289,8 @@ export default function ShiftsPage() {
                 <textarea
                   rows={2}
                   placeholder="Physical location or hardware details..."
-                  value={newDrawerDesc}
-                  onChange={(e) => setNewDrawerDesc(e.target.value)}
+                  value={drawerDescInput}
+                  onChange={(e) => setDrawerDescInput(e.target.value)}
                   className="w-full text-xs border border-gray-300 rounded-xl p-2.5 text-gray-800 focus:outline-none focus:ring-1 focus:ring-[#0D3826]"
                 />
               </div>
@@ -1123,7 +1298,10 @@ export default function ShiftsPage() {
               <div className="pt-2 flex items-center justify-end space-x-3">
                 <button
                   type="button"
-                  onClick={() => setShowAddDrawerModal(false)}
+                  onClick={() => {
+                    setShowAddDrawerModal(false);
+                    setEditingDrawer(null);
+                  }}
                   className="px-4 py-2 text-xs font-semibold text-gray-600 hover:text-gray-800"
                 >
                   Cancel
@@ -1133,7 +1311,7 @@ export default function ShiftsPage() {
                   disabled={drawerSubmitting}
                   className="px-5 py-2.5 text-xs font-bold text-white bg-[#0D3826] hover:bg-[#1B6543] rounded-xl shadow transition"
                 >
-                  {drawerSubmitting ? 'Registering...' : 'Register Drawer'}
+                  {drawerSubmitting ? 'Saving...' : editingDrawer ? 'Update Drawer' : 'Register Drawer'}
                 </button>
               </div>
             </form>
@@ -1179,12 +1357,20 @@ export default function ShiftsPage() {
                   <p className="font-semibold text-gray-800">{selectedShiftForDetail.cashierName || 'Cashier'}</p>
                 </div>
                 <div>
-                  <span className="text-gray-500">Shift Status:</span>
+                  <span className="text-gray-500">Currency / Status:</span>
                   <p className="font-bold text-gray-800">
-                    {selectedShiftForDetail.status === 0 ? '🟢 Open' : '🔒 Closed & Reconciled'}
+                    {selectedShiftForDetail.currencyCode || 'LKR'} • {selectedShiftForDetail.status === 0 ? '🟢 Open' : '🔒 Closed'}
                   </p>
                 </div>
               </div>
+
+              {selectedShiftForDetail.isOverrideClose && (
+                <div className="p-3 bg-purple-50 rounded-xl border border-purple-200">
+                  <span className="font-bold text-purple-900">⚠️ Management Override Close:</span>
+                  <p className="text-purple-800 mt-0.5">{selectedShiftForDetail.overrideReason || 'No reason specified'}</p>
+                  <p className="text-[10px] text-purple-600 mt-1">Closed by: {selectedShiftForDetail.closedByName || 'Manager'}</p>
+                </div>
+              )}
 
               <div className="p-3 bg-gray-50 rounded-xl space-y-1.5 font-mono">
                 <div className="flex justify-between">

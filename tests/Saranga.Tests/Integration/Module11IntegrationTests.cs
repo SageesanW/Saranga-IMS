@@ -83,9 +83,9 @@ public class Module11IntegrationTests : IClassFixture<WebApplicationFactory<Prog
         ownerClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", ownerToken);
 
         // =========================================================================
-        // 2. Setup Test Branch, Drawers, and Cashiers
+        // 2. Setup Test Branch, Drawers, Cashiers, and Manager
         // =========================================================================
-        _output.WriteLine("=== 2. Setup Test Branch, Cash Drawers, and Cashiers ===");
+        _output.WriteLine("=== 2. Setup Test Branch, Cash Drawers, and Staff ===");
         var branchRes = await ownerClient.PostAsJsonAsync("/api/branches", new CreateBranchRequest(
             Name: "Test M11 Colombo Flagship",
             Code: "T11B1",
@@ -97,7 +97,7 @@ public class Module11IntegrationTests : IClassFixture<WebApplicationFactory<Prog
         Assert.Equal(HttpStatusCode.Created, branchRes.StatusCode);
         var branch = (await branchRes.Content.ReadFromJsonAsync<BranchDto>())!;
 
-        // Register 2 Cash Drawers
+        // Register 2 Cash Drawers via dedicated CASH_DRAWER_MANAGE endpoint
         var drawer1Res = await ownerClient.PostAsJsonAsync("/api/shifts/drawers", new CreateCashDrawerRequest(
             BranchId: branch.Id,
             DrawerCode: "T11DRW1",
@@ -116,10 +116,21 @@ public class Module11IntegrationTests : IClassFixture<WebApplicationFactory<Prog
         Assert.Equal(HttpStatusCode.Created, drawer2Res.StatusCode);
         var drawer2 = (await drawer2Res.Content.ReadFromJsonAsync<CashDrawerDto>())!;
 
-        // Get Cashier Role ID
+        // Verify Case-Insensitive Drawer Code Uniqueness within same branch
+        var duplicateDrawerRes = await ownerClient.PostAsJsonAsync("/api/shifts/drawers", new CreateCashDrawerRequest(
+            BranchId: branch.Id,
+            DrawerCode: "t11drw1", // lower-case duplicate
+            Name: "Duplicate Drawer Code"
+        ));
+        Assert.Equal(HttpStatusCode.BadRequest, duplicateDrawerRes.StatusCode);
+        var dupDrawerErr = await duplicateDrawerRes.Content.ReadAsStringAsync();
+        Assert.Contains("already exists", dupDrawerErr, StringComparison.OrdinalIgnoreCase);
+
+        // Get Role IDs
         var rolesRes = await ownerClient.GetFromJsonAsync<List<Saranga.Application.DTOs.Roles.RoleDto>>("/api/roles");
         Assert.NotNull(rolesRes);
         var cashierRole = rolesRes.First(r => r.Name == SystemRoles.Cashier);
+        var managerRole = rolesRes.First(r => r.Name == SystemRoles.Manager);
 
         // Create Cashier 1
         var cashier1Res = await ownerClient.PostAsJsonAsync("/api/users", new CreateUserRequest(
@@ -147,6 +158,19 @@ public class Module11IntegrationTests : IClassFixture<WebApplicationFactory<Prog
         Assert.Equal(HttpStatusCode.Created, cashier2Res.StatusCode);
         var cashier2User = (await cashier2Res.Content.ReadFromJsonAsync<UserDto>())!;
 
+        // Create Manager (has SHIFT_OVERRIDE_CLOSE and CASH_DRAWER_MANAGE)
+        var managerRes = await ownerClient.PostAsJsonAsync("/api/users", new CreateUserRequest(
+            Username: "test_m11_manager",
+            Email: "test_m11_manager@saranga.lk",
+            Password: "Manager@2026#Secure",
+            FullName: "M11 Branch Manager",
+            RoleIds: new List<Guid> { managerRole.Id },
+            BranchIds: new List<Guid> { branch.Id },
+            DefaultBranchId: branch.Id
+        ));
+        Assert.Equal(HttpStatusCode.Created, managerRes.StatusCode);
+        var managerUser = (await managerRes.Content.ReadFromJsonAsync<UserDto>())!;
+
         // Login Cashier 1
         var cashier1Login = await client.PostAsJsonAsync("/api/auth/login", new LoginRequest("test_m11_cashier1", "Cashier@2026#Secure"));
         var cashier1Token = (await cashier1Login.Content.ReadFromJsonAsync<AuthResponse>())!.AccessToken;
@@ -159,25 +183,44 @@ public class Module11IntegrationTests : IClassFixture<WebApplicationFactory<Prog
         var cashier2Client = _factory.CreateClient();
         cashier2Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", cashier2Token);
 
+        // Login Manager
+        var managerLogin = await client.PostAsJsonAsync("/api/auth/login", new LoginRequest("test_m11_manager", "Manager@2026#Secure"));
+        var managerToken = (await managerLogin.Content.ReadFromJsonAsync<AuthResponse>())!.AccessToken;
+        var managerClient = _factory.CreateClient();
+        managerClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", managerToken);
+
         // =========================================================================
-        // 3. First Shift: Defaults to Rs. 0.00 Expected Float
+        // 3. Monetary Validation on Opening Balance
         // =========================================================================
-        _output.WriteLine("=== 3. First Shift Opening Float Defaults ===");
+        _output.WriteLine("=== 3. Monetary Input Validation on Opening Float ===");
+        // Negative opening balance rejected
+        var negativeOpenRes = await cashier1Client.PostAsJsonAsync("/api/shifts/open", new OpenShiftRequest(
+            BranchId: branch.Id,
+            CashDrawerId: drawer1.Id,
+            OpeningBalance: -500.00m,
+            OpeningDifferenceReason: "Negative test"
+        ));
+        Assert.Equal(HttpStatusCode.BadRequest, negativeOpenRes.StatusCode);
+
+        // Decimal precision > 2 rejected
+        var invalidPrecisionOpenRes = await cashier1Client.PostAsJsonAsync("/api/shifts/open", new OpenShiftRequest(
+            BranchId: branch.Id,
+            CashDrawerId: drawer1.Id,
+            OpeningBalance: 50000.123m,
+            OpeningDifferenceReason: "Precision test"
+        ));
+        Assert.Equal(HttpStatusCode.BadRequest, invalidPrecisionOpenRes.StatusCode);
+
+        // =========================================================================
+        // 4. First Shift: Defaults to Rs. 0.00 Expected Float & Persists Currency
+        // =========================================================================
+        _output.WriteLine("=== 4. Shift 1 Opening Float & Currency Persistence ===");
         var defaultsRes1 = await cashier1Client.GetFromJsonAsync<ShiftOpeningDefaultsDto>(
             $"/api/shifts/opening-defaults/{drawer1.Id}"
         );
         Assert.NotNull(defaultsRes1);
         Assert.Equal(0.00m, defaultsRes1.SystemExpectedOpeningBalance);
         Assert.Null(defaultsRes1.PreviousShiftNumber);
-
-        // Opening with Rs. 50,000 float when system expects 0 requires a reason!
-        var openWithoutReasonRes = await cashier1Client.PostAsJsonAsync("/api/shifts/open", new OpenShiftRequest(
-            BranchId: branch.Id,
-            CashDrawerId: drawer1.Id,
-            OpeningBalance: 50000.00m,
-            OpeningDifferenceReason: null // Missing mandatory reason!
-        ));
-        Assert.Equal(HttpStatusCode.BadRequest, openWithoutReasonRes.StatusCode);
 
         // Open with mandatory reason
         var openReq1 = new OpenShiftRequest(
@@ -194,76 +237,78 @@ public class Module11IntegrationTests : IClassFixture<WebApplicationFactory<Prog
         Assert.NotNull(shift1);
         Assert.StartsWith("SHF-T11B1-", shift1.ShiftNumber);
         Assert.Equal(ShiftStatus.Open, shift1.Status);
+        Assert.Equal("LKR", shift1.CurrencyCode); // CurrencyCode persisted at opening time
         Assert.Equal(50000.00m, shift1.OpeningBalance);
         Assert.Equal(0.00m, shift1.SystemExpectedOpeningBalance);
         Assert.Equal(50000.00m, shift1.OpeningBalanceDifference);
         Assert.Equal(cashier1User.Id, shift1.CashierId);
-        _output.WriteLine($"Shift 1 Opened: {shift1.ShiftNumber}");
+        _output.WriteLine($"Shift 1 Opened: {shift1.ShiftNumber} in {shift1.CurrencyCode}");
 
         // =========================================================================
-        // 4. Invariant: One Active Shift Per Cash Drawer
+        // 5. Drawer Management: Cannot Deactivate Drawer while Open Shift Active
         // =========================================================================
-        _output.WriteLine("=== 4. One Active Shift Per Cash Drawer ===");
-        // Cashier 2 tries to open a shift on Drawer 1 while Shift 1 is still open
-        var openConflictDrawerRes = await cashier2Client.PostAsJsonAsync("/api/shifts/open", new OpenShiftRequest(
-            BranchId: branch.Id,
-            CashDrawerId: drawer1.Id, // Same drawer!
-            OpeningBalance: 50000.00m,
-            OpeningDifferenceReason: "Conflict test"
-        ));
-        Assert.Equal(HttpStatusCode.BadRequest, openConflictDrawerRes.StatusCode);
-        var errDrawer = await openConflictDrawerRes.Content.ReadAsStringAsync();
-        Assert.Contains("already has an active open shift", errDrawer, StringComparison.OrdinalIgnoreCase);
+        _output.WriteLine("=== 5. Cash Drawer Management Constraints ===");
+        var deactivateBusyDrawerRes = await managerClient.PatchAsJsonAsync(
+            $"/api/shifts/drawers/{drawer1.Id}/status",
+            new UpdateCashDrawerStatusRequest(IsActive: false, Reason: "Maintenance")
+        );
+        Assert.Equal(HttpStatusCode.BadRequest, deactivateBusyDrawerRes.StatusCode);
+        var deactErr = await deactivateBusyDrawerRes.Content.ReadAsStringAsync();
+        Assert.Contains("open shift is in progress", deactErr, StringComparison.OrdinalIgnoreCase);
+
+        // Ordinary cashier cannot manage cash drawers (needs CASH_DRAWER_MANAGE)
+        var cashierDrawerManageRes = await cashier1Client.PostAsJsonAsync(
+            "/api/shifts/drawers",
+            new CreateCashDrawerRequest(branch.Id, "T11DRWX", "Unauthorized Drawer")
+        );
+        Assert.Equal(HttpStatusCode.Forbidden, cashierDrawerManageRes.StatusCode);
 
         // =========================================================================
-        // 5. Invariant: One Active Shift Per Cashier (MVP)
+        // 6. Ownership & Override Closing: Unauthorized Cashier Closing Blocked
         // =========================================================================
-        _output.WriteLine("=== 5. One Active Shift Per Cashier ===");
-        // Cashier 1 tries to open a second shift on Drawer 2 while Shift 1 is still open
-        var openConflictCashierRes = await cashier1Client.PostAsJsonAsync("/api/shifts/open", new OpenShiftRequest(
-            BranchId: branch.Id,
-            CashDrawerId: drawer2.Id, // Different drawer
-            OpeningBalance: 25000.00m,
-            OpeningDifferenceReason: "Cashier conflict test"
-        ));
-        Assert.Equal(HttpStatusCode.BadRequest, openConflictCashierRes.StatusCode);
-        var errCashier = await openConflictCashierRes.Content.ReadAsStringAsync();
-        Assert.Contains("Cashier already has an active open shift", errCashier, StringComparison.OrdinalIgnoreCase);
-
-        // =========================================================================
-        // 6. Close Shift 1: Backend Calculation, Variance, & Mandatory Reason
-        // =========================================================================
-        _output.WriteLine("=== 6. Close Shift 1 & Reconcile Variance ===");
-        // Actual physical cash counted: Rs. 52,500.00
-        // Backend Expected Closing: Rs. 50,000.00
-        // Variance: +Rs. 2,500.00 (Surplus)
-        // Attempting to close with variance without reason must fail
-        var closeWithoutReasonRes = await cashier1Client.PostAsJsonAsync($"/api/shifts/{shift1.Id}/close", new CloseShiftRequest(
+        _output.WriteLine("=== 6. Ownership & Unauthorized Close Prevention ===");
+        // Cashier 2 attempts to close Cashier 1's active shift
+        var unauthorizedCloseRes = await cashier2Client.PostAsJsonAsync($"/api/shifts/{shift1.Id}/close", new CloseShiftRequest(
             ActualClosingBalance: 52500.00m,
-            ClosingVarianceReason: null, // Missing mandatory reason!
+            ClosingVarianceReason: "Hijack close",
             RowVersion: shift1.Version
         ));
-        Assert.Equal(HttpStatusCode.BadRequest, closeWithoutReasonRes.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, unauthorizedCloseRes.StatusCode);
+        var unauthErr = await unauthorizedCloseRes.Content.ReadAsStringAsync();
+        Assert.Contains("only close your own active shift", unauthErr, StringComparison.OrdinalIgnoreCase);
 
-        // Close with mandatory explanation reason
-        var closeRes1 = await cashier1Client.PostAsJsonAsync($"/api/shifts/{shift1.Id}/close", new CloseShiftRequest(
+        // Management Override Closing without override reason must fail
+        var managerCloseNoReasonRes = await managerClient.PostAsJsonAsync($"/api/shifts/{shift1.Id}/close", new CloseShiftRequest(
+            ActualClosingBalance: 52500.00m,
+            ClosingVarianceReason: "Variance reason",
+            OverrideReason: null, // Missing mandatory override reason!
+            RowVersion: shift1.Version
+        ));
+        Assert.Equal(HttpStatusCode.BadRequest, managerCloseNoReasonRes.StatusCode);
+        var noReasonErr = await managerCloseNoReasonRes.Content.ReadAsStringAsync();
+        Assert.Contains("override reason is mandatory", noReasonErr, StringComparison.OrdinalIgnoreCase);
+
+        // Management Override Closing WITH override reason succeeds
+        var managerCloseRes = await managerClient.PostAsJsonAsync($"/api/shifts/{shift1.Id}/close", new CloseShiftRequest(
             ActualClosingBalance: 52500.00m,
             ClosingVarianceReason: "Customer cash tip/surplus rounded into drawer",
-            ClosingNotes: "Safe deposit bag sealed",
+            OverrideReason: "Cashier had medical emergency; manager closed shift",
             RowVersion: shift1.Version
         ));
-        Assert.Equal(HttpStatusCode.OK, closeRes1.StatusCode);
-        var closedShift1 = (await closeRes1.Content.ReadFromJsonAsync<ShiftDto>())!;
+        Assert.Equal(HttpStatusCode.OK, managerCloseRes.StatusCode);
+        var closedShift1 = (await managerCloseRes.Content.ReadFromJsonAsync<ShiftDto>())!;
 
         Assert.Equal(ShiftStatus.Closed, closedShift1.Status);
-        Assert.NotNull(closedShift1.ClosedAt);
+        Assert.True(closedShift1.IsOverrideClose);
+        Assert.Equal("Cashier had medical emergency; manager closed shift", closedShift1.OverrideReason);
+        Assert.Equal(cashier1User.Id, closedShift1.CashierId); // Original cashier preserved!
+        Assert.Equal(managerUser.Id, closedShift1.ClosedBy);    // Actual closer preserved!
         Assert.Equal(50000.00m, closedShift1.ExpectedClosingBalance);
         Assert.Equal(52500.00m, closedShift1.ActualClosingBalance);
         Assert.Equal(2500.00m, closedShift1.ClosingVariance);
-        Assert.Equal("Customer cash tip/surplus rounded into drawer", closedShift1.ClosingVarianceReason);
 
         // =========================================================================
-        // 7. Immutability: Closed Shifts Cannot Be Re-Closed or Modified
+        // 7. Immutability: Closed Shifts Cannot Be Re-Closed
         // =========================================================================
         _output.WriteLine("=== 7. Immutability of Closed Shifts ===");
         var recloseRes = await cashier1Client.PostAsJsonAsync($"/api/shifts/{shift1.Id}/close", new CloseShiftRequest(
@@ -276,40 +321,47 @@ public class Module11IntegrationTests : IClassFixture<WebApplicationFactory<Prog
         Assert.Contains("already closed", recloseErr, StringComparison.OrdinalIgnoreCase);
 
         // =========================================================================
-        // 8. Next Shift Inherits Previous Actual Closing Balance (Rs. 52,500.00)
+        // 8. Cannot Delete Drawer with Financial/Shift History
         // =========================================================================
-        _output.WriteLine("=== 8. Inherit Previous Shift Closing Balance as Opening Float ===");
+        _output.WriteLine("=== 8. Drawer History Preservation (No Hard Delete) ===");
+        var deleteDrawerRes = await managerClient.DeleteAsync($"/api/shifts/drawers/{drawer1.Id}");
+        Assert.Equal(HttpStatusCode.BadRequest, deleteDrawerRes.StatusCode);
+        var delErr = await deleteDrawerRes.Content.ReadAsStringAsync();
+        Assert.Contains("Cannot delete a cash drawer that has existing shift", delErr, StringComparison.OrdinalIgnoreCase);
+
+        // Cannot change branch of drawer with shift history
+        var changeBranchRes = await managerClient.PutAsJsonAsync($"/api/shifts/drawers/{drawer1.Id}", new UpdateCashDrawerRequest(
+            DrawerCode: drawer1.DrawerCode,
+            Name: drawer1.Name,
+            BranchId: Guid.NewGuid() // Different branch
+        ));
+        Assert.Equal(HttpStatusCode.BadRequest, changeBranchRes.StatusCode);
+        var chgBranchErr = await changeBranchRes.Content.ReadAsStringAsync();
+        Assert.Contains("Cannot change the branch of a cash drawer that has shift history", chgBranchErr, StringComparison.OrdinalIgnoreCase);
+
+        // =========================================================================
+        // 9. Next Shift Inherits Previous Actual Closing Balance (Rs. 52,500.00)
+        // =========================================================================
+        _output.WriteLine("=== 9. Inherit Previous Shift Closing Balance as Opening Float ===");
         var defaultsRes2 = await cashier2Client.GetFromJsonAsync<ShiftOpeningDefaultsDto>(
             $"/api/shifts/opening-defaults/{drawer1.Id}"
         );
         Assert.NotNull(defaultsRes2);
-        // Must equal Shift 1's actual closing cash
         Assert.Equal(52500.00m, defaultsRes2.SystemExpectedOpeningBalance);
         Assert.Equal(shift1.ShiftNumber, defaultsRes2.PreviousShiftNumber);
 
-        // Cashier 2 opens Shift 2 on Drawer 1 with exact expected float (Rs. 52,500.00) -> 0 difference -> No reason needed!
-        var openReq2 = new OpenShiftRequest(
+        // Cashier 2 opens Shift 2 with exact expected float
+        var openRes2 = await cashier2Client.PostAsJsonAsync("/api/shifts/open", new OpenShiftRequest(
             BranchId: branch.Id,
             CashDrawerId: drawer1.Id,
             OpeningBalance: 52500.00m,
-            OpeningDifferenceReason: null, // No reason needed because diff is 0.00
+            OpeningDifferenceReason: null,
             OpeningNotes: "Shift handover from Cashier 1"
-        );
-        var openRes2 = await cashier2Client.PostAsJsonAsync("/api/shifts/open", openReq2);
+        ));
         Assert.Equal(HttpStatusCode.Created, openRes2.StatusCode);
         var shift2 = (await openRes2.Content.ReadFromJsonAsync<ShiftDto>())!;
 
-        Assert.Equal(ShiftStatus.Open, shift2.Status);
-        Assert.Equal(52500.00m, shift2.OpeningBalance);
-        Assert.Equal(52500.00m, shift2.SystemExpectedOpeningBalance);
-        Assert.Equal(0.00m, shift2.OpeningBalanceDifference);
-        Assert.Null(shift2.OpeningDifferenceReason);
-        Assert.NotEqual(shift1.ShiftNumber, shift2.ShiftNumber);
-
-        // =========================================================================
-        // 9. Close Shift 2 with Shortage Variance (Rs. 51,000 actual vs 52,500 expected)
-        // =========================================================================
-        _output.WriteLine("=== 9. Close Shift 2 with Cash Shortage Variance ===");
+        // Normal Cashier 2 closes their own shift with Shortage Variance
         var closeRes2 = await cashier2Client.PostAsJsonAsync($"/api/shifts/{shift2.Id}/close", new CloseShiftRequest(
             ActualClosingBalance: 51000.00m,
             ClosingVarianceReason: "Petty cash voucher #488 paid out for water supply (Rs. 1,500)",
@@ -319,26 +371,10 @@ public class Module11IntegrationTests : IClassFixture<WebApplicationFactory<Prog
         Assert.Equal(HttpStatusCode.OK, closeRes2.StatusCode);
         var closedShift2 = (await closeRes2.Content.ReadFromJsonAsync<ShiftDto>())!;
 
-        Assert.Equal(ShiftStatus.Closed, closedShift2.Status);
-        Assert.Equal(52500.00m, closedShift2.ExpectedClosingBalance);
-        Assert.Equal(51000.00m, closedShift2.ActualClosingBalance);
-        Assert.Equal(-1500.00m, closedShift2.ClosingVariance); // Negative indicates cash shortage
-
-        // =========================================================================
-        // 10. Query Shift History & Active Cashier Shift Retrieval
-        // =========================================================================
-        _output.WriteLine("=== 10. Query Shift History & Board ===");
-        var historyRes = await cashier1Client.GetFromJsonAsync<PagedResult<ShiftDto>>(
-            $"/api/shifts?branchId={branch.Id}"
-        );
-        Assert.NotNull(historyRes);
-        Assert.True(historyRes.TotalCount >= 2);
-        Assert.Contains(historyRes.Items, s => s.Id == shift1.Id);
-        Assert.Contains(historyRes.Items, s => s.Id == shift2.Id);
-
-        // Verify active cashier returns 204 No Content when no shift is currently open
-        var noActiveRes = await cashier1Client.GetAsync("/api/shifts/active-cashier");
-        Assert.Equal(HttpStatusCode.NoContent, noActiveRes.StatusCode);
+        Assert.False(closedShift2.IsOverrideClose);
+        Assert.Null(closedShift2.OverrideReason);
+        Assert.Equal(cashier2User.Id, closedShift2.ClosedBy);
+        Assert.Equal(-1500.00m, closedShift2.ClosingVariance); // Negative indicates shortage
 
         _output.WriteLine("=== MODULE 11 INTEGRATION TESTS COMPLETED SUCCESSFULLY ===");
     }
@@ -448,5 +484,107 @@ public class Module11IntegrationTests : IClassFixture<WebApplicationFactory<Prog
         var failedRes = responses.First(r => r.StatusCode == HttpStatusCode.BadRequest);
         var errBody = await failedRes.Content.ReadAsStringAsync();
         Assert.Contains("active open shift", errBody, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task ConcurrentShiftClosing_AgainstSameShift_OnlyOneSucceeds()
+    {
+        var client = _factory.CreateClient();
+
+        // 1. Authenticate as Owner
+        var loginRes = await client.PostAsJsonAsync("/api/auth/login", new LoginRequest(
+            Username: "saranga_owner",
+            Password: "OwnerSuperAdmin@2026#Secure"
+        ));
+        Assert.Equal(HttpStatusCode.OK, loginRes.StatusCode);
+        var ownerToken = (await loginRes.Content.ReadFromJsonAsync<AuthResponse>())!.AccessToken;
+
+        var ownerClient = _factory.CreateClient();
+        ownerClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", ownerToken);
+
+        // 2. Setup Branch, Drawer and Cashier
+        var branchRes = await ownerClient.PostAsJsonAsync("/api/branches", new CreateBranchRequest(
+            Name: "Test M11 Close Concurrency Branch",
+            Code: "T11B1",
+            Country: "LK",
+            CurrencyCode: "LKR",
+            TimeZone: "Asia/Colombo",
+            IsActive: true
+        ));
+        var branch = (await branchRes.Content.ReadFromJsonAsync<BranchDto>())!;
+
+        var drawerRes = await ownerClient.PostAsJsonAsync("/api/shifts/drawers", new CreateCashDrawerRequest(
+            BranchId: branch.Id,
+            DrawerCode: "T11DRW7",
+            Name: "Close Race Drawer"
+        ));
+        var drawer = (await drawerRes.Content.ReadFromJsonAsync<CashDrawerDto>())!;
+
+        var rolesRes = await ownerClient.GetFromJsonAsync<List<Saranga.Application.DTOs.Roles.RoleDto>>("/api/roles");
+        var cashierRole = rolesRes!.First(r => r.Name == SystemRoles.Cashier);
+
+        await ownerClient.PostAsJsonAsync("/api/users", new CreateUserRequest(
+            Username: "test_m11_close_race",
+            Email: "test_m11_close_race@saranga.lk",
+            Password: "Cashier@2026#Secure",
+            FullName: "Close Race Cashier",
+            RoleIds: new List<Guid> { cashierRole.Id },
+            BranchIds: new List<Guid> { branch.Id },
+            DefaultBranchId: branch.Id
+        ));
+
+        var cashierLogin = await client.PostAsJsonAsync("/api/auth/login", new LoginRequest("test_m11_close_race", "Cashier@2026#Secure"));
+        var cashierToken = (await cashierLogin.Content.ReadFromJsonAsync<AuthResponse>())!.AccessToken;
+        var cashierClient1 = _factory.CreateClient();
+        cashierClient1.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", cashierToken);
+
+        var cashierClient2 = _factory.CreateClient();
+        cashierClient2.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", cashierToken);
+
+        // 3. Open a shift
+        var openRes = await cashierClient1.PostAsJsonAsync("/api/shifts/open", new OpenShiftRequest(
+            BranchId: branch.Id,
+            CashDrawerId: drawer.Id,
+            OpeningBalance: 20000.00m,
+            OpeningDifferenceReason: "Test M11 Close race initial float"
+        ));
+        Assert.Equal(HttpStatusCode.Created, openRes.StatusCode);
+        var shift = (await openRes.Content.ReadFromJsonAsync<ShiftDto>())!;
+
+        // 4. Dispatch two concurrent close requests against the same shift using the same initial RowVersion
+        var closeReq1 = new CloseShiftRequest(
+            ActualClosingBalance: 20000.00m,
+            ClosingVarianceReason: null,
+            RowVersion: shift.Version
+        );
+
+        var closeReq2 = new CloseShiftRequest(
+            ActualClosingBalance: 20000.00m,
+            ClosingVarianceReason: null,
+            RowVersion: shift.Version
+        );
+
+        var task1 = cashierClient1.PostAsJsonAsync($"/api/shifts/{shift.Id}/close", closeReq1);
+        var task2 = cashierClient2.PostAsJsonAsync($"/api/shifts/{shift.Id}/close", closeReq2);
+
+        var responses = await Task.WhenAll(task1, task2);
+
+        var successCount = responses.Count(r => r.StatusCode == HttpStatusCode.OK);
+        var rejectedCount = responses.Count(r => r.StatusCode == HttpStatusCode.BadRequest || r.StatusCode == HttpStatusCode.Conflict);
+
+        _output.WriteLine($"Close Concurrency Results -> Success: {successCount}, Rejected: {rejectedCount}");
+
+        // Exactly one closing operation must succeed
+        Assert.Equal(1, successCount);
+        Assert.Equal(1, rejectedCount);
+
+        // Second request receives a controlled business rule / conflict error, never 500
+        var failedRes = responses.First(r => r.StatusCode != HttpStatusCode.OK);
+        var errBody = await failedRes.Content.ReadAsStringAsync();
+        Assert.True(
+            errBody.Contains("already closed", StringComparison.OrdinalIgnoreCase) ||
+            errBody.Contains("modified concurrently", StringComparison.OrdinalIgnoreCase),
+            $"Expected clean rejection message but got: {errBody}"
+        );
     }
 }

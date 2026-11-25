@@ -33,7 +33,7 @@ public class ShiftsController : ControllerBase
     }
 
     [HttpPost("{id:guid}/close")]
-    [RequirePermission(Permissions.ShiftEnd)]
+    [RequirePermission(Permissions.ShiftEnd, Permissions.ShiftOverrideClose)]
     [ProducesResponseType(typeof(ShiftDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -113,7 +113,7 @@ public class ShiftsController : ControllerBase
     }
 
     [HttpGet("drawers")]
-    [RequirePermission(Permissions.ShiftStart, Permissions.ShiftEnd, Permissions.CashLedgerView)]
+    [RequirePermission(Permissions.ShiftStart, Permissions.ShiftEnd, Permissions.CashLedgerView, Permissions.CashDrawerManage)]
     [ProducesResponseType(typeof(List<CashDrawerDto>), StatusCodes.Status200OK)]
     public async Task<ActionResult<List<CashDrawerDto>>> GetCashDrawers(
         [FromQuery] Guid branchId,
@@ -123,8 +123,20 @@ public class ShiftsController : ControllerBase
         return Ok(result);
     }
 
+    [HttpGet("drawers/{id:guid}")]
+    [RequirePermission(Permissions.CashDrawerManage, Permissions.CashLedgerView)]
+    [ProducesResponseType(typeof(CashDrawerDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<CashDrawerDto>> GetCashDrawerById(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        var result = await _shiftService.GetCashDrawerByIdAsync(id, cancellationToken);
+        return Ok(result);
+    }
+
     [HttpPost("drawers")]
-    [RequirePermission(Permissions.BranchEdit, Permissions.UserEdit)]
+    [RequirePermission(Permissions.CashDrawerManage)]
     [ProducesResponseType(typeof(CashDrawerDto), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<CashDrawerDto>> CreateCashDrawer(
@@ -133,5 +145,46 @@ public class ShiftsController : ControllerBase
     {
         var result = await _shiftService.CreateCashDrawerAsync(request, cancellationToken);
         return StatusCode(StatusCodes.Status201Created, result);
+    }
+
+    [HttpPut("drawers/{id:guid}")]
+    [RequirePermission(Permissions.CashDrawerManage)]
+    [ProducesResponseType(typeof(CashDrawerDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<CashDrawerDto>> UpdateCashDrawer(
+        Guid id,
+        [FromBody] UpdateCashDrawerRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _shiftService.UpdateCashDrawerAsync(id, request, cancellationToken);
+        return Ok(result);
+    }
+
+    [HttpPatch("drawers/{id:guid}/status")]
+    [RequirePermission(Permissions.CashDrawerManage)]
+    [ProducesResponseType(typeof(CashDrawerDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<CashDrawerDto>> UpdateCashDrawerStatus(
+        Guid id,
+        [FromBody] UpdateCashDrawerStatusRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _shiftService.UpdateCashDrawerStatusAsync(id, request, cancellationToken);
+        return Ok(result);
+    }
+
+    [HttpDelete("drawers/{id:guid}")]
+    [RequirePermission(Permissions.CashDrawerManage)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> DeleteCashDrawer(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        await _shiftService.DeleteCashDrawerAsync(id, cancellationToken);
+        return NoContent();
     }
 }

@@ -13,6 +13,8 @@ public class Shift : BaseEntity
 
     public Guid CashierId { get; set; }
 
+    public string CurrencyCode { get; set; } = "LKR";
+
     public ShiftStatus Status { get; set; } = ShiftStatus.Open;
 
     public DateTimeOffset OpenedAt { get; set; }
@@ -42,6 +44,10 @@ public class Shift : BaseEntity
     public string? ClosingVarianceReason { get; set; }
 
     public string? ClosingNotes { get; set; }
+
+    public bool IsOverrideClose { get; set; } = false;
+
+    public string? OverrideReason { get; set; }
 
     public uint Version { get; set; }
 

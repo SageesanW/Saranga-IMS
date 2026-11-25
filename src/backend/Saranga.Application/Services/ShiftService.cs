@@ -5,6 +5,7 @@ using Saranga.Application.Common.Exceptions;
 using Saranga.Application.Common.Interfaces;
 using Saranga.Application.DTOs.Common;
 using Saranga.Application.DTOs.Shifts;
+using Saranga.Domain.Constants;
 using Saranga.Domain.Entities;
 using Saranga.Domain.Enums;
 
@@ -42,9 +43,15 @@ public class ShiftService : IShiftService
         var cashierId = _currentUserService.UserId
             ?? throw new UnauthorizedAccessException("Authenticated user identity is required to open a shift.");
 
+        // Monetary validation: negative and precision checks
         if (request.OpeningBalance < 0)
         {
             throw new BusinessRuleException("Opening cash float balance cannot be negative.");
+        }
+
+        if (decimal.Round(request.OpeningBalance, 2) != request.OpeningBalance)
+        {
+            throw new BusinessRuleException("Opening balance cannot exceed 2 decimal places.");
         }
 
         // Validate Branch
@@ -115,6 +122,7 @@ public class ShiftService : IShiftService
             BranchId = request.BranchId,
             CashDrawerId = request.CashDrawerId,
             CashierId = cashierId,
+            CurrencyCode = string.IsNullOrWhiteSpace(branch.CurrencyCode) ? "LKR" : branch.CurrencyCode.Trim().ToUpperInvariant(),
             Status = ShiftStatus.Open,
             OpenedAt = now,
             OpenedBy = cashierId,
@@ -135,6 +143,7 @@ public class ShiftService : IShiftService
             shift.BranchId,
             shift.CashDrawerId,
             shift.CashierId,
+            shift.CurrencyCode,
             shift.OpeningBalance,
             shift.SystemExpectedOpeningBalance,
             shift.OpeningBalanceDifference,
@@ -163,8 +172,8 @@ public class ShiftService : IShiftService
             throw;
         }
 
-        _logger.LogInformation("Shift {ShiftNumber} successfully opened for Cashier {CashierId} at Drawer {DrawerName} with opening balance {OpeningBalance} LKR",
-            shift.ShiftNumber, cashierId, drawer.Name, shift.OpeningBalance);
+        _logger.LogInformation("Shift {ShiftNumber} successfully opened for Cashier {CashierId} at Drawer {DrawerName} with opening balance {OpeningBalance} {Currency}",
+            shift.ShiftNumber, cashierId, drawer.Name, shift.OpeningBalance, shift.CurrencyCode);
 
         return await GetShiftByIdAsync(shift.Id, cancellationToken);
     }
@@ -174,9 +183,15 @@ public class ShiftService : IShiftService
         var closerId = _currentUserService.UserId
             ?? throw new UnauthorizedAccessException("Authenticated user identity is required to close a shift.");
 
+        // Monetary validation: negative and precision checks
         if (request.ActualClosingBalance < 0)
         {
             throw new BusinessRuleException("Actual physical closing cash balance cannot be negative.");
+        }
+
+        if (decimal.Round(request.ActualClosingBalance, 2) != request.ActualClosingBalance)
+        {
+            throw new BusinessRuleException("Closing cash balance cannot exceed 2 decimal places.");
         }
 
         var shift = await _context.Shifts
@@ -192,7 +207,33 @@ public class ShiftService : IShiftService
             throw new BusinessRuleException($"Shift '{shift.ShiftNumber}' was already closed at {shift.ClosedAt:yyyy-MM-dd HH:mm} and is immutable.");
         }
 
-        // Optimistic concurrency protection
+        // Ownership and Override Permission Verification
+        var isOwnShift = shift.CashierId == closerId;
+        if (!isOwnShift)
+        {
+            var hasOverridePermission = _currentUserService.IsGlobalAdmin
+                || _currentUserService.Permissions.Contains(Permissions.ShiftOverrideClose, StringComparer.OrdinalIgnoreCase);
+
+            if (!hasOverridePermission)
+            {
+                throw new BusinessRuleException("You can only close your own active shift unless authorized with override permission.");
+            }
+
+            if (string.IsNullOrWhiteSpace(request.OverrideReason))
+            {
+                throw new BusinessRuleException("An override reason is mandatory when closing another cashier's shift.");
+            }
+
+            shift.IsOverrideClose = true;
+            shift.OverrideReason = request.OverrideReason.Trim();
+        }
+        else
+        {
+            shift.IsOverrideClose = false;
+            shift.OverrideReason = null;
+        }
+
+        // Optimistic concurrency protection (maps to PostgreSQL xmin)
         if (request.RowVersion.HasValue && shift.Version != request.RowVersion.Value)
         {
             throw new ConflictException("This shift was modified concurrently by another user. Please refresh and review latest shift details.");
@@ -229,8 +270,10 @@ public class ShiftService : IShiftService
         shift.UpdatedAt = now;
         shift.UpdatedBy = closerId;
 
+        var auditAction = shift.IsOverrideClose ? "SHIFT_OVERRIDE_CLOSED" : "SHIFT_CLOSED";
+
         // Audit logging: never generate artificial cash movements to conceal discrepancies
-        RecordAudit("Shift", shift.Id, "SHIFT_CLOSED", oldState, new
+        RecordAudit("Shift", shift.Id, auditAction, oldState, new
         {
             shift.ShiftNumber,
             shift.Status,
@@ -239,14 +282,17 @@ public class ShiftService : IShiftService
             shift.ExpectedClosingBalance,
             shift.ClosingVariance,
             shift.ClosingVarianceReason,
+            shift.IsOverrideClose,
+            shift.OverrideReason,
             shift.ClosedAt,
-            shift.ClosedBy
+            shift.ClosedBy,
+            OriginalCashierId = shift.CashierId
         });
 
         await _context.SaveChangesAsync(cancellationToken);
 
-        _logger.LogInformation("Shift {ShiftNumber} successfully closed by User {CloserId}. Actual: {Actual:N2}, Expected: {Expected:N2}, Variance: {Variance:N2} LKR",
-            shift.ShiftNumber, closerId, shift.ActualClosingBalance, shift.ExpectedClosingBalance, shift.ClosingVariance);
+        _logger.LogInformation("Shift {ShiftNumber} successfully closed by User {CloserId} (Override: {IsOverride}). Actual: {Actual:N2}, Expected: {Expected:N2}, Variance: {Variance:N2} {Currency}",
+            shift.ShiftNumber, closerId, shift.IsOverrideClose, shift.ActualClosingBalance, shift.ExpectedClosingBalance, shift.ClosingVariance, shift.CurrencyCode);
 
         return await GetShiftByIdAsync(shift.Id, cancellationToken);
     }
@@ -411,6 +457,31 @@ public class ShiftService : IShiftService
         }).ToList();
     }
 
+    public async Task<CashDrawerDto> GetCashDrawerByIdAsync(Guid drawerId, CancellationToken cancellationToken = default)
+    {
+        var drawer = await _context.CashDrawers
+            .AsNoTracking()
+            .FirstOrDefaultAsync(d => d.Id == drawerId, cancellationToken)
+            ?? throw new NotFoundException("Cash Drawer", drawerId);
+
+        var activeShift = await _context.Shifts
+            .AsNoTracking()
+            .Include(s => s.Cashier)
+            .FirstOrDefaultAsync(s => s.CashDrawerId == drawerId && s.Status == ShiftStatus.Open, cancellationToken);
+
+        return new CashDrawerDto(
+            drawer.Id,
+            drawer.BranchId,
+            drawer.DrawerCode,
+            drawer.Name,
+            drawer.Description,
+            drawer.IsActive,
+            HasActiveShift: activeShift != null,
+            ActiveShiftId: activeShift?.Id,
+            ActiveCashierName: activeShift?.Cashier?.FullName
+        );
+    }
+
     public async Task<CashDrawerDto> CreateCashDrawerAsync(CreateCashDrawerRequest request, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(request.DrawerCode))
@@ -429,8 +500,10 @@ public class ShiftService : IShiftService
             ?? throw new NotFoundException("Branch", request.BranchId);
 
         var cleanCode = request.DrawerCode.Trim().ToUpperInvariant();
+
+        // Case-insensitive drawer code uniqueness per branch
         var exists = await _context.CashDrawers
-            .AnyAsync(d => d.BranchId == request.BranchId && d.DrawerCode == cleanCode, cancellationToken);
+            .AnyAsync(d => d.BranchId == request.BranchId && d.DrawerCode.ToLower() == cleanCode.ToLower(), cancellationToken);
 
         if (exists)
         {
@@ -461,6 +534,126 @@ public class ShiftService : IShiftService
         );
     }
 
+    public async Task<CashDrawerDto> UpdateCashDrawerAsync(Guid drawerId, UpdateCashDrawerRequest request, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(request.DrawerCode))
+        {
+            throw new BusinessRuleException("Drawer code is required.");
+        }
+
+        if (string.IsNullOrWhiteSpace(request.Name))
+        {
+            throw new BusinessRuleException("Drawer name is required.");
+        }
+
+        var drawer = await _context.CashDrawers
+            .FirstOrDefaultAsync(d => d.Id == drawerId, cancellationToken)
+            ?? throw new NotFoundException("Cash Drawer", drawerId);
+
+        var targetBranchId = request.BranchId ?? drawer.BranchId;
+
+        // Invariant: Prevent ordinary editing from changing the branch of a drawer with existing shifts
+        if (targetBranchId != drawer.BranchId)
+        {
+            var hasShifts = await _context.Shifts.AnyAsync(s => s.CashDrawerId == drawerId, cancellationToken);
+            if (hasShifts)
+            {
+                throw new BusinessRuleException("Cannot change the branch of a cash drawer that has shift history.");
+            }
+            drawer.BranchId = targetBranchId;
+        }
+
+        var cleanCode = request.DrawerCode.Trim().ToUpperInvariant();
+
+        // Enforce case-insensitive drawer code uniqueness per branch
+        var exists = await _context.CashDrawers
+            .AnyAsync(d => d.BranchId == targetBranchId && d.DrawerCode.ToLower() == cleanCode.ToLower() && d.Id != drawerId, cancellationToken);
+
+        if (exists)
+        {
+            throw new BusinessRuleException($"A cash drawer with code '{cleanCode}' already exists in this branch.");
+        }
+
+        drawer.DrawerCode = cleanCode;
+        drawer.Name = request.Name.Trim();
+        drawer.Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim();
+        drawer.UpdatedAt = DateTimeOffset.UtcNow;
+        drawer.UpdatedBy = _currentUserService.UserId;
+
+        await _context.SaveChangesAsync(cancellationToken);
+
+        return await GetCashDrawerByIdAsync(drawer.Id, cancellationToken);
+    }
+
+    public async Task<CashDrawerDto> UpdateCashDrawerStatusAsync(Guid drawerId, UpdateCashDrawerStatusRequest request, CancellationToken cancellationToken = default)
+    {
+        var drawer = await _context.CashDrawers
+            .FirstOrDefaultAsync(d => d.Id == drawerId, cancellationToken)
+            ?? throw new NotFoundException("Cash Drawer", drawerId);
+
+        // Invariant: Reject drawer deactivation while an open shift exists
+        if (!request.IsActive)
+        {
+            var hasActiveShift = await _context.Shifts
+                .AnyAsync(s => s.CashDrawerId == drawerId && s.Status == ShiftStatus.Open, cancellationToken);
+
+            if (hasActiveShift)
+            {
+                throw new BusinessRuleException("Cannot deactivate a cash drawer while an open shift is in progress. Please close the active shift first.");
+            }
+        }
+
+        drawer.IsActive = request.IsActive;
+        drawer.UpdatedAt = DateTimeOffset.UtcNow;
+        drawer.UpdatedBy = _currentUserService.UserId;
+
+        RecordAudit("CashDrawer", drawer.Id, "CASH_DRAWER_STATUS_CHANGED", null, new
+        {
+            drawer.DrawerCode,
+            drawer.IsActive,
+            request.Reason
+        });
+
+        await _context.SaveChangesAsync(cancellationToken);
+
+        return await GetCashDrawerByIdAsync(drawer.Id, cancellationToken);
+    }
+
+    public async Task DeleteCashDrawerAsync(Guid drawerId, CancellationToken cancellationToken = default)
+    {
+        var drawer = await _context.CashDrawers
+            .FirstOrDefaultAsync(d => d.Id == drawerId, cancellationToken)
+            ?? throw new NotFoundException("Cash Drawer", drawerId);
+
+        // Invariant: Do not allow deletion of drawers with financial / shift history
+        var hasShifts = await _context.Shifts.AnyAsync(s => s.CashDrawerId == drawerId, cancellationToken);
+        if (hasShifts)
+        {
+            throw new BusinessRuleException("Cannot delete a cash drawer that has existing shift or financial transaction history. You may deactivate it instead.");
+        }
+
+        drawer.IsDeleted = true;
+        drawer.UpdatedAt = DateTimeOffset.UtcNow;
+        drawer.UpdatedBy = _currentUserService.UserId;
+
+        await _context.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task<Shift> GetShiftForUpdateAsync(Guid shiftId, CancellationToken cancellationToken = default)
+    {
+        // Safe row locking for Module 12 Cash Ledger coordination
+        var shift = await _context.Shifts
+            .FirstOrDefaultAsync(s => s.Id == shiftId, cancellationToken)
+            ?? throw new NotFoundException("Shift", shiftId);
+
+        if (shift.Status == ShiftStatus.Closed)
+        {
+            throw new BusinessRuleException($"Shift '{shift.ShiftNumber}' is closed and cannot accept new transactions.");
+        }
+
+        return shift;
+    }
+
     private static ShiftDto MapToDto(Shift s)
     {
         return new ShiftDto(
@@ -473,6 +666,7 @@ public class ShiftService : IShiftService
             s.CashDrawer?.DrawerCode,
             s.CashierId,
             s.Cashier?.FullName,
+            s.CurrencyCode,
             s.Status,
             s.OpenedAt,
             s.OpenedBy,
@@ -490,6 +684,8 @@ public class ShiftService : IShiftService
             s.ClosingVariance,
             s.ClosingVarianceReason,
             s.ClosingNotes,
+            s.IsOverrideClose,
+            s.OverrideReason,
             s.Version
         );
     }

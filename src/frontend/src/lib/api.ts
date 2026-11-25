@@ -1272,6 +1272,9 @@ export interface Shift {
   closingVariance?: number | null;
   closingVarianceReason?: string | null;
   closingNotes?: string | null;
+  currencyCode?: string;
+  isOverrideClose?: boolean;
+  overrideReason?: string | null;
   version: number;
 }
 
@@ -1287,6 +1290,7 @@ export interface CloseShiftRequest {
   actualClosingBalance: number;
   closingVarianceReason?: string | null;
   closingNotes?: string | null;
+  overrideReason?: string | null;
   rowVersion?: number;
 }
 
@@ -1435,5 +1439,21 @@ export const shiftApi = {
     apiRequest<CashDrawer>('/shifts/drawers', {
       method: 'POST',
       body: JSON.stringify(data),
+    }),
+  getCashDrawerById: (id: string) =>
+    apiRequest<CashDrawer>(`/shifts/drawers/${id}`),
+  updateCashDrawer: (id: string, data: { drawerCode: string; name: string; description?: string | null; branchId?: string | null }) =>
+    apiRequest<CashDrawer>(`/shifts/drawers/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+  updateCashDrawerStatus: (id: string, data: { isActive: boolean; reason?: string | null }) =>
+    apiRequest<CashDrawer>(`/shifts/drawers/${id}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+  deleteCashDrawer: (id: string) =>
+    apiRequest<void>(`/shifts/drawers/${id}`, {
+      method: 'DELETE',
     }),
 };

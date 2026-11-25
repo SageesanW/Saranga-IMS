@@ -75,6 +75,8 @@ public static class Permissions
     // Module: Shift & Cash Ledger
     public const string ShiftStart = "SHIFT_START";
     public const string ShiftEnd = "SHIFT_END";
+    public const string ShiftOverrideClose = "SHIFT_OVERRIDE_CLOSE";
+    public const string CashDrawerManage = "CASH_DRAWER_MANAGE";
     public const string CashLedgerView = "CASH_LEDGER_VIEW";
     public const string CashLedgerAdjust = "CASH_LEDGER_ADJUST";
 
@@ -155,6 +157,8 @@ public static class Permissions
         // Shift & Cash
         new(ShiftStart, "Open cashier operational shift", "Shift & Cash"),
         new(ShiftEnd, "Close and reconcile cashier shift", "Shift & Cash"),
+        new(ShiftOverrideClose, "Override and close active shifts on behalf of other cashiers", "Shift & Cash"),
+        new(CashDrawerManage, "Create, configure, and manage physical branch cash drawers", "Shift & Cash"),
         new(CashLedgerView, "View branch cash ledger entries", "Shift & Cash"),
         new(CashLedgerAdjust, "Perform cash-in / cash-out ledger adjustments", "Shift & Cash"),
 

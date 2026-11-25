@@ -823,6 +823,8 @@ public class AppDbContext : DbContext, IAppDbContext
             entity.Property(s => s.ShiftNumber).HasMaxLength(50).IsRequired();
             entity.HasIndex(s => s.ShiftNumber).IsUnique();
 
+            entity.Property(s => s.CurrencyCode).HasMaxLength(10).IsRequired().HasDefaultValue("LKR");
+
             entity.Property(s => s.Status).HasConversion<int>().IsRequired();
 
             entity.Property(s => s.OpeningBalance).HasPrecision(18, 2);
@@ -836,6 +838,9 @@ public class AppDbContext : DbContext, IAppDbContext
             entity.Property(s => s.ClosingVariance).HasPrecision(18, 2);
             entity.Property(s => s.ClosingVarianceReason).HasMaxLength(500);
             entity.Property(s => s.ClosingNotes).HasMaxLength(1000);
+
+            entity.Property(s => s.IsOverrideClose).HasDefaultValue(false);
+            entity.Property(s => s.OverrideReason).HasMaxLength(500);
 
             entity.Property(s => s.Version).IsRowVersion();
 

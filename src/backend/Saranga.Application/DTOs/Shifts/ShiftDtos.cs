@@ -21,6 +21,18 @@ public record CreateCashDrawerRequest(
     string? Description = null
 );
 
+public record UpdateCashDrawerRequest(
+    string DrawerCode,
+    string Name,
+    string? Description = null,
+    Guid? BranchId = null
+);
+
+public record UpdateCashDrawerStatusRequest(
+    bool IsActive,
+    string? Reason = null
+);
+
 public record ShiftDto(
     Guid Id,
     string ShiftNumber,
@@ -31,6 +43,7 @@ public record ShiftDto(
     string? CashDrawerCode,
     Guid CashierId,
     string? CashierName,
+    string CurrencyCode,
     ShiftStatus Status,
     DateTimeOffset OpenedAt,
     Guid OpenedBy,
@@ -48,6 +61,8 @@ public record ShiftDto(
     decimal? ClosingVariance,
     string? ClosingVarianceReason,
     string? ClosingNotes,
+    bool IsOverrideClose,
+    string? OverrideReason,
     uint Version
 );
 
@@ -63,6 +78,7 @@ public record CloseShiftRequest(
     decimal ActualClosingBalance,
     string? ClosingVarianceReason = null,
     string? ClosingNotes = null,
+    string? OverrideReason = null,
     uint? RowVersion = null
 );
 
