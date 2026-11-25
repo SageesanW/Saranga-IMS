@@ -1,5 +1,6 @@
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.IdentityModel.Tokens;
 using Scalar.AspNetCore;
 using Serilog;
@@ -9,6 +10,13 @@ using Saranga.Infrastructure;
 using Saranga.Infrastructure.Middleware;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Configure dynamic port binding (Render assigns PORT env var, e.g. 10000)
+var port = Environment.GetEnvironmentVariable("PORT");
+if (!string.IsNullOrWhiteSpace(port))
+{
+    builder.WebHost.UseUrls($"http://0.0.0.0:{port}");
+}
 
 // Configure Serilog
 Log.Logger = new LoggerConfiguration()
@@ -23,6 +31,14 @@ builder.Host.UseSerilog();
 builder.Services.AddControllers();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddOpenApi();
+
+// Configure Forwarded Headers for reverse proxy hosting (Render TLS termination)
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.KnownIPNetworks.Clear();
+    options.KnownProxies.Clear();
+});
 
 // Register Infrastructure & Persistence (includes auth handlers, policy provider, and application services)
 builder.Services.AddInfrastructure(builder.Configuration);
@@ -73,11 +89,18 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
+// Forwarded headers for reverse proxies (must run early before auth and exception logging)
+app.UseForwardedHeaders();
+
 // Global exception handling (RFC 7807 / unified JSON)
 app.UseMiddleware<GlobalExceptionMiddleware>();
 
-// Configure the HTTP request pipeline
-if (app.Environment.IsDevelopment() || app.Environment.IsStaging())
+// Configure the HTTP request pipeline (Swagger / Scalar)
+var enableScalar = app.Environment.IsDevelopment() 
+    || app.Environment.IsStaging() 
+    || builder.Configuration.GetValue<bool>("Scalar:Enabled", false);
+
+if (enableScalar)
 {
     app.MapOpenApi();
     app.MapScalarApiReference(options =>
