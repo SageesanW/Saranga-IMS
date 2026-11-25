@@ -64,5 +64,10 @@ public interface IAppDbContext
     DbSet<CashLedgerTransaction> CashLedgerTransactions { get; }
     DbSet<CashLedgerEntry> CashLedgerEntries { get; }
 
+    // Module 13: POS Normal Jewellery Sales
+    DbSet<Invoice> Invoices { get; }
+    DbSet<InvoiceLine> InvoiceLines { get; }
+    DbSet<InvoicePayment> InvoicePayments { get; }
+
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

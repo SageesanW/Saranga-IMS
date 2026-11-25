@@ -9,4 +9,5 @@ public interface ITagGeneratorService
     Task<string> GenerateCustomerCodeAsync(CancellationToken cancellationToken = default);
     Task<string> GenerateShiftNumberAsync(string branchCode, CancellationToken cancellationToken = default);
     Task<string> GenerateCashLedgerReferenceAsync(string branchCode, CancellationToken cancellationToken = default);
+    Task<string> GenerateInvoiceNumberAsync(string branchCode, CancellationToken cancellationToken = default);
 }

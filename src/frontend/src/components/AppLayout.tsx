@@ -52,10 +52,10 @@ export default function AppLayout({ children }: AppLayoutProps) {
     { name: 'Customers', href: '/customers', icon: '👤' },
     { name: 'Shifts', href: '/shifts', icon: '💵' },
     { name: 'Cash Ledger', href: '/cash-ledger', icon: '🪙' },
+    { name: 'POS Terminal', href: '/pos', icon: '🧾' },
   ];
 
   const upcomingModules = [
-    { name: 'POS & Billing', icon: '🧾' },
     { name: 'Sales Verification', icon: '🔍' },
     { name: 'Audit Logs', icon: '📜' },
   ];

@@ -1665,3 +1665,202 @@ export const cashLedgerApi = {
     body: JSON.stringify({ isActive })
   })
 };
+
+export interface PosItemLookupResult {
+  inventoryItemId: string;
+  itemCode: string;
+  tagNumber: string;
+  barcode?: string;
+  itemName: string;
+  categoryId: string;
+  categoryName: string;
+  materialId: string;
+  materialName: string;
+  purityId: string;
+  purityName: string;
+  karatValue: number;
+  grossWeight: number;
+  stoneWeight: number;
+  netWeight: number;
+  pieceCount: number;
+  activeRatePerGram: number;
+  referenceMaterialValue: number;
+  referenceMakingCharge: number;
+  referencePrice: number;
+  currencyCode: string;
+  isPartOfComposition: boolean;
+  compositionId?: string;
+  compositionName?: string;
+  compositionTagNumber?: string;
+  compositionType?: string;
+}
+
+export interface PosInvoiceLine {
+  id: string;
+  lineType: number;
+  lineTypeName: string;
+  inventoryItemId?: string;
+  compositionId?: string;
+  itemCode: string;
+  tagNumber: string;
+  barcode?: string;
+  itemName: string;
+  grossWeight: number;
+  stoneWeight: number;
+  netWeight: number;
+  pieceCount: number;
+  materialName?: string;
+  karatValue?: number;
+  referenceRatePerGram: number;
+  referenceMaterialValue: number;
+  referenceMakingCharge: number;
+  referencePrice: number;
+  unitPrice: number;
+  quantity: number;
+  lineTotal: number;
+  notes?: string;
+}
+
+export interface PosInvoicePayment {
+  id: string;
+  paymentMethod: number;
+  paymentMethodName: string;
+  amount: number;
+  cashTendered?: number;
+  changeGiven?: number;
+  referenceNumber?: string;
+  cardType?: string;
+  cardLast4?: string;
+  bankName?: string;
+  cashLedgerTransactionId?: string;
+  notes?: string;
+  createdAt: string;
+}
+
+export interface PosInvoice {
+  id: string;
+  invoiceNumber: string;
+  branchId: string;
+  branchName?: string;
+  shiftId: string;
+  shiftNumber?: string;
+  cashierId: string;
+  cashierName?: string;
+  customerId: string;
+  customerCode?: string;
+  customerName: string;
+  customerPhone: string;
+  status: number;
+  statusName: string;
+  subTotal: number;
+  discountAmount: number;
+  vatRate: number;
+  vatAmount: number;
+  totalAmount: number;
+  totalPaidAmount: number;
+  totalCashTendered: number;
+  totalCashChange: number;
+  netCashPaid: number;
+  currencyCode: string;
+  notes?: string;
+  createdAt: string;
+  finalizedAt?: string;
+  lines: PosInvoiceLine[];
+  payments: PosInvoicePayment[];
+}
+
+export const posApi = {
+  lookupItem: (shiftId: string, query: string) =>
+    apiRequest<PosItemLookupResult>(`/pos/lookup?shiftId=${shiftId}&query=${encodeURIComponent(query)}`),
+
+  createDraft: (data: { shiftId: string; customerId: string; notes?: string }) =>
+    apiRequest<PosInvoice>('/pos/drafts', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    }),
+
+  quickCustomerDraft: (data: {
+    shiftId: string;
+    fullName: string;
+    primaryPhone: string;
+    email?: string;
+    addressLine1?: string;
+    city?: string;
+    notes?: string;
+  }) =>
+    apiRequest<PosInvoice>('/pos/drafts/quick-customer', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    }),
+
+  getInvoiceById: (id: string) =>
+    apiRequest<PosInvoice>(`/pos/invoices/${id}`),
+
+  getInvoices: (params?: {
+    branchId?: string;
+    customerId?: string;
+    cashierId?: string;
+    shiftId?: string;
+    status?: number;
+    fromDate?: string;
+    toDate?: string;
+    page?: number;
+    pageSize?: number;
+  }) => {
+    const q = new URLSearchParams();
+    if (params?.branchId) q.append('branchId', params.branchId);
+    if (params?.customerId) q.append('customerId', params.customerId);
+    if (params?.cashierId) q.append('cashierId', params.cashierId);
+    if (params?.shiftId) q.append('shiftId', params.shiftId);
+    if (params?.status !== undefined) q.append('status', String(params.status));
+    if (params?.fromDate) q.append('fromDate', params.fromDate);
+    if (params?.toDate) q.append('toDate', params.toDate);
+    if (params?.page) q.append('page', String(params.page));
+    if (params?.pageSize) q.append('pageSize', String(params.pageSize));
+    const qs = q.toString();
+    return apiRequest<PagedResult<PosInvoice>>(`/pos/invoices${qs ? `?${qs}` : ''}`);
+  },
+
+  addLine: (invoiceId: string, data: { itemBarcodeOrTag: string; negotiatedUnitPrice?: number; notes?: string }) =>
+    apiRequest<PosInvoice>(`/pos/invoices/${invoiceId}/lines`, {
+      method: 'POST',
+      body: JSON.stringify(data)
+    }),
+
+  updateLine: (invoiceId: string, lineId: string, data: { negotiatedUnitPrice: number; notes?: string }) =>
+    apiRequest<PosInvoice>(`/pos/invoices/${invoiceId}/lines/${lineId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data)
+    }),
+
+  removeLine: (invoiceId: string, lineId: string) =>
+    apiRequest<PosInvoice>(`/pos/invoices/${invoiceId}/lines/${lineId}`, {
+      method: 'DELETE'
+    }),
+
+  finalizeInvoice: (invoiceId: string, data: {
+    payments: Array<{
+      method: number;
+      amount: number;
+      cashTendered?: number;
+      referenceNumber?: string;
+      cardType?: string;
+      cardLast4?: string;
+      bankName?: string;
+      notes?: string;
+    }>;
+    discountAmount?: number;
+    notes?: string;
+  }) =>
+    apiRequest<PosInvoice>(`/pos/invoices/${invoiceId}/finalize`, {
+      method: 'POST',
+      headers: { 'Idempotency-Key': crypto.randomUUID() },
+      body: JSON.stringify(data)
+    }),
+
+  cancelInvoice: (invoiceId: string, reason: string) =>
+    apiRequest<PosInvoice>(`/pos/invoices/${invoiceId}/cancel`, {
+      method: 'POST',
+      body: JSON.stringify({ reason })
+    })
+};

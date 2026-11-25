@@ -83,6 +83,11 @@ public class AppDbContext : DbContext, IAppDbContext
     public DbSet<CashLedgerTransaction> CashLedgerTransactions => Set<CashLedgerTransaction>();
     public DbSet<CashLedgerEntry> CashLedgerEntries => Set<CashLedgerEntry>();
 
+    // Module 13: POS Normal Jewellery Sales
+    public DbSet<Invoice> Invoices => Set<Invoice>();
+    public DbSet<InvoiceLine> InvoiceLines => Set<InvoiceLine>();
+    public DbSet<InvoicePayment> InvoicePayments => Set<InvoicePayment>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -1025,6 +1030,126 @@ public class AppDbContext : DbContext, IAppDbContext
             entity.HasOne(e => e.Creator)
                   .WithMany()
                   .HasForeignKey(e => e.CreatedBy)
+                  .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // Module 13: POS Normal Jewellery Sales Configuration
+        modelBuilder.HasSequence<long>("InvoiceSequence").StartsAt(1).IncrementsBy(1);
+
+        modelBuilder.Entity<Invoice>(entity =>
+        {
+            entity.ToTable("Invoices");
+            entity.HasKey(i => i.Id);
+
+            entity.Property(i => i.InvoiceNumber).HasMaxLength(60).IsRequired();
+            entity.HasIndex(i => i.InvoiceNumber).IsUnique();
+
+            entity.Property(i => i.CustomerNameSnapshot).HasMaxLength(200).IsRequired();
+            entity.Property(i => i.CustomerPhoneSnapshot).HasMaxLength(50).IsRequired();
+            entity.Property(i => i.CurrencyCode).HasMaxLength(10).IsRequired().HasDefaultValue("LKR");
+
+            entity.Property(i => i.SubTotal).HasPrecision(18, 2);
+            entity.Property(i => i.DiscountAmount).HasPrecision(18, 2);
+            entity.Property(i => i.VatRate).HasPrecision(18, 2);
+            entity.Property(i => i.VatAmount).HasPrecision(18, 2);
+            entity.Property(i => i.TotalAmount).HasPrecision(18, 2);
+            entity.Property(i => i.TotalPaidAmount).HasPrecision(18, 2);
+            entity.Property(i => i.TotalCashTendered).HasPrecision(18, 2);
+            entity.Property(i => i.TotalCashChange).HasPrecision(18, 2);
+            entity.Property(i => i.NetCashPaid).HasPrecision(18, 2);
+
+            entity.Property(i => i.Status).HasConversion<int>().IsRequired();
+            entity.Property(i => i.IdempotencyKey).HasMaxLength(100);
+
+            entity.HasIndex(i => i.BranchId);
+            entity.HasIndex(i => i.ShiftId);
+            entity.HasIndex(i => i.CustomerId);
+            entity.HasIndex(i => i.Status);
+            entity.HasIndex(i => i.CreatedAt);
+            entity.HasIndex(i => new { i.BranchId, i.CreatedAt });
+
+            entity.HasOne(i => i.Branch)
+                  .WithMany()
+                  .HasForeignKey(i => i.BranchId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(i => i.Shift)
+                  .WithMany()
+                  .HasForeignKey(i => i.ShiftId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(i => i.Cashier)
+                  .WithMany()
+                  .HasForeignKey(i => i.CashierId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(i => i.Customer)
+                  .WithMany()
+                  .HasForeignKey(i => i.CustomerId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasMany(i => i.Lines)
+                  .WithOne(l => l.Invoice)
+                  .HasForeignKey(l => l.InvoiceId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasMany(i => i.Payments)
+                  .WithOne(p => p.Invoice)
+                  .HasForeignKey(p => p.InvoiceId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<InvoiceLine>(entity =>
+        {
+            entity.ToTable("InvoiceLines");
+            entity.HasKey(l => l.Id);
+
+            entity.Property(l => l.LineType).HasConversion<int>().IsRequired();
+            entity.Property(l => l.ItemCode).HasMaxLength(60).IsRequired();
+            entity.Property(l => l.TagNumber).HasMaxLength(60).IsRequired();
+            entity.Property(l => l.Barcode).HasMaxLength(100);
+            entity.Property(l => l.ItemName).HasMaxLength(200).IsRequired();
+
+            entity.Property(l => l.GrossWeight).HasPrecision(18, 4);
+            entity.Property(l => l.StoneWeight).HasPrecision(18, 4);
+            entity.Property(l => l.NetWeight).HasPrecision(18, 4);
+
+            entity.Property(l => l.ReferenceRatePerGram).HasPrecision(18, 2);
+            entity.Property(l => l.ReferenceMaterialValue).HasPrecision(18, 2);
+            entity.Property(l => l.ReferenceMakingCharge).HasPrecision(18, 2);
+            entity.Property(l => l.ReferencePrice).HasPrecision(18, 2);
+            entity.Property(l => l.UnitPrice).HasPrecision(18, 2);
+            entity.Property(l => l.LineTotal).HasPrecision(18, 2);
+
+            entity.HasOne(l => l.InventoryItem)
+                  .WithMany()
+                  .HasForeignKey(l => l.InventoryItemId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(l => l.Composition)
+                  .WithMany()
+                  .HasForeignKey(l => l.CompositionId)
+                  .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<InvoicePayment>(entity =>
+        {
+            entity.ToTable("InvoicePayments");
+            entity.HasKey(p => p.Id);
+
+            entity.Property(p => p.PaymentMethod).HasConversion<int>().IsRequired();
+            entity.Property(p => p.Amount).HasPrecision(18, 2).IsRequired();
+            entity.Property(p => p.CashTendered).HasPrecision(18, 2);
+            entity.Property(p => p.ChangeGiven).HasPrecision(18, 2);
+
+            entity.Property(p => p.ReferenceNumber).HasMaxLength(100);
+            entity.Property(p => p.CardType).HasMaxLength(50);
+            entity.Property(p => p.CardLast4).HasMaxLength(10);
+            entity.Property(p => p.BankName).HasMaxLength(100);
+
+            entity.HasOne(p => p.CashLedgerTransaction)
+                  .WithMany()
+                  .HasForeignKey(p => p.CashLedgerTransactionId)
                   .OnDelete(DeleteBehavior.Restrict);
         });
     }

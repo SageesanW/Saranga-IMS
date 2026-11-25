@@ -67,6 +67,9 @@ public static class DependencyInjection
         // Module 12: Cash Ledger & Cash Drawer Movements
         services.AddScoped<ICashLedgerService, CashLedgerService>();
 
+        // Module 13: POS Normal Jewellery Sales
+        services.AddScoped<IPosService, PosService>();
+
         // Authorization Handler & Policy Provider
         services.AddSingleton<IAuthorizationPolicyProvider, PermissionPolicyProvider>();
         services.AddScoped<IAuthorizationHandler, PermissionAuthorizationHandler>();
