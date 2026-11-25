@@ -23,7 +23,7 @@ public interface ICompositionService
     Task<InventoryCompositionDto> AddMemberAsync(Guid compositionId, AddCompositionMemberRequest request, CancellationToken cancellationToken = default);
     Task<InventoryCompositionDto> RemoveMemberAsync(Guid compositionId, Guid inventoryItemId, CancellationToken cancellationToken = default);
     Task<InventoryCompositionDto> DissolveCompositionAsync(Guid compositionId, uint? rowVersion = null, CancellationToken cancellationToken = default);
-    Task<MemberDetachmentResultDto?> DetachMemberOnSaleAsync(Guid inventoryItemId, string? saleInvoiceNumber = null, Guid? soldByUserId = null, CancellationToken cancellationToken = default);
+    Task<MemberDetachmentResultDto?> DetachMemberOnSaleAsync(Guid inventoryItemId, string? saleInvoiceNumber = null, Guid? soldByUserId = null, bool autoSave = true, CancellationToken cancellationToken = default);
 }
 
 public class CompositionService : ICompositionService
@@ -735,6 +735,7 @@ public class CompositionService : ICompositionService
         Guid inventoryItemId,
         string? saleInvoiceNumber = null,
         Guid? soldByUserId = null,
+        bool autoSave = true,
         CancellationToken cancellationToken = default)
     {
         // 1. Locate active membership
@@ -754,7 +755,13 @@ public class CompositionService : ICompositionService
         var composition = membership.Composition;
         var userId = soldByUserId ?? _currentUserService.UserId;
 
-        await using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
+        var ownsTransaction = _context.Database.CurrentTransaction == null;
+        Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction? transaction = null;
+        if (ownsTransaction)
+        {
+            transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
+        }
+
         try
         {
             var activeMembersBefore = composition.Members.Where(m => m.IsActive).ToList();
@@ -804,8 +811,15 @@ public class CompositionService : ICompositionService
                 new { SaleInvoiceNumber = saleInvoiceNumber, RemainingMemberCount = remainingCount, CompositionStatus = composition.Status.ToString() },
                 composition.BranchId);
 
-            await _context.SaveChangesAsync(cancellationToken);
-            await transaction.CommitAsync(cancellationToken);
+            if (autoSave)
+            {
+                await _context.SaveChangesAsync(cancellationToken);
+            }
+
+            if (transaction != null)
+            {
+                await transaction.CommitAsync(cancellationToken);
+            }
 
             // 4. Calculate updated totals for remaining active members
             decimal newGross = 0;
@@ -843,8 +857,18 @@ public class CompositionService : ICompositionService
         }
         catch
         {
-            await transaction.RollbackAsync(cancellationToken);
+            if (transaction != null)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+            }
             throw;
+        }
+        finally
+        {
+            if (transaction != null)
+            {
+                await transaction.DisposeAsync();
+            }
         }
     }
 

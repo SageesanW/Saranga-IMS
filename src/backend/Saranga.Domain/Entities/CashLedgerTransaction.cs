@@ -15,6 +15,8 @@ public class CashLedgerTransaction : BaseEntity
     public string? Description { get; set; }
     public string? Reason { get; set; }
     public Guid? CategoryId { get; set; }
+    public string? CategoryNameSnapshot { get; set; }
+    public string? CategoryCodeSnapshot { get; set; }
     public CashLedgerStatus Status { get; set; } = CashLedgerStatus.Posted;
     public DateTimeOffset TransactionAt { get; set; }
     public Guid? ReversalOfTransactionId { get; set; }
