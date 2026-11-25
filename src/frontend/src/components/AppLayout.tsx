@@ -50,11 +50,12 @@ export default function AppLayout({ children }: AppLayoutProps) {
     { name: 'Metal Rates', href: '/rates', icon: '🪙' },
     { name: 'VAT Configuration', href: '/vat', icon: '🏷️' },
     { name: 'Customers', href: '/customers', icon: '👤' },
+    { name: 'Shifts', href: '/shifts', icon: '💵' },
   ];
 
   const upcomingModules = [
     { name: 'POS & Billing', icon: '🧾' },
-    { name: 'Shift & Cash Ledger', icon: '💵' },
+    { name: 'Cash Ledger', icon: '🪙' },
     { name: 'Sales Verification', icon: '🔍' },
     { name: 'Audit Logs', icon: '📜' },
   ];

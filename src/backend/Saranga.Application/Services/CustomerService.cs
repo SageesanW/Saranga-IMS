@@ -15,6 +15,7 @@ public class CustomerService : ICustomerService
     private readonly IAppDbContext _context;
     private readonly ITagGeneratorService _tagGeneratorService;
     private readonly ICurrentUserService _currentUserService;
+    private readonly IPhoneNormalizationService _phoneNormalizer;
     private readonly ILogger<CustomerService> _logger;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -26,11 +27,13 @@ public class CustomerService : ICustomerService
         IAppDbContext context,
         ITagGeneratorService tagGeneratorService,
         ICurrentUserService currentUserService,
+        IPhoneNormalizationService phoneNormalizer,
         ILogger<CustomerService> logger)
     {
         _context = context;
         _tagGeneratorService = tagGeneratorService;
         _currentUserService = currentUserService;
+        _phoneNormalizer = phoneNormalizer;
         _logger = logger;
     }
 
@@ -50,8 +53,8 @@ public class CustomerService : ICustomerService
         if (!string.IsNullOrWhiteSpace(queryParams.Search))
         {
             var term = queryParams.Search.Trim();
-            var digitsOnly = new string(term.Where(char.IsDigit).ToArray());
-            var normalizedFull = PhoneNormalizer.Normalize(term);
+            var digitsOnly = _phoneNormalizer.ExtractDigits(term);
+            var normalizedFull = _phoneNormalizer.Normalize(term);
             var termLower = term.ToLower();
 
             query = query.Where(c =>
@@ -87,8 +90,8 @@ public class CustomerService : ICustomerService
         }
 
         var term = query.Trim();
-        var digitsOnly = new string(term.Where(char.IsDigit).ToArray());
-        var normalizedFull = PhoneNormalizer.Normalize(term);
+        var digitsOnly = _phoneNormalizer.ExtractDigits(term);
+        var normalizedFull = _phoneNormalizer.Normalize(term);
         var termLower = term.ToLower();
 
         var customers = await _context.Customers
@@ -143,7 +146,7 @@ public class CustomerService : ICustomerService
 
     public async Task<CustomerDuplicateCheckResult> CheckDuplicateAsync(string primaryPhone, string? email = null, Guid? excludeCustomerId = null, CancellationToken cancellationToken = default)
     {
-        var normalizedPhone = PhoneNormalizer.Normalize(primaryPhone);
+        var normalizedPhone = _phoneNormalizer.Normalize(primaryPhone);
         if (!string.IsNullOrEmpty(normalizedPhone))
         {
             var phoneMatch = await _context.Customers
@@ -194,7 +197,7 @@ public class CustomerService : ICustomerService
             throw new BusinessRuleException("Primary phone number is required.");
         }
 
-        var normalizedPhone = PhoneNormalizer.Normalize(request.PrimaryPhone);
+        var normalizedPhone = _phoneNormalizer.Normalize(request.PrimaryPhone);
         if (string.IsNullOrEmpty(normalizedPhone) || normalizedPhone.Length < 7)
         {
             throw new BusinessRuleException("Primary phone number must contain at least 7 digits.");
@@ -220,7 +223,7 @@ public class CustomerService : ICustomerService
         string? normalizedSecPhone = null;
         if (!string.IsNullOrWhiteSpace(request.SecondaryPhone))
         {
-            normalizedSecPhone = PhoneNormalizer.Normalize(request.SecondaryPhone);
+            normalizedSecPhone = _phoneNormalizer.Normalize(request.SecondaryPhone);
         }
 
         // Generate Customer Code from database sequence via TagGeneratorService
@@ -287,7 +290,7 @@ public class CustomerService : ICustomerService
             throw new BusinessRuleException("Primary phone number is required.");
         }
 
-        var normalizedPhone = PhoneNormalizer.Normalize(request.PrimaryPhone);
+        var normalizedPhone = _phoneNormalizer.Normalize(request.PrimaryPhone);
         if (string.IsNullOrEmpty(normalizedPhone) || normalizedPhone.Length < 7)
         {
             throw new BusinessRuleException("Primary phone number must contain at least 7 digits.");
@@ -313,7 +316,7 @@ public class CustomerService : ICustomerService
         string? normalizedSecPhone = null;
         if (!string.IsNullOrWhiteSpace(request.SecondaryPhone))
         {
-            normalizedSecPhone = PhoneNormalizer.Normalize(request.SecondaryPhone);
+            normalizedSecPhone = _phoneNormalizer.Normalize(request.SecondaryPhone);
         }
 
         var oldState = new

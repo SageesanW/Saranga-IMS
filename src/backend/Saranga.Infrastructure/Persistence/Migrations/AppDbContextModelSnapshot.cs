@@ -147,6 +147,57 @@ namespace Saranga.Infrastructure.Persistence.Migrations
                     b.ToTable("Branches", (string)null);
                 });
 
+            modelBuilder.Entity("Saranga.Domain.Entities.CashDrawer", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("BranchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("DrawerCode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("IsActive");
+
+                    b.HasIndex("BranchId", "DrawerCode")
+                        .IsUnique();
+
+                    b.ToTable("CashDrawers", (string)null);
+                });
+
             modelBuilder.Entity("Saranga.Domain.Entities.Category", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1543,6 +1594,128 @@ namespace Saranga.Infrastructure.Persistence.Migrations
                     b.ToTable("RolePermissions", (string)null);
                 });
 
+            modelBuilder.Entity("Saranga.Domain.Entities.Shift", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal?>("ActualClosingBalance")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<Guid>("BranchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CashDrawerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CashierId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("ClosedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ClosedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ClosingNotes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<decimal?>("ClosingVariance")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<string>("ClosingVarianceReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal?>("ExpectedClosingBalance")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTimeOffset>("OpenedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("OpenedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("OpeningBalance")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<decimal>("OpeningBalanceDifference")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<string>("OpeningDifferenceReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("OpeningNotes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("ShiftNumber")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("SystemExpectedOpeningBalance")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BranchId");
+
+                    b.HasIndex("CashDrawerId")
+                        .IsUnique()
+                        .HasFilter("\"Status\" = 0 AND \"IsDeleted\" = false");
+
+                    b.HasIndex("CashierId")
+                        .IsUnique()
+                        .HasFilter("\"Status\" = 0 AND \"IsDeleted\" = false");
+
+                    b.HasIndex("ClosedBy");
+
+                    b.HasIndex("OpenedAt");
+
+                    b.HasIndex("OpenedBy");
+
+                    b.HasIndex("ShiftNumber")
+                        .IsUnique();
+
+                    b.HasIndex("Status");
+
+                    b.ToTable("Shifts", (string)null);
+                });
+
             modelBuilder.Entity("Saranga.Domain.Entities.Specification", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1894,6 +2067,17 @@ namespace Saranga.Infrastructure.Persistence.Migrations
                     b.ToTable("VatConfigurations", (string)null);
                 });
 
+            modelBuilder.Entity("Saranga.Domain.Entities.CashDrawer", b =>
+                {
+                    b.HasOne("Saranga.Domain.Entities.Branch", "Branch")
+                        .WithMany()
+                        .HasForeignKey("BranchId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Branch");
+                });
+
             modelBuilder.Entity("Saranga.Domain.Entities.Customer", b =>
                 {
                     b.HasOne("Saranga.Domain.Entities.User", "Creator")
@@ -2199,6 +2383,48 @@ namespace Saranga.Infrastructure.Persistence.Migrations
                     b.Navigation("Permission");
 
                     b.Navigation("Role");
+                });
+
+            modelBuilder.Entity("Saranga.Domain.Entities.Shift", b =>
+                {
+                    b.HasOne("Saranga.Domain.Entities.Branch", "Branch")
+                        .WithMany()
+                        .HasForeignKey("BranchId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Saranga.Domain.Entities.CashDrawer", "CashDrawer")
+                        .WithMany()
+                        .HasForeignKey("CashDrawerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Saranga.Domain.Entities.User", "Cashier")
+                        .WithMany()
+                        .HasForeignKey("CashierId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Saranga.Domain.Entities.User", "Closer")
+                        .WithMany()
+                        .HasForeignKey("ClosedBy")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Saranga.Domain.Entities.User", "Opener")
+                        .WithMany()
+                        .HasForeignKey("OpenedBy")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Branch");
+
+                    b.Navigation("CashDrawer");
+
+                    b.Navigation("Cashier");
+
+                    b.Navigation("Closer");
+
+                    b.Navigation("Opener");
                 });
 
             modelBuilder.Entity("Saranga.Domain.Entities.SpecificationOption", b =>

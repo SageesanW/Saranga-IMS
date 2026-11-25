@@ -92,4 +92,29 @@ public class TagGeneratorService : ITagGeneratorService
 
         return $"CUS-{seqValue:D6}";
     }
+
+    public async Task<string> GenerateShiftNumberAsync(string branchCode, CancellationToken cancellationToken = default)
+    {
+        long seqValue;
+        try
+        {
+            var conn = _context.Database.GetDbConnection();
+            if (conn.State != System.Data.ConnectionState.Open)
+            {
+                await conn.OpenAsync(cancellationToken);
+            }
+
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandText = "SELECT nextval('\"ShiftNumberSequence\"');";
+            var result = await cmd.ExecuteScalarAsync(cancellationToken);
+            seqValue = Convert.ToInt64(result);
+        }
+        catch
+        {
+            seqValue = Random.Shared.NextInt64(100001, 999999);
+        }
+
+        var cleanBranch = string.IsNullOrWhiteSpace(branchCode) ? "BR" : branchCode.Trim().ToUpperInvariant();
+        return $"SHF-{cleanBranch}-{seqValue:D6}";
+    }
 }

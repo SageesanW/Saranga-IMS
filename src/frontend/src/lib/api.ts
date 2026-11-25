@@ -1233,6 +1233,78 @@ export interface CustomerDuplicateCheckResult {
   existingCustomerId?: string | null;
 }
 
+export interface CashDrawer {
+  id: string;
+  branchId: string;
+  drawerCode: string;
+  name: string;
+  description?: string | null;
+  isActive: boolean;
+  hasActiveShift: boolean;
+  activeShiftId?: string | null;
+  activeCashierName?: string | null;
+}
+
+export interface Shift {
+  id: string;
+  shiftNumber: string;
+  branchId: string;
+  branchName?: string | null;
+  cashDrawerId: string;
+  cashDrawerName?: string | null;
+  cashDrawerCode?: string | null;
+  cashierId: string;
+  cashierName?: string | null;
+  status: number; // 0: Open, 1: Closed
+  openedAt: string;
+  openedBy: string;
+  openedByName?: string | null;
+  openingBalance: number;
+  systemExpectedOpeningBalance: number;
+  openingBalanceDifference: number;
+  openingDifferenceReason?: string | null;
+  openingNotes?: string | null;
+  closedAt?: string | null;
+  closedBy?: string | null;
+  closedByName?: string | null;
+  actualClosingBalance?: number | null;
+  expectedClosingBalance?: number | null;
+  closingVariance?: number | null;
+  closingVarianceReason?: string | null;
+  closingNotes?: string | null;
+  version: number;
+}
+
+export interface OpenShiftRequest {
+  branchId: string;
+  cashDrawerId: string;
+  openingBalance: number;
+  openingDifferenceReason?: string | null;
+  openingNotes?: string | null;
+}
+
+export interface CloseShiftRequest {
+  actualClosingBalance: number;
+  closingVarianceReason?: string | null;
+  closingNotes?: string | null;
+  rowVersion?: number;
+}
+
+export interface ShiftOpeningDefaults {
+  cashDrawerId: string;
+  drawerName: string;
+  systemExpectedOpeningBalance: number;
+  previousShiftClosedAt?: string | null;
+  previousShiftNumber?: string | null;
+}
+
+export interface CreateCashDrawerRequest {
+  branchId: string;
+  drawerCode: string;
+  name: string;
+  description?: string | null;
+}
+
 export interface CreateCustomerRequest {
   fullName: string;
   primaryPhone: string;
@@ -1313,6 +1385,55 @@ export const customerApi = {
   updateCustomerStatus: (id: string, data: UpdateCustomerStatusRequest) =>
     apiRequest<Customer>(`/customers/${id}/status`, {
       method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+};
+
+export const shiftApi = {
+  openShift: (data: OpenShiftRequest) =>
+    apiRequest<Shift>('/shifts/open', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  closeShift: (id: string, data: CloseShiftRequest) =>
+    apiRequest<Shift>(`/shifts/${id}/close`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  getShiftById: (id: string) =>
+    apiRequest<Shift>(`/shifts/${id}`),
+  getActiveCashierShift: (cashierId?: string) =>
+    apiRequest<Shift | null>(`/shifts/active-cashier${cashierId ? `?cashierId=${cashierId}` : ''}`),
+  getActiveDrawerShift: (drawerId: string) =>
+    apiRequest<Shift | null>(`/shifts/active-drawer/${drawerId}`),
+  getOpeningDefaults: (drawerId: string) =>
+    apiRequest<ShiftOpeningDefaults>(`/shifts/opening-defaults/${drawerId}`),
+  getShifts: (params?: {
+    branchId?: string;
+    cashDrawerId?: string;
+    cashierId?: string;
+    status?: number;
+    startDate?: string;
+    endDate?: string;
+    page?: number;
+    pageSize?: number;
+  }) => {
+    const p = new URLSearchParams();
+    if (params?.branchId) p.append('branchId', params.branchId);
+    if (params?.cashDrawerId) p.append('cashDrawerId', params.cashDrawerId);
+    if (params?.cashierId) p.append('cashierId', params.cashierId);
+    if (params?.status !== undefined) p.append('status', params.status.toString());
+    if (params?.startDate) p.append('startDate', params.startDate);
+    if (params?.endDate) p.append('endDate', params.endDate);
+    if (params?.page) p.append('page', params.page.toString());
+    if (params?.pageSize) p.append('pageSize', params.pageSize.toString());
+    return apiRequest<PagedResult<Shift>>(`/shifts?${p.toString()}`);
+  },
+  getCashDrawers: (branchId: string) =>
+    apiRequest<CashDrawer[]>(`/shifts/drawers?branchId=${branchId}`),
+  createCashDrawer: (data: CreateCashDrawerRequest) =>
+    apiRequest<CashDrawer>('/shifts/drawers', {
+      method: 'POST',
       body: JSON.stringify(data),
     }),
 };

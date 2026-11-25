@@ -57,7 +57,12 @@ public static class DependencyInjection
         services.AddScoped<IReferencePricingService, ReferencePricingService>();
 
         // Module 10: Customer Management
+        services.AddSingleton<IPhoneNormalizationService, PhoneNormalizationService>();
         services.AddScoped<ICustomerService, CustomerService>();
+
+        // Module 11: Shift Opening & Closing
+        services.AddScoped<IShiftExpectedBalanceService, ShiftExpectedBalanceService>();
+        services.AddScoped<IShiftService, ShiftService>();
 
         // Authorization Handler & Policy Provider
         services.AddSingleton<IAuthorizationPolicyProvider, PermissionPolicyProvider>();

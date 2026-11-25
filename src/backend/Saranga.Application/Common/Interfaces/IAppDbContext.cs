@@ -55,5 +55,9 @@ public interface IAppDbContext
     // Module 10: Customer Management
     DbSet<Customer> Customers { get; }
 
+    // Module 11: Shift Opening & Closing
+    DbSet<CashDrawer> CashDrawers { get; }
+    DbSet<Shift> Shifts { get; }
+
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

@@ -74,6 +74,10 @@ public class AppDbContext : DbContext, IAppDbContext
     // Module 10: Customer Management
     public DbSet<Customer> Customers => Set<Customer>();
 
+    // Module 11: Shift Opening & Closing
+    public DbSet<CashDrawer> CashDrawers => Set<CashDrawer>();
+    public DbSet<Shift> Shifts => Set<Shift>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -788,6 +792,90 @@ public class AppDbContext : DbContext, IAppDbContext
             entity.HasOne(c => c.Updater)
                   .WithMany()
                   .HasForeignKey(c => c.UpdatedBy)
+                  .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // Module 11: CashDrawer Configuration
+        modelBuilder.Entity<CashDrawer>(entity =>
+        {
+            entity.ToTable("CashDrawers");
+            entity.HasKey(d => d.Id);
+
+            entity.Property(d => d.DrawerCode).HasMaxLength(50).IsRequired();
+            entity.Property(d => d.Name).HasMaxLength(150).IsRequired();
+            entity.Property(d => d.Description).HasMaxLength(500);
+
+            entity.HasIndex(d => new { d.BranchId, d.DrawerCode }).IsUnique();
+            entity.HasIndex(d => d.IsActive);
+
+            entity.HasOne(d => d.Branch)
+                  .WithMany()
+                  .HasForeignKey(d => d.BranchId)
+                  .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // Module 11: Shift Configuration
+        modelBuilder.Entity<Shift>(entity =>
+        {
+            entity.ToTable("Shifts");
+            entity.HasKey(s => s.Id);
+
+            entity.Property(s => s.ShiftNumber).HasMaxLength(50).IsRequired();
+            entity.HasIndex(s => s.ShiftNumber).IsUnique();
+
+            entity.Property(s => s.Status).HasConversion<int>().IsRequired();
+
+            entity.Property(s => s.OpeningBalance).HasPrecision(18, 2);
+            entity.Property(s => s.SystemExpectedOpeningBalance).HasPrecision(18, 2);
+            entity.Property(s => s.OpeningBalanceDifference).HasPrecision(18, 2);
+            entity.Property(s => s.OpeningDifferenceReason).HasMaxLength(500);
+            entity.Property(s => s.OpeningNotes).HasMaxLength(1000);
+
+            entity.Property(s => s.ActualClosingBalance).HasPrecision(18, 2);
+            entity.Property(s => s.ExpectedClosingBalance).HasPrecision(18, 2);
+            entity.Property(s => s.ClosingVariance).HasPrecision(18, 2);
+            entity.Property(s => s.ClosingVarianceReason).HasMaxLength(500);
+            entity.Property(s => s.ClosingNotes).HasMaxLength(1000);
+
+            entity.Property(s => s.Version).IsRowVersion();
+
+            // PostgreSQL level uniqueness: One active shift per cash drawer
+            entity.HasIndex(s => s.CashDrawerId)
+                  .IsUnique()
+                  .HasFilter("\"Status\" = 0 AND \"IsDeleted\" = false");
+
+            // PostgreSQL level uniqueness: One active shift per cashier for MVP
+            entity.HasIndex(s => s.CashierId)
+                  .IsUnique()
+                  .HasFilter("\"Status\" = 0 AND \"IsDeleted\" = false");
+
+            entity.HasIndex(s => s.BranchId);
+            entity.HasIndex(s => s.Status);
+            entity.HasIndex(s => s.OpenedAt);
+
+            entity.HasOne(s => s.Branch)
+                  .WithMany()
+                  .HasForeignKey(s => s.BranchId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(s => s.CashDrawer)
+                  .WithMany()
+                  .HasForeignKey(s => s.CashDrawerId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(s => s.Cashier)
+                  .WithMany()
+                  .HasForeignKey(s => s.CashierId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(s => s.Opener)
+                  .WithMany()
+                  .HasForeignKey(s => s.OpenedBy)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(s => s.Closer)
+                  .WithMany()
+                  .HasForeignKey(s => s.ClosedBy)
                   .OnDelete(DeleteBehavior.Restrict);
         });
     }
