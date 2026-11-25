@@ -64,7 +64,7 @@ public class Module12IntegrationTests : IClassFixture<WebApplicationFactory<Prog
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
         await db.Database.ExecuteSqlRawAsync(@"
-            SET LOCAL saranga.bypass_immutability_for_test = 'true';
+            SET LOCAL saranga.maintenance_mode = 'true';
             DELETE FROM ""CashLedgerEntries"" WHERE ""BranchId"" IN (SELECT ""Id"" FROM ""Branches"" WHERE ""Code"" LIKE 'T12B%');
             DELETE FROM ""CashLedgerTransactions"" WHERE ""BranchId"" IN (SELECT ""Id"" FROM ""Branches"" WHERE ""Code"" LIKE 'T12B%');
             DELETE FROM ""CashMovementCategories"" WHERE ""Code"" LIKE 'TEST_%';
@@ -74,6 +74,7 @@ public class Module12IntegrationTests : IClassFixture<WebApplicationFactory<Prog
                 OR ""UserId"" IN (SELECT ""Id"" FROM ""Users"" WHERE ""Username"" LIKE 'test_m12_%');
             DELETE FROM ""UserRoles"" WHERE ""UserId"" IN (SELECT ""Id"" FROM ""Users"" WHERE ""Username"" LIKE 'test_m12_%');
             DELETE FROM ""Users"" WHERE ""Username"" LIKE 'test_m12_%';
+            DELETE FROM ""Roles"" WHERE ""Name"" LIKE 'ShiftCloserOnly%';
             DELETE FROM ""Branches"" WHERE ""Code"" LIKE 'T12B%';
             DELETE FROM ""IdempotencyRecords"" WHERE ""Key"" LIKE 'IDEMP-%' OR ""Key"" LIKE 'CL-%';
         ");
@@ -1087,7 +1088,15 @@ public class Module12IntegrationTests : IClassFixture<WebApplicationFactory<Prog
         var exTxAmountUpdate = await Assert.ThrowsAsync<Npgsql.PostgresException>(() =>
             db.Database.ExecuteSqlRawAsync($"UPDATE \"CashLedgerTransactions\" SET \"Amount\" = 99999.00 WHERE \"Id\" = '{inTx.Id}'")
         );
-        Assert.Contains("immutable", exTxAmountUpdate.MessageText, StringComparison.OrdinalIgnoreCase);
+        Assert.True(exTxAmountUpdate.MessageText.Contains("immutable", StringComparison.OrdinalIgnoreCase)
+                 || exTxAmountUpdate.MessageText.Contains("status can only transition to Reversed", StringComparison.OrdinalIgnoreCase));
+
+        // 4. Direct raw SQL UPDATE altering ReversalOfTransactionId must be blocked
+        var exTxRevIdUpdate = await Assert.ThrowsAsync<Npgsql.PostgresException>(() =>
+            db.Database.ExecuteSqlRawAsync($"UPDATE \"CashLedgerTransactions\" SET \"ReversalOfTransactionId\" = '{Guid.NewGuid()}' WHERE \"Id\" = '{inTx.Id}'")
+        );
+        Assert.True(exTxRevIdUpdate.MessageText.Contains("ReversalOfTransactionId is immutable", StringComparison.OrdinalIgnoreCase)
+                 || exTxRevIdUpdate.MessageText.Contains("status can only transition to Reversed", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
@@ -1168,5 +1177,104 @@ public class Module12IntegrationTests : IClassFixture<WebApplicationFactory<Prog
         var transferAttempt = await SendWithIdempotencyAsync(c1Client, HttpMethod.Post, "/api/cash-ledger/transfer",
             new PostTransferRequest(shift1.Id, shift2.Id, 1000.00m, "Unauthorized transfer", null));
         Assert.Equal(HttpStatusCode.Forbidden, transferAttempt.StatusCode);
+    }
+
+    [Fact]
+    public async Task Hardening_11_ShiftOverrideClose_DoesNotAuthorizeFinancialPostingsOrTransfers()
+    {
+        var client = _factory.CreateClient();
+        var loginRes = await client.PostAsJsonAsync("/api/auth/login", new LoginRequest("saranga_owner", "OwnerSuperAdmin@2026#Secure"));
+        var ownerToken = (await loginRes.Content.ReadFromJsonAsync<AuthResponse>())!.AccessToken;
+        var ownerClient = _factory.CreateClient();
+        ownerClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", ownerToken);
+
+        var branchRes = await ownerClient.PostAsJsonAsync("/api/branches", new CreateBranchRequest("Test M12 H11 Branch", "T12BH11", "LK", "LKR", "Asia/Colombo", true));
+        var branch = (await branchRes.Content.ReadFromJsonAsync<BranchDto>())!;
+
+        var drwRes = await ownerClient.PostAsJsonAsync("/api/shifts/drawers", new CreateCashDrawerRequest(branch.Id, "T12DRWH11", "Drawer 11", null));
+        var drawer = (await drwRes.Content.ReadFromJsonAsync<CashDrawerDto>())!;
+
+        // 1. Create a custom role with SHIFT_OVERRIDE_CLOSE, SHIFT_START, SHIFT_END, CASH_LEDGER_VIEW, CASH_LEDGER_CASH_IN
+        // Notice: NO CASH_LEDGER_TRANSFER and NO CASH_LEDGER_REVERSE
+        var allPerms = await ownerClient.GetFromJsonAsync<List<Saranga.Application.DTOs.Roles.PermissionDto>>("/api/permissions");
+        var targetPermNames = new HashSet<string>
+        {
+            Permissions.ShiftStart,
+            Permissions.ShiftEnd,
+            Permissions.ShiftOverrideClose,
+            Permissions.CashLedgerView,
+            Permissions.CashLedgerCashIn
+        };
+        var selectedPermIds = allPerms!.Where(p => targetPermNames.Contains(p.Name)).Select(p => p.Id).ToList();
+
+        var roleName = $"ShiftCloserOnly_{Guid.NewGuid():N}";
+        var roleRes = await ownerClient.PostAsJsonAsync("/api/roles", new Saranga.Application.DTOs.Roles.CreateRoleRequest(
+            roleName,
+            "Role with shift override close and basic cash in but no transfer or reverse",
+            selectedPermIds
+        ));
+        Assert.Equal(HttpStatusCode.Created, roleRes.StatusCode);
+        var customRole = (await roleRes.Content.ReadFromJsonAsync<Saranga.Application.DTOs.Roles.RoleDto>())!;
+
+        // Create Supervisor user
+        var supRes = await ownerClient.PostAsJsonAsync("/api/users", new CreateUserRequest(
+            "test_m12_h11_sup",
+            "test_m12_h11_sup@saranga.lk",
+            "Supervisor11@Saranga2026!",
+            "Supervisor 11",
+            new List<Guid> { customRole.Id },
+            new List<Guid> { branch.Id },
+            branch.Id
+        ));
+        Assert.Equal(HttpStatusCode.Created, supRes.StatusCode);
+
+        // Setup Cashier with Cashier role
+        var rolesRes = await ownerClient.GetFromJsonAsync<List<Saranga.Application.DTOs.Roles.RoleDto>>("/api/roles");
+        var cashierRoleId = rolesRes!.First(r => r.Name == SystemRoles.Cashier).Id;
+        var cashUserRes = await ownerClient.PostAsJsonAsync("/api/users", new CreateUserRequest(
+            "test_m12_h11_cash",
+            "test_m12_h11_cash@saranga.lk",
+            "Cashier11@Saranga2026!",
+            "Cashier 11",
+            new List<Guid> { cashierRoleId },
+            new List<Guid> { branch.Id },
+            branch.Id
+        ));
+        Assert.Equal(HttpStatusCode.Created, cashUserRes.StatusCode);
+
+        // Cashier opens shift
+        var cashLogin = await client.PostAsJsonAsync("/api/auth/login", new LoginRequest("test_m12_h11_cash", "Cashier11@Saranga2026!"));
+        var cashToken = (await cashLogin.Content.ReadFromJsonAsync<AuthResponse>())!.AccessToken;
+        var cashClient = _factory.CreateClient();
+        cashClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", cashToken);
+        var sRes = await cashClient.PostAsJsonAsync("/api/shifts/open", new OpenShiftRequest(branch.Id, drawer.Id, 5000.00m, "Float", "Cashier 11 Shift"));
+        var cashierShift = (await sRes.Content.ReadFromJsonAsync<ShiftDto>())!;
+
+        // Authenticate Supervisor
+        var supLogin = await client.PostAsJsonAsync("/api/auth/login", new LoginRequest("test_m12_h11_sup", "Supervisor11@Saranga2026!"));
+        var supToken = (await supLogin.Content.ReadFromJsonAsync<AuthResponse>())!.AccessToken;
+        var supClient = _factory.CreateClient();
+        supClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", supToken);
+
+        // 2. Supervisor has SHIFT_OVERRIDE_CLOSE and CASH_LEDGER_CASH_IN.
+        // Attempting to post Cash In to the Cashier's shift must be rejected!
+        // SHIFT_OVERRIDE_CLOSE does not grant permission to post cash movements into another user's drawer.
+        var crossPostRes = await SendWithIdempotencyAsync(supClient, HttpMethod.Post, "/api/cash-ledger/cash-in",
+            new PostCashInRequest(cashierShift.Id, 500.00m, null, "Supervisor attempt", "Unauthorized", null));
+        Assert.Equal(HttpStatusCode.BadRequest, crossPostRes.StatusCode);
+        var crossErr = await crossPostRes.Content.ReadAsStringAsync();
+        Assert.Contains("own active open shift", crossErr, StringComparison.OrdinalIgnoreCase);
+
+        // 3. Supervisor attempts Transfer without CASH_LEDGER_TRANSFER -> 403 Forbidden
+        // Proves SHIFT_OVERRIDE_CLOSE does not grant transfer privileges.
+        var transferRes = await SendWithIdempotencyAsync(supClient, HttpMethod.Post, "/api/cash-ledger/transfer",
+            new PostTransferRequest(cashierShift.Id, cashierShift.Id, 500.00m, "Transfer attempt", null));
+        Assert.Equal(HttpStatusCode.Forbidden, transferRes.StatusCode);
+
+        // 4. Supervisor attempts Reversal without CASH_LEDGER_REVERSE -> 403 Forbidden
+        // Proves SHIFT_OVERRIDE_CLOSE does not grant reversal privileges.
+        var reverseRes = await SendWithIdempotencyAsync(supClient, HttpMethod.Post, $"/api/cash-ledger/transactions/{Guid.NewGuid()}/reverse",
+            new ReverseTransactionRequest("Reversal attempt"));
+        Assert.Equal(HttpStatusCode.Forbidden, reverseRes.StatusCode);
     }
 }

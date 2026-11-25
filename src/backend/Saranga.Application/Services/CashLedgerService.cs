@@ -728,8 +728,8 @@ public class CashLedgerService : ICashLedgerService
         var destShift = request.DestinationShiftId == firstId ? firstShift : secondShift;
 
         // Validation (Section 13)
-        ValidateShiftForPosting(sourceShift);
-        ValidateShiftForPosting(destShift);
+        ValidateShiftForPosting(sourceShift, isTransfer: true);
+        ValidateShiftForPosting(destShift, isTransfer: true);
 
         if (sourceShift.CashDrawerId == destShift.CashDrawerId)
         {
@@ -1606,7 +1606,7 @@ public class CashLedgerService : ICashLedgerService
         }
     }
 
-    private void ValidateShiftForPosting(Shift shift, bool isSystem = false)
+    private void ValidateShiftForPosting(Shift shift, bool isSystem = false, bool isTransfer = false)
     {
         if (shift.Status != ShiftStatus.Open)
         {
@@ -1629,14 +1629,25 @@ public class CashLedgerService : ICashLedgerService
             throw new ForbiddenException("You are not authorized to post transactions to this branch.");
         }
 
-        // Cashier ownership: if user is cashier without manager/admin roles, must be own shift
-        var isManagerOrAdmin = _currentUserService.IsGlobalAdmin
-            || _currentUserService.Permissions.Contains(Permissions.CashLedgerTransfer, StringComparer.OrdinalIgnoreCase)
-            || _currentUserService.Permissions.Contains(Permissions.ShiftOverrideClose, StringComparer.OrdinalIgnoreCase);
-
-        if (!isManagerOrAdmin && shift.CashierId != _currentUserService.UserId)
+        // Cashier ownership and granular financial permissions:
+        // SHIFT_OVERRIDE_CLOSE must NOT implicitly authorize financial postings, transfers, or reversals.
+        if (isTransfer)
         {
-            throw new BusinessRuleException("Cashiers may only post physical cash movements to their own active open shift.");
+            var isTransferAuthorized = _currentUserService.IsGlobalAdmin
+                || _currentUserService.Permissions.Contains(Permissions.CashLedgerTransfer, StringComparer.OrdinalIgnoreCase);
+
+            if (!isTransferAuthorized)
+            {
+                throw new ForbiddenException("You do not possess the required CASH_LEDGER_TRANSFER permission.");
+            }
+        }
+        else
+        {
+            // For Cash In / Cash Out: only the cashier assigned to the shift (or global admin) can post to it.
+            if (!_currentUserService.IsGlobalAdmin && shift.CashierId != _currentUserService.UserId)
+            {
+                throw new BusinessRuleException("Cashiers may only post physical cash movements to their own active open shift.");
+            }
         }
     }
 
