@@ -67,7 +67,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
       setShiftLoading(true);
       shiftApi
         .getActiveCashierShift()
-        .then((shift: Shift | null) => setActiveShift(shift))
+        .then((shift: Shift | null) => setActiveShift(shift && shift.id ? shift : null))
         .catch(() => setActiveShift(null))
         .finally(() => setShiftLoading(false));
     }
@@ -287,7 +287,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
           {/* Right: Active Shift Badge & Staff Profile */}
           <div className="flex items-center space-x-3 sm:space-x-4">
             {/* Contextual Active Shift Indicator */}
-            {activeShift ? (
+            {activeShift && activeShift.id ? (
               <Link
                 href="/shifts"
                 className="flex items-center space-x-2 px-3 py-1.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 hover:bg-emerald-100 transition-colors"

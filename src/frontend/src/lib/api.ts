@@ -173,11 +173,15 @@ export async function apiRequest<T>(
   }
 
   // Handle empty responses (e.g. 204 or void actions)
+  if (response.status === 204) {
+    return null as unknown as T;
+  }
+
   const contentType = response.headers.get('content-type');
   if (contentType && contentType.includes('application/json')) {
     return response.json();
   }
-  return {} as T;
+  return null as unknown as T;
 }
 
 // Module 2 API Helpers

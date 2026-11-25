@@ -80,7 +80,7 @@ export default function ShiftsPage() {
     try {
       setLoadingActiveShift(true);
       const shift = await shiftApi.getActiveCashierShift();
-      setActiveShift(shift);
+      setActiveShift(shift && shift.id ? shift : null);
     } catch {
       setActiveShift(null);
     } finally {
@@ -431,7 +431,7 @@ export default function ShiftsPage() {
                 <span>New Drawer</span>
               </button>
             )}
-            {!activeShift && canStartShift && (
+            {(!activeShift || !activeShift.id) && canStartShift && (
               <button
                 onClick={() => {
                   setShowOpenModal(true);
@@ -446,7 +446,7 @@ export default function ShiftsPage() {
                 <span>Open Shift</span>
               </button>
             )}
-            {activeShift && canEndShift && (
+            {activeShift && activeShift.id && canEndShift && (
               <button
                 onClick={() => initiateCloseShift(activeShift)}
                 className="px-5 py-2.5 text-sm font-semibold text-white bg-gradient-to-r from-[#991b1b] to-[#b91c1c] hover:from-[#7f1d1d] hover:to-[#991b1b] rounded-xl shadow-md transition-all flex items-center space-x-2"
@@ -468,7 +468,7 @@ export default function ShiftsPage() {
               </h2>
               {loadingActiveShift ? (
                 <span className="text-xs text-gray-400 animate-pulse">Checking shift status...</span>
-              ) : activeShift ? (
+              ) : activeShift && activeShift.id ? (
                 <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
                   <span className="w-2 h-2 rounded-full bg-emerald-500 mr-1.5 animate-ping"></span>
                   Active Shift #{activeShift.shiftNumber}
@@ -482,7 +482,7 @@ export default function ShiftsPage() {
 
             {loadingActiveShift ? (
               <div className="py-8 text-center text-gray-400 text-sm">Loading cashier session...</div>
-            ) : activeShift ? (
+            ) : activeShift && activeShift.id ? (
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 rounded-xl bg-gradient-to-r from-[#123B32]/5 to-[#B89A60]/10 border border-[#B89A60]/30">
                 <div>
                   <span className="text-xs text-gray-500 uppercase tracking-wider font-semibold">Cash Drawer</span>
@@ -493,19 +493,21 @@ export default function ShiftsPage() {
                 <div>
                   <span className="text-xs text-gray-500 uppercase tracking-wider font-semibold">Opened At</span>
                   <p className="text-sm font-medium text-gray-900 mt-0.5">
-                    {new Date(activeShift.openedAt).toLocaleString('en-GB', {
-                      day: '2-digit',
-                      month: 'short',
-                      year: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit'
-                    })}
+                    {activeShift.openedAt
+                      ? new Date(activeShift.openedAt).toLocaleString('en-GB', {
+                          day: '2-digit',
+                          month: 'short',
+                          year: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })
+                      : '—'}
                   </p>
                 </div>
                 <div>
                   <span className="text-xs text-gray-500 uppercase tracking-wider font-semibold">Opening Float ({activeShift.currencyCode || 'LKR'})</span>
                   <p className="text-lg font-extrabold text-[#123B32] mt-0.5">
-                    Rs. {activeShift.openingBalance.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
+                    Rs. {(activeShift.openingBalance ?? 0).toLocaleString('en-LK', { minimumFractionDigits: 2 })}
                   </p>
                 </div>
                 <div className="flex items-center justify-end">
@@ -635,7 +637,7 @@ export default function ShiftsPage() {
                       )}
                     </span>
                     <div className="flex items-center space-x-2">
-                      {d.isActive && !d.hasActiveShift && !activeShift && canStartShift && (
+                      {d.isActive && !d.hasActiveShift && (!activeShift || !activeShift.id) && canStartShift && (
                         <button
                           onClick={() => {
                             handleDrawerSelect(d.id);
@@ -777,12 +779,14 @@ export default function ShiftsPage() {
                           )}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-gray-600">
-                          {new Date(s.openedAt).toLocaleString('en-GB', {
-                            day: '2-digit',
-                            month: 'short',
-                            hour: '2-digit',
-                            minute: '2-digit'
-                          })}
+                          {s.openedAt
+                            ? new Date(s.openedAt).toLocaleString('en-GB', {
+                                day: '2-digit',
+                                month: 'short',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              })
+                            : '—'}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-gray-600">
                           {s.closedAt
@@ -795,11 +799,11 @@ export default function ShiftsPage() {
                             : '—'}
                         </td>
                         <td className="px-6 py-4 text-right font-mono text-gray-900 font-medium">
-                          Rs. {s.openingBalance.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
+                          Rs. {(s.openingBalance ?? 0).toLocaleString('en-LK', { minimumFractionDigits: 2 })}
                         </td>
                         <td className="px-6 py-4 text-right font-mono text-gray-900 font-medium">
                           {s.actualClosingBalance != null
-                            ? `Rs. ${s.actualClosingBalance.toLocaleString('en-LK', { minimumFractionDigits: 2 })}`
+                            ? `Rs. ${(s.actualClosingBalance ?? 0).toLocaleString('en-LK', { minimumFractionDigits: 2 })}`
                             : '—'}
                         </td>
                         <td className="px-6 py-4 text-right font-mono font-bold">
@@ -809,11 +813,11 @@ export default function ShiftsPage() {
                             <span className="text-emerald-700">Rs. 0.00</span>
                           ) : variance < 0 ? (
                             <span className="text-rose-700 font-bold" title={s.closingVarianceReason || 'Shortage'}>
-                              Rs. {variance.toLocaleString('en-LK', { minimumFractionDigits: 2 })} 
+                              Rs. {(variance ?? 0).toLocaleString('en-LK', { minimumFractionDigits: 2 })} 
                             </span>
                           ) : (
                             <span className="text-blue-700 font-bold" title={s.closingVarianceReason || 'Surplus'}>
-                              +Rs. {variance.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
+                              +Rs. {(variance ?? 0).toLocaleString('en-LK', { minimumFractionDigits: 2 })}
                             </span>
                           )}
                         </td>
@@ -936,7 +940,7 @@ export default function ShiftsPage() {
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-semibold text-blue-900">System Expected Opening Float:</span>
                     <span className="text-sm font-extrabold text-blue-900 font-mono">
-                      Rs. {openingDefaults.systemExpectedOpeningBalance.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
+                      Rs. {(openingDefaults.systemExpectedOpeningBalance ?? 0).toLocaleString('en-LK', { minimumFractionDigits: 2 })}
                     </span>
                   </div>
                   <p className="text-[11px] text-blue-700 mt-1">
@@ -972,7 +976,7 @@ export default function ShiftsPage() {
                   <div className="flex items-center justify-between text-xs font-bold text-amber-900">
                     <span>Discrepancy Detected:</span>
                     <span className="font-mono">
-                      {openDiscrepancy > 0 ? '+' : ''}Rs. {openDiscrepancy.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
+                      {openDiscrepancy > 0 ? '+' : ''}Rs. {(openDiscrepancy ?? 0).toLocaleString('en-LK', { minimumFractionDigits: 2 })}
                     </span>
                   </div>
                   <p className="text-[11px] text-amber-800">
@@ -1080,9 +1084,9 @@ export default function ShiftsPage() {
               {/* Balances Summary Box */}
               <div className="p-4 bg-gray-50 rounded-xl border border-gray-200 space-y-2">
                 <div className="flex items-center justify-between text-xs text-gray-600">
-                  <span>Opening Float ({targetShift.currencyCode || 'LKR'}):</span>
+                  <span>Opening Float ({targetShift?.currencyCode || 'LKR'}):</span>
                   <span className="font-mono font-semibold text-gray-800">
-                    Rs. {targetShift.openingBalance.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
+                    Rs. {(targetShift?.openingBalance ?? 0).toLocaleString('en-LK', { minimumFractionDigits: 2 })}
                   </span>
                 </div>
                 {closingShiftSummary && (
@@ -1090,13 +1094,13 @@ export default function ShiftsPage() {
                     <div className="flex items-center justify-between text-xs text-emerald-700">
                       <span>Total Posted Cash In (+):</span>
                       <span className="font-mono font-semibold">
-                        + Rs. {closingShiftSummary.totalCashIn.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
+                        + Rs. {(closingShiftSummary.totalCashIn ?? 0).toLocaleString('en-LK', { minimumFractionDigits: 2 })}
                       </span>
                     </div>
                     <div className="flex items-center justify-between text-xs text-rose-700">
                       <span>Total Posted Cash Out (-):</span>
                       <span className="font-mono font-semibold">
-                        - Rs. {closingShiftSummary.totalCashOut.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
+                        - Rs. {(closingShiftSummary.totalCashOut ?? 0).toLocaleString('en-LK', { minimumFractionDigits: 2 })}
                       </span>
                     </div>
                   </>
@@ -1104,7 +1108,7 @@ export default function ShiftsPage() {
                 <div className="flex items-center justify-between text-xs text-gray-600 border-t border-gray-200 pt-2">
                   <span className="font-bold text-gray-900">Backend Expected Closing Cash:</span>
                   <span className="font-mono font-extrabold text-[#123B32] text-sm">
-                    Rs. {closeExpectedNum.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
+                    Rs. {(closeExpectedNum ?? 0).toLocaleString('en-LK', { minimumFractionDigits: 2 })}
                   </span>
                 </div>
                 <p className="text-[10px] text-gray-400">
@@ -1145,9 +1149,9 @@ export default function ShiftsPage() {
                     {closeVariance === 0 ? (
                       'Balanced (0.00)'
                     ) : closeVariance < 0 ? (
-                      ` Shortage: Rs. ${Math.abs(closeVariance).toLocaleString('en-LK', { minimumFractionDigits: 2 })}`
+                      ` Shortage: Rs. ${Math.abs(closeVariance ?? 0).toLocaleString('en-LK', { minimumFractionDigits: 2 })}`
                     ) : (
-                      ` Surplus: +Rs. ${closeVariance.toLocaleString('en-LK', { minimumFractionDigits: 2 })}`
+                      ` Surplus: +Rs. ${(closeVariance ?? 0).toLocaleString('en-LK', { minimumFractionDigits: 2 })}`
                     )}
                   </span>
                 </div>
@@ -1397,17 +1401,17 @@ export default function ShiftsPage() {
                 <div className="flex justify-between">
                   <span className="text-gray-600">Opening Balance:</span>
                   <span className="font-bold text-gray-900">
-                    Rs. {selectedShiftForDetail.openingBalance.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
+                    Rs. {(selectedShiftForDetail.openingBalance ?? 0).toLocaleString('en-LK', { minimumFractionDigits: 2 })}
                   </span>
                 </div>
                 <div className="flex justify-between text-gray-500">
                   <span>System Expected Float:</span>
-                  <span>Rs. {selectedShiftForDetail.systemExpectedOpeningBalance.toLocaleString('en-LK', { minimumFractionDigits: 2 })}</span>
+                  <span>Rs. {(selectedShiftForDetail.systemExpectedOpeningBalance ?? 0).toLocaleString('en-LK', { minimumFractionDigits: 2 })}</span>
                 </div>
                 {selectedShiftForDetail.openingBalanceDifference !== 0 && (
                   <div className="flex justify-between text-amber-700">
                     <span>Opening Discrepancy:</span>
-                    <span>Rs. {selectedShiftForDetail.openingBalanceDifference.toLocaleString('en-LK', { minimumFractionDigits: 2 })}</span>
+                    <span>Rs. {(selectedShiftForDetail.openingBalanceDifference ?? 0).toLocaleString('en-LK', { minimumFractionDigits: 2 })}</span>
                   </div>
                 )}
                 {selectedShiftForDetail.openingDifferenceReason && (
@@ -1422,19 +1426,19 @@ export default function ShiftsPage() {
                   <div className="flex justify-between">
                     <span className="text-gray-600">Expected Closing Cash:</span>
                     <span className="font-bold text-gray-900">
-                      Rs. {selectedShiftForDetail.expectedClosingBalance?.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
+                      Rs. {(selectedShiftForDetail.expectedClosingBalance ?? 0).toLocaleString('en-LK', { minimumFractionDigits: 2 })}
                     </span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-600">Actual Closing Cash:</span>
                     <span className="font-bold text-gray-900">
-                      Rs. {selectedShiftForDetail.actualClosingBalance?.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
+                      Rs. {(selectedShiftForDetail.actualClosingBalance ?? 0).toLocaleString('en-LK', { minimumFractionDigits: 2 })}
                     </span>
                   </div>
                   <div className="flex justify-between border-t border-gray-200 pt-1.5 font-bold">
                     <span>Reconciliation Variance:</span>
                     <span className={selectedShiftForDetail.closingVariance === 0 ? 'text-emerald-700' : selectedShiftForDetail.closingVariance! < 0 ? 'text-rose-700' : 'text-blue-700'}>
-                      Rs. {selectedShiftForDetail.closingVariance?.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
+                      Rs. {(selectedShiftForDetail.closingVariance ?? 0).toLocaleString('en-LK', { minimumFractionDigits: 2 })}
                     </span>
                   </div>
                   {selectedShiftForDetail.closingVarianceReason && (

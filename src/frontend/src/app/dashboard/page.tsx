@@ -59,7 +59,7 @@ export default function DashboardPage() {
         if (isMounted) {
           if (invRes.status === 'fulfilled') setTotalItems(invRes.value.totalCount);
           if (custRes.status === 'fulfilled') setTotalCustomers(custRes.value.totalCount);
-          if (shiftRes.status === 'fulfilled') setActiveShift(shiftRes.value);
+          if (shiftRes.status === 'fulfilled') setActiveShift(shiftRes.value && shiftRes.value.id ? shiftRes.value : null);
           if (rateRes.status === 'fulfilled') setMetalRates(rateRes.value);
           if (cashRes.status === 'fulfilled') setRecentCashMoves(cashRes.value.items);
         }
@@ -108,7 +108,7 @@ export default function DashboardPage() {
               <span className="text-[11px] font-semibold text-[#69736E] uppercase tracking-wider">
                 Active Shift
               </span>
-              {activeShift ? (
+              {activeShift && activeShift.id ? (
                 <Badge variant="success" size="sm">
                   Open
                 </Badge>
@@ -118,7 +118,7 @@ export default function DashboardPage() {
                 </Badge>
               )}
             </div>
-            {activeShift ? (
+            {activeShift && activeShift.id ? (
               <div>
                 <p className="text-lg font-bold text-[#123B32]">
                   {activeShift.cashDrawerName}
@@ -137,7 +137,7 @@ export default function DashboardPage() {
           <div className="mt-4 pt-3 border-t border-[#E2E6E3] flex justify-between items-center text-xs">
             <span className="text-[#69736E]">Cash Drawer</span>
             <Link href="/shifts" className="font-semibold text-[#123B32] hover:underline">
-              {activeShift ? 'Manage Shift' : 'Open Shift'} &rarr;
+              {activeShift && activeShift.id ? 'Manage Shift' : 'Open Shift'} &rarr;
             </Link>
           </div>
         </div>

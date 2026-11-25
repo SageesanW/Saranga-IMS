@@ -110,10 +110,11 @@ export default function CashLedgerPage() {
   const loadShiftContext = useCallback(async () => {
     try {
       const active = await shiftApi.getActiveCashierShift();
-      setActiveShift(active);
+      const validActive = active && active.id ? active : null;
+      setActiveShift(validActive);
 
-      if (active) {
-        const summary = await cashLedgerApi.getShiftSummary(active.id);
+      if (validActive) {
+        const summary = await cashLedgerApi.getShiftSummary(validActive.id);
         setShiftSummary(summary);
       } else {
         setShiftSummary(null);
@@ -509,10 +510,10 @@ export default function CashLedgerPage() {
                   Authoritative Expected Cash
                 </span>
                 <div className="text-3xl font-black text-white mt-0.5">
-                  Rs. {shiftSummary.currentExpectedBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  Rs. {(shiftSummary?.currentExpectedBalance ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </div>
                 <div className="text-[10px] text-gray-300">
-                  {shiftSummary.totalTransactionsCount} physical movements recorded
+                  {shiftSummary?.totalTransactionsCount ?? 0} physical movements recorded
                 </div>
               </div>
             </div>
@@ -522,7 +523,7 @@ export default function CashLedgerPage() {
               <div className="bg-white/5 rounded-xl p-3 border border-white/10">
                 <p className="text-[10px] text-gray-300 uppercase font-semibold">Opening Float</p>
                 <p className="text-base font-bold text-white mt-0.5">
-                  Rs. {shiftSummary.openingBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  Rs. {(shiftSummary?.openingBalance ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                 </p>
               </div>
 
@@ -531,7 +532,7 @@ export default function CashLedgerPage() {
                   <ArrowDownLeft className="w-3 h-3" /> Total Cash In
                 </p>
                 <p className="text-base font-bold text-emerald-300 mt-0.5">
-                  + Rs. {shiftSummary.totalCashIn.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  + Rs. {(shiftSummary?.totalCashIn ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                 </p>
               </div>
 
@@ -540,14 +541,14 @@ export default function CashLedgerPage() {
                   <ArrowUpRight className="w-3 h-3" /> Total Cash Out
                 </p>
                 <p className="text-base font-bold text-rose-300 mt-0.5">
-                  - Rs. {shiftSummary.totalCashOut.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  - Rs. {(shiftSummary?.totalCashOut ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                 </p>
               </div>
 
               <div className="bg-[#B89A60]/10 rounded-xl p-3 border border-[#B89A60]/30">
                 <p className="text-[10px] text-[#B89A60] uppercase font-semibold">Formula Balance</p>
                 <p className="text-base font-black text-[#B89A60] mt-0.5">
-                  Rs. {shiftSummary.currentExpectedBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  Rs. {(shiftSummary?.currentExpectedBalance ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                 </p>
               </div>
             </div>
