@@ -11,6 +11,9 @@ public interface IMetalRateService
     Task<MetalRateDto> CreateManualRateAsync(CreateManualRateRequest request, CancellationToken cancellationToken = default);
     Task<MetalRateDto> AdminOverrideRateAsync(AdminOverrideRateRequest request, CancellationToken cancellationToken = default);
     Task<List<MetalRateDto>> RefreshExternalRatesAsync(RefreshExternalRatesRequest request, CancellationToken cancellationToken = default);
-    Task<ExternalRateProviderStatusDto> GetProviderStatusAsync(CancellationToken cancellationToken = default);
+    Task<ExternalRateProviderStatusDto> GetProviderStatusAsync(Guid? branchId = null, CancellationToken cancellationToken = default);
+    Task<MetalRateFeedPreviewDto> GetFeedPreviewAsync(CancellationToken cancellationToken = default);
+    Task<List<MetalRateDto>> SwitchPricingModeAsync(SwitchPricingModeRequest request, CancellationToken cancellationToken = default);
+    Task RefreshStaleBranchRatesAsync(CancellationToken cancellationToken = default);
     decimal DerivePurityRate(decimal pureReferenceRate, decimal purityPercentage, decimal? karatValue);
 }

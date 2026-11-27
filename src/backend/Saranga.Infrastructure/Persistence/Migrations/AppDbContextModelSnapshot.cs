@@ -132,6 +132,13 @@ namespace Saranga.Infrastructure.Persistence.Migrations
                         .HasMaxLength(150)
                         .HasColumnType("character varying(150)");
 
+                    b.Property<string>("RatePricingMode")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasDefaultValue("MANUAL");
+
                     b.Property<string>("TimeZone")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -1525,6 +1532,18 @@ namespace Saranga.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("CashierId")
                         .HasColumnType("uuid");
 
+                    b.Property<decimal>("CombinedAgreedTotal")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasDefaultValue(0m);
+
+                    b.Property<decimal>("CombinedExpectedTotal")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasDefaultValue(0m);
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -1562,6 +1581,12 @@ namespace Saranga.Infrastructure.Persistence.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
+                    b.Property<decimal>("InvoiceAdjustmentAmount")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasDefaultValue(0m);
+
                     b.Property<string>("InvoiceNumber")
                         .IsRequired()
                         .HasMaxLength(60)
@@ -1569,6 +1594,11 @@ namespace Saranga.Infrastructure.Persistence.Migrations
 
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
+
+                    b.Property<bool>("IsInvoicePriceConfirmed")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
 
                     b.Property<decimal>("NetCashPaid")
                         .HasPrecision(18, 2)
@@ -1645,6 +1675,12 @@ namespace Saranga.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<decimal>("AllocatedInvoiceAdjustment")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasDefaultValue(0m);
+
                     b.Property<string>("Barcode")
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
@@ -1681,8 +1717,8 @@ namespace Saranga.Infrastructure.Persistence.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
-                    b.Property<int?>("KaratValueSnapshot")
-                        .HasColumnType("integer");
+                    b.Property<decimal?>("KaratValueSnapshot")
+                        .HasColumnType("numeric");
 
                     b.Property<decimal>("LineTotal")
                         .HasPrecision(18, 2)
@@ -1691,11 +1727,31 @@ namespace Saranga.Infrastructure.Persistence.Migrations
                     b.Property<int>("LineType")
                         .HasColumnType("integer");
 
+                    b.Property<int>("MakingChargeMethodSnapshot")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1);
+
+                    b.Property<decimal>("MakingChargeValueSnapshot")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasDefaultValue(0m);
+
                     b.Property<Guid?>("MaterialId")
                         .HasColumnType("uuid");
 
                     b.Property<string>("MaterialNameSnapshot")
                         .HasColumnType("text");
+
+                    b.Property<Guid?>("MetalRateId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("NetLineTotal")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasDefaultValue(0m);
 
                     b.Property<decimal>("NetWeight")
                         .HasPrecision(18, 4)
@@ -1712,6 +1768,16 @@ namespace Saranga.Infrastructure.Persistence.Migrations
 
                     b.Property<int>("Quantity")
                         .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset?>("QuotedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset?>("RateEffectiveAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("RateSource")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
 
                     b.Property<decimal>("ReferenceMakingCharge")
                         .HasPrecision(18, 2)

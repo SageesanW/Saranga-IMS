@@ -57,7 +57,47 @@ public record ExternalRateProviderStatusDto(
     DateTimeOffset? LastSuccessfulRefreshAt,
     DateTimeOffset? LastAttemptAt,
     string? LastErrorMessage,
-    int TotalActiveRatesManaged
+    int TotalActiveRatesManaged,
+    string ActivePricingMode = "MANUAL",
+    DateTimeOffset? ProviderEffectiveTime = null,
+    string? CbslReferenceDate = null,
+    string? AttributionText = null,
+    string? AttributionUrl = null,
+    bool IsStale = false
+);
+
+public record SwitchPricingModeRequest(
+    Guid BranchId,
+    string PricingMode, // "MARKET_API", "CBSL_API", "MANUAL"
+    string? Reason = null,
+    List<ManualRateConfigItem>? InitialManualRates = null
+);
+
+public record ManualRateConfigItem(
+    Guid MaterialId,
+    Guid PurityId,
+    decimal RatePerGram
+);
+
+public record FeedPurityRateDto(
+    string PurityCode,
+    decimal KaratValue,
+    decimal RatePerGram,
+    decimal RatePerPawn
+);
+
+public record MetalRateFeedPreviewDto(
+    bool IsSuccess,
+    string ProviderName,
+    string Currency,
+    DateTimeOffset UpdatedAt,
+    DateTimeOffset? MarketTime,
+    string? CbslDate,
+    List<FeedPurityRateDto> MarketRates,
+    List<FeedPurityRateDto> CbslRates,
+    string AttributionText,
+    string AttributionUrl,
+    string? ErrorMessage = null
 );
 
 public record MetalRateHistoryQueryParams(

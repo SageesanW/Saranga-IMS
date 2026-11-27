@@ -20,6 +20,12 @@ public class Invoice : BaseEntity
     public decimal VatAmount { get; set; }
     public decimal TotalAmount { get; set; }
 
+    // Module 13: Negotiated Pricing Architecture
+    public decimal CombinedExpectedTotal { get; set; }
+    public decimal CombinedAgreedTotal { get; set; }
+    public decimal InvoiceAdjustmentAmount { get; set; }
+    public bool IsInvoicePriceConfirmed { get; set; }
+
     public decimal TotalPaidAmount { get; set; }
     public decimal TotalCashTendered { get; set; }
     public decimal TotalCashChange { get; set; }

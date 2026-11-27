@@ -55,6 +55,62 @@ public class FakeMetalRateProvider : IMetalRateProvider
             NormalizedRates: new List<ProviderNormalizedRate> { normalized }
         ));
     }
+
+    public Task<GoldPriceSriLankaFeed> FetchSriLankaFeedAsync(CancellationToken cancellationToken = default)
+    {
+        if (ShouldFail)
+        {
+            return Task.FromResult(new GoldPriceSriLankaFeed(
+                IsSuccess: false,
+                ProviderName: ProviderName,
+                Currency: "LKR",
+                UpdatedAt: DateTimeOffset.UtcNow,
+                MarketTime: null,
+                CbslDate: null,
+                MarketGold: null,
+                CbslGold: null,
+                AttributionText: "Gold prices by GoldPriceSriLanka.com",
+                AttributionUrl: "https://goldpricesrilanka.com/",
+                ErrorMessage: "Simulated upstream provider outage / network timeout"
+            ));
+        }
+
+        var marketGold = new ProviderNormalizedRate(
+            "XAU",
+            Rate24K,
+            KaratRates,
+            RatePerPawn24K: Rate24K * 8m,
+            RatePerPawn22K: KaratRates.GetValueOrDefault(22.0m) * 8m
+        );
+
+        var cbslRates = new Dictionary<decimal, decimal>
+        {
+            [24.0m] = Rate24K - 500m,
+            [22.0m] = (KaratRates.GetValueOrDefault(22.0m)) - 400m,
+            [18.0m] = (KaratRates.GetValueOrDefault(18.0m)) - 300m
+        };
+
+        var cbslGold = new ProviderNormalizedRate(
+            "XAU",
+            Rate24K - 500m,
+            cbslRates,
+            RatePerPawn24K: (Rate24K - 500m) * 8m,
+            RatePerPawn22K: (KaratRates.GetValueOrDefault(22.0m) - 400m) * 8m
+        );
+
+        return Task.FromResult(new GoldPriceSriLankaFeed(
+            IsSuccess: true,
+            ProviderName: ProviderName,
+            Currency: "LKR",
+            UpdatedAt: DateTimeOffset.UtcNow,
+            MarketTime: DateTimeOffset.UtcNow.AddMinutes(-5),
+            CbslDate: DateTimeOffset.UtcNow.ToString("yyyy-MM-dd"),
+            MarketGold: marketGold,
+            CbslGold: cbslGold,
+            AttributionText: "Gold prices by GoldPriceSriLanka.com",
+            AttributionUrl: "https://goldpricesrilanka.com/"
+        ));
+    }
 }
 
 public class Module9IntegrationTests : IClassFixture<WebApplicationFactory<Program>>, IAsyncLifetime
@@ -538,6 +594,86 @@ public class Module9IntegrationTests : IClassFixture<WebApplicationFactory<Progr
         // Cashier can read active rates -> 200 OK
         var cashierRatesRes = await cashierClient.GetAsync($"/api/metal-rates?branchId={b1.Id}");
         Assert.Equal(HttpStatusCode.OK, cashierRatesRes.StatusCode);
+
+        // =========================================================================
+        // 15. Live Gold Rate Integration, Source Switching (3 Buttons) & Attribution
+        // =========================================================================
+        _output.WriteLine("=== 15. Gold Rate Source Switching (Market, CBSL, Manual) ===");
+        FakeProvider.ShouldFail = false;
+
+        // A. Feed Preview Endpoint Verification
+        var previewRes = await ownerClient.GetFromJsonAsync<MetalRateFeedPreviewDto>("/api/metal-rates/feed-preview");
+        Assert.NotNull(previewRes);
+        Assert.True(previewRes.IsSuccess);
+        Assert.NotEmpty(previewRes.MarketRates);
+        Assert.NotEmpty(previewRes.CbslRates);
+        Assert.Equal("Gold prices by GoldPriceSriLanka.com", previewRes.AttributionText);
+        Assert.Equal("https://goldpricesrilanka.com/", previewRes.AttributionUrl);
+
+        // Cashier cannot switch mode -> 403 Forbidden
+        var unauthSwitchRes = await cashierClient.PostAsJsonAsync("/api/metal-rates/switch-source", new SwitchPricingModeRequest(
+            BranchId: b1.Id,
+            PricingMode: BranchPricingModes.MarketApi
+        ));
+        Assert.Equal(HttpStatusCode.Forbidden, unauthSwitchRes.StatusCode);
+
+        // B. Switch to Market Rate API Mode
+        var switchToMarketRes = await ownerClient.PostAsJsonAsync("/api/metal-rates/switch-source", new SwitchPricingModeRequest(
+            BranchId: b1.Id,
+            PricingMode: BranchPricingModes.MarketApi,
+            Reason: "Switching to live market spot rates"
+        ));
+        Assert.Equal(HttpStatusCode.OK, switchToMarketRes.StatusCode);
+        var marketRates = (await switchToMarketRes.Content.ReadFromJsonAsync<List<MetalRateDto>>())!;
+        var market24k = marketRates.Single(r => r.MaterialId == matGold.Id && r.PurityId == pur24k.Id);
+        Assert.Equal(MetalRateSources.MarketApi, market24k.Source);
+        Assert.Equal(FakeProvider.Rate24K, market24k.RatePerGram);
+
+        // Verify Branch RatePricingMode in DB and Status API
+        var b1Updated = await ownerClient.GetFromJsonAsync<BranchDto>($"/api/branches/{b1.Id}");
+        Assert.Equal(BranchPricingModes.MarketApi, b1Updated!.RatePricingMode);
+
+        var statusMarket = await ownerClient.GetFromJsonAsync<ExternalRateProviderStatusDto>($"/api/metal-rates/provider-status?branchId={b1.Id}");
+        Assert.Equal(BranchPricingModes.MarketApi, statusMarket!.ActivePricingMode);
+        Assert.NotNull(statusMarket.AttributionText);
+        Assert.NotNull(statusMarket.AttributionUrl);
+
+        // C. Switch to CBSL Rate API Mode
+        var switchToCbslRes = await ownerClient.PostAsJsonAsync("/api/metal-rates/switch-source", new SwitchPricingModeRequest(
+            BranchId: b1.Id,
+            PricingMode: BranchPricingModes.CbslApi,
+            Reason: "Switching to official Central Bank reference rates"
+        ));
+        Assert.Equal(HttpStatusCode.OK, switchToCbslRes.StatusCode);
+        var cbslRates = (await switchToCbslRes.Content.ReadFromJsonAsync<List<MetalRateDto>>())!;
+        var cbsl24k = cbslRates.Single(r => r.MaterialId == matGold.Id && r.PurityId == pur24k.Id);
+        Assert.Equal(MetalRateSources.CbslApi, cbsl24k.Source);
+        Assert.Equal(FakeProvider.Rate24K - 500m, cbsl24k.RatePerGram);
+
+        var b1Cbsl = await ownerClient.GetFromJsonAsync<BranchDto>($"/api/branches/{b1.Id}");
+        Assert.Equal(BranchPricingModes.CbslApi, b1Cbsl!.RatePricingMode);
+
+        // D. Switch to Manual Rate Mode (Restores previous manual rates)
+        var switchToManualRes = await ownerClient.PostAsJsonAsync("/api/metal-rates/switch-source", new SwitchPricingModeRequest(
+            BranchId: b1.Id,
+            PricingMode: BranchPricingModes.Manual,
+            Reason: "Restoring manual store rate governance"
+        ));
+        Assert.Equal(HttpStatusCode.OK, switchToManualRes.StatusCode);
+        var manualRates = (await switchToManualRes.Content.ReadFromJsonAsync<List<MetalRateDto>>())!;
+        var manual22k = manualRates.Single(r => r.MaterialId == matGold.Id && r.PurityId == pur22k.Id);
+        Assert.Equal(MetalRateSources.Manual, manual22k.Source);
+
+        var b1Manual = await ownerClient.GetFromJsonAsync<BranchDto>($"/api/branches/{b1.Id}");
+        Assert.Equal(BranchPricingModes.Manual, b1Manual!.RatePricingMode);
+
+        // E. Rate History reflects source transitions
+        var historyAfterSwitches = await ownerClient.GetFromJsonAsync<PagedResult<MetalRateDto>>(
+            $"/api/metal-rates/history?branchId={b1.Id}&pageSize=50");
+        Assert.NotNull(historyAfterSwitches);
+        Assert.Contains(historyAfterSwitches.Items, r => r.Source == MetalRateSources.MarketApi);
+        Assert.Contains(historyAfterSwitches.Items, r => r.Source == MetalRateSources.CbslApi);
+        Assert.Contains(historyAfterSwitches.Items, r => r.Source == MetalRateSources.Manual);
 
         _output.WriteLine("=== All Module 9 Verification Phases Completed Successfully ===");
     }

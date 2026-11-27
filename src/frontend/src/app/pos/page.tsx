@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
+import Link from 'next/link';
 import AppLayout from '@/components/AppLayout';
 import { useAuth } from '@/lib/auth-context';
 import { useBranch } from '@/lib/branch-context';
@@ -16,10 +17,8 @@ import {
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
-import { Select } from '@/components/ui/Select';
 import { Modal } from '@/components/ui/Modal';
 import { Badge } from '@/components/ui/Badge';
-import { Table } from '@/components/ui/Table';
 import {
   CreditCard,
   Banknote,
@@ -33,11 +32,15 @@ import {
   CheckCircle2,
   Scan,
   Printer,
-  RotateCcw,
   Plus,
   Wallet,
   Clock,
   ArrowRight,
+  ArrowLeft,
+  Sparkles,
+  RefreshCw,
+  Coins,
+  Gem,
   Info,
 } from 'lucide-react';
 
@@ -60,6 +63,9 @@ export default function PosTerminalPage() {
   // Shift & Cashier State
   const [activeShift, setActiveShift] = useState<Shift | null>(null);
   const [isLoadingShift, setIsLoadingShift] = useState(true);
+
+  // Step in POS: 'CART' (scanning & negotiation) or 'PAYMENT' (settlement)
+  const [posStep, setPosStep] = useState<'CART' | 'PAYMENT'>('CART');
 
   // Customer Search & Quick Add
   const [customerSearchQuery, setCustomerSearchQuery] = useState('');
@@ -85,6 +91,15 @@ export default function PosTerminalPage() {
   const [scannedItem, setScannedItem] = useState<PosItemLookupResult | null>(null);
   const [negotiatedPriceInput, setNegotiatedPriceInput] = useState<string>('');
 
+  // Overall Invoice Negotiation
+  const [finalInvoicePriceInput, setFinalInvoicePriceInput] = useState<string>('');
+  const [isConfirmingPricing, setIsConfirmingPricing] = useState(false);
+
+  // Rates Update Detection
+  const [hasRateUpdates, setHasRateUpdates] = useState(false);
+  const [changedPurities, setChangedPurities] = useState<string[]>([]);
+  const [isRefreshingRates, setIsRefreshingRates] = useState(false);
+
   // Editing line price modal
   const [editingLineId, setEditingLineId] = useState<string | null>(null);
   const [editPriceValue, setEditPriceValue] = useState<string>('');
@@ -93,7 +108,6 @@ export default function PosTerminalPage() {
   const [payments, setPayments] = useState<PaymentRow[]>([
     { method: 1, amount: 0, cashTendered: 0 },
   ]);
-  const [discountAmount, setDiscountAmount] = useState<number>(0);
   const [invoiceNotes, setInvoiceNotes] = useState('');
   const [isFinalizing, setIsFinalizing] = useState(false);
   const [finalizedSuccess, setFinalizedSuccess] = useState<PosInvoice | null>(null);
@@ -158,12 +172,51 @@ export default function PosTerminalPage() {
     return () => clearTimeout(timer);
   }, [customerSearchQuery]);
 
-  // Focus barcode input on mount
+  // Focus barcode input on mount and state changes
   useEffect(() => {
-    if (activeShift && !finalizedSuccess) {
+    if (activeShift && !finalizedSuccess && posStep === 'CART') {
       barcodeInputRef.current?.focus();
     }
-  }, [activeShift, finalizedSuccess]);
+  }, [activeShift, finalizedSuccess, posStep]);
+
+  // Sync Final Invoice Price input when invoice changes
+  useEffect(() => {
+    if (currentInvoice) {
+      const agreed = currentInvoice.combinedAgreedTotal || currentInvoice.lines.reduce((s, l) => s + l.lineTotal, 0);
+      const total = currentInvoice.totalAmount || agreed;
+      setFinalInvoicePriceInput(total.toFixed(2));
+    }
+  }, [currentInvoice?.id, currentInvoice?.lines.length, currentInvoice?.combinedAgreedTotal, currentInvoice?.totalAmount]);
+
+  // Check rate status for active cart
+  useEffect(() => {
+    let isCancelled = false;
+
+    async function checkRates() {
+      if (!currentInvoice || currentInvoice.lines.length === 0 || currentInvoice.status !== 1) {
+        setHasRateUpdates(false);
+        setChangedPurities([]);
+        return;
+      }
+
+      try {
+        const res = await posApi.checkRatesStatus(currentInvoice.id);
+        if (!isCancelled) {
+          setHasRateUpdates(res.hasRateUpdates);
+          setChangedPurities(res.changedPurities || []);
+        }
+      } catch (err) {
+        // Non-blocking check
+      }
+    }
+
+    checkRates();
+    const interval = setInterval(checkRates, 30000); // Check every 30 seconds
+    return () => {
+      isCancelled = true;
+      clearInterval(interval);
+    };
+  }, [currentInvoice?.id, currentInvoice?.lines.length]);
 
   // Item Lookup
   const handleItemLookup = async (e?: React.FormEvent) => {
@@ -181,7 +234,8 @@ export default function PosTerminalPage() {
     try {
       const item = await posApi.lookupItem(activeShift.id, scanQuery.trim());
       setScannedItem(item);
-      setNegotiatedPriceInput(item.referencePrice.toFixed(2));
+      const expected = item.expectedSellingPrice || item.referencePrice;
+      setNegotiatedPriceInput(expected.toFixed(2));
     } catch (err: any) {
       setErrorMsg(err.message || 'Item lookup failed. Verify barcode or tag number.');
     } finally {
@@ -204,7 +258,7 @@ export default function PosTerminalPage() {
       const invoice = await posApi.createDraft({
         customerId: customer.id,
         shiftId: activeShift.id,
-        notes: 'POS Walk-in Sale',
+        notes: 'POS Jewellery Sale',
       });
       setCurrentInvoice(invoice);
       return invoice;
@@ -223,7 +277,7 @@ export default function PosTerminalPage() {
 
     const price = parseFloat(negotiatedPriceInput);
     if (isNaN(price) || price < 0) {
-      setErrorMsg('Please specify a valid non-negative negotiated selling price.');
+      setErrorMsg('Please specify a valid non-negative agreed selling price.');
       return;
     }
 
@@ -232,13 +286,14 @@ export default function PosTerminalPage() {
       const invoice = await ensureDraftInvoice(selectedCustomer);
       const updated = await posApi.addLine(invoice.id, {
         itemBarcodeOrTag: scannedItem.tagNumber,
-        negotiatedUnitPrice: price,
+        agreedSellingPrice: price,
       });
 
       setCurrentInvoice(updated);
       setScannedItem(null);
       setScanQuery('');
       setNegotiatedPriceInput('');
+      setPosStep('CART'); // Invalidate confirmation and stay in cart
       setInfoMsg(`Added ${scannedItem.itemName} (${scannedItem.tagNumber}) to cart.`);
       barcodeInputRef.current?.focus();
     } catch (err: any) {
@@ -279,7 +334,8 @@ export default function PosTerminalPage() {
     try {
       const updated = await posApi.removeLine(currentInvoice.id, lineId);
       setCurrentInvoice(updated);
-      setInfoMsg('Item removed from cart.');
+      setPosStep('CART');
+      setInfoMsg('Item removed from cart. Please review updated totals.');
     } catch (err: any) {
       setErrorMsg(err.message || 'Failed to remove item.');
     }
@@ -295,35 +351,76 @@ export default function PosTerminalPage() {
 
     try {
       const updated = await posApi.updateLine(currentInvoice.id, editingLineId, {
-        negotiatedUnitPrice: price,
+        agreedSellingPrice: price,
       });
       setCurrentInvoice(updated);
       setEditingLineId(null);
       setEditPriceValue('');
-      setInfoMsg('Negotiated price updated.');
+      setPosStep('CART');
+      setInfoMsg('Agreed line price updated. Please review updated totals.');
     } catch (err: any) {
       setErrorMsg(err.message || 'Failed to update line price.');
     }
   };
 
-  // Financial Calculations
-  const linesTotal = currentInvoice?.lines.reduce((sum, l) => sum + l.lineTotal, 0) || 0;
-  const netPayable = Math.max(0, linesTotal - discountAmount);
-
-  // Auto-sync initial cash payment amount
-  useEffect(() => {
-    if (netPayable > 0 && payments.length === 1 && payments[0].amount === 0) {
-      setPayments([{ method: 1, amount: netPayable, cashTendered: netPayable }]);
+  // Confirm Negotiated Pricing & Proceed to Payment
+  const handleConfirmPricingAndProceed = async () => {
+    if (!currentInvoice || currentInvoice.lines.length === 0) {
+      setErrorMsg('Cart is empty. Please add items before proceeding.');
+      return;
     }
-  }, [netPayable, payments.length]);
 
-  const totalTendered = payments.reduce((sum, p) => {
-    if (p.method === 1) {
-      return sum + (p.cashTendered !== undefined ? p.cashTendered : p.amount);
+    const finalAmount = parseFloat(finalInvoicePriceInput);
+    if (isNaN(finalAmount) || finalAmount < 0) {
+      setErrorMsg('Please enter a valid final negotiated invoice price.');
+      return;
     }
-    return sum + (p.amount || 0);
-  }, 0);
 
+    setIsConfirmingPricing(true);
+    setErrorMsg(null);
+    try {
+      const updated = await posApi.negotiateTotal(currentInvoice.id, {
+        finalNegotiatedTotal: finalAmount,
+      });
+      setCurrentInvoice(updated);
+      setPayments([{ method: 1, amount: updated.totalAmount, cashTendered: updated.totalAmount }]);
+      setPosStep('PAYMENT');
+      setInfoMsg('Invoice pricing confirmed. You may now process payment.');
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Failed to confirm invoice pricing.');
+    } finally {
+      setIsConfirmingPricing(false);
+    }
+  };
+
+  // Refresh Reference Rates
+  const handleRefreshReferenceRates = async () => {
+    if (!currentInvoice) return;
+    setIsRefreshingRates(true);
+    setErrorMsg(null);
+    try {
+      const res = await posApi.refreshRates(currentInvoice.id);
+      setCurrentInvoice(res.invoice);
+      setHasRateUpdates(false);
+      setChangedPurities([]);
+      setInfoMsg(res.message);
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Failed to refresh reference rates.');
+    } finally {
+      setIsRefreshingRates(false);
+    }
+  };
+
+  // Pricing Totals Calculations
+  const combinedExpected = currentInvoice?.combinedExpectedTotal || currentInvoice?.lines.reduce((s, l) => s + l.referencePrice, 0) || 0;
+  const combinedAgreed = currentInvoice?.combinedAgreedTotal || currentInvoice?.lines.reduce((s, l) => s + l.lineTotal, 0) || 0;
+  const itemLevelDifference = combinedAgreed - combinedExpected;
+
+  const currentFinalNegotiated = parseFloat(finalInvoicePriceInput) || combinedAgreed;
+  const additionalInvoiceAdjustment = currentFinalNegotiated - combinedAgreed;
+  const confirmedPayable = currentInvoice?.totalAmount || currentFinalNegotiated;
+
+  // Tender Calculations
   const totalPaidAllocation = payments.reduce((sum, p) => sum + (p.amount || 0), 0);
   const cashRow = payments.find((p) => p.method === 1);
   const changeDue =
@@ -331,7 +428,7 @@ export default function PosTerminalPage() {
       ? (cashRow.cashTendered || 0) - cashRow.amount
       : 0;
 
-  // Checkout & Finalize Invoice
+  // Finalize Invoice
   const handleCheckout = async () => {
     if (!currentInvoice || currentInvoice.lines.length === 0) {
       setErrorMsg('Cart is empty. Add items before checking out.');
@@ -341,11 +438,9 @@ export default function PosTerminalPage() {
       setErrorMsg('Active shift required to complete checkout.');
       return;
     }
-    if (totalPaidAllocation < netPayable) {
+    if (Math.abs(totalPaidAllocation - confirmedPayable) > 0.01) {
       setErrorMsg(
-        `Insufficient payment allocated. Allocated: ${currency} ${totalPaidAllocation.toFixed(
-          2
-        )}, Total Payable: ${currency} ${netPayable.toFixed(2)}`
+        `Total payments (${currency} ${totalPaidAllocation.toFixed(2)}) must exactly settle the confirmed invoice total (${currency} ${confirmedPayable.toFixed(2)}).`
       );
       return;
     }
@@ -368,7 +463,6 @@ export default function PosTerminalPage() {
 
       const finalized = await posApi.finalizeInvoice(currentInvoice.id, {
         payments: checkoutPayments,
-        discountAmount,
         notes: invoiceNotes,
       });
 
@@ -376,8 +470,9 @@ export default function PosTerminalPage() {
       setCurrentInvoice(null);
       setSelectedCustomer(null);
       setPayments([{ method: 1, amount: 0, cashTendered: 0 }]);
-      setDiscountAmount(0);
+      setFinalInvoicePriceInput('');
       setInvoiceNotes('');
+      setPosStep('CART');
     } catch (err: any) {
       setErrorMsg(err.message || 'Checkout failed. Please verify payments.');
     } finally {
@@ -385,11 +480,26 @@ export default function PosTerminalPage() {
     }
   };
 
+  // Helper for pricing mode label
+  const getPricingModeLabel = (source?: string) => {
+    if (!source) return 'Active Gold Rate';
+    const s = source.toUpperCase();
+    if (s.includes('MARKET')) return 'Market Rate API';
+    if (s.includes('CBSL')) return 'CBSL Rate API';
+    if (s.includes('MANUAL')) return 'Manual Rate';
+    return source;
+  };
+
+  // Variance indicator for scanned item
+  const scannedExpected = scannedItem?.expectedSellingPrice || scannedItem?.referencePrice || 0;
+  const parsedScannedAgreed = parseFloat(negotiatedPriceInput) || 0;
+  const scannedVariance = parsedScannedAgreed - scannedExpected;
+
   return (
     <AppLayout>
       <PageHeader
         title="POS Sales Workspace"
-        description="Authoritative jewellery retail checkout with reference price verification, price negotiation, and physical cash ledger posting."
+        description="Authoritative jewellery retail checkout with live operational gold rates, item-by-item price negotiation, and physical cash drawer settlement."
         badge={
           activeShift ? (
             <Badge variant="success" size="sm">
@@ -404,6 +514,11 @@ export default function PosTerminalPage() {
         actions={
           activeShift && (
             <div className="flex items-center gap-2">
+              <Link href="/rates">
+                <Button variant="secondary" size="sm" leftIcon={<Coins className="w-4 h-4 text-[#B89A60]" />}>
+                  Metal Rates
+                </Button>
+              </Link>
               <a href="/shifts">
                 <Button variant="secondary" size="sm" leftIcon={<Wallet className="w-4 h-4" />}>
                   Shift Details
@@ -434,6 +549,34 @@ export default function PosTerminalPage() {
         </div>
       )}
 
+      {/* Gold Rate Updates Subtle Banner (Quote Protection) */}
+      {hasRateUpdates && currentInvoice && currentInvoice.lines.length > 0 && (
+        <div className="mb-4 p-3.5 rounded-xl bg-amber-50/90 border border-amber-300 text-amber-950 text-xs flex items-center justify-between shadow-xs">
+          <div className="flex items-center gap-2.5">
+            <Info className="w-4 h-4 text-amber-700 flex-shrink-0" />
+            <div>
+              <p className="font-semibold text-amber-900">
+                Gold rates have been updated. Existing item quotations remain unchanged.
+              </p>
+              {changedPurities.length > 0 && (
+                <p className="text-[11px] text-amber-800 mt-0.5">
+                  Updated purities: {changedPurities.join(', ')}
+                </p>
+              )}
+            </div>
+          </div>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={handleRefreshReferenceRates}
+            isLoading={isRefreshingRates}
+            leftIcon={<RefreshCw className="w-3.5 h-3.5 text-amber-700" />}
+          >
+            Refresh Reference Prices
+          </Button>
+        </div>
+      )}
+
       {/* Notifications */}
       {errorMsg && (
         <div className="mb-4 p-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-center justify-between">
@@ -441,7 +584,7 @@ export default function PosTerminalPage() {
             <AlertTriangle className="w-4 h-4 text-rose-600 flex-shrink-0" />
             <span>{errorMsg}</span>
           </div>
-          <button onClick={() => setErrorMsg(null)} className="text-rose-700 hover:text-rose-900">
+          <button onClick={() => setErrorMsg(null)} className="text-rose-700 hover:text-rose-900 font-bold ml-2">
             ✕
           </button>
         </div>
@@ -453,7 +596,7 @@ export default function PosTerminalPage() {
             <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
             <span>{infoMsg}</span>
           </div>
-          <button onClick={() => setInfoMsg(null)} className="text-emerald-700 hover:text-emerald-900">
+          <button onClick={() => setInfoMsg(null)} className="text-emerald-700 hover:text-emerald-900 font-bold ml-2">
             ✕
           </button>
         </div>
@@ -472,26 +615,38 @@ export default function PosTerminalPage() {
             Invoice {finalizedSuccess.invoiceNumber}
           </h2>
           <p className="text-xs text-[#69736E] mt-1">
-            Customer: <strong className="text-[#202824]">{finalizedSuccess.customerName}</strong> • Cashier: {user?.fullName || 'Cashier'}
+            Customer: <strong className="text-[#202824]">{finalizedSuccess.customerName}</strong> • Cashier:{' '}
+            {user?.fullName || 'Cashier'}
           </p>
 
           <div className="my-6 p-4 rounded-xl bg-[#F8F7F4] border border-[#E2E6E3] text-left text-xs space-y-2">
             <div className="flex justify-between py-1 border-b border-[#E2E6E3]">
-              <span className="text-[#69736E]">Subtotal</span>
+              <span className="text-[#69736E]">Combined Expected Total</span>
               <span className="font-mono font-medium text-[#202824]">
-                {currency} {finalizedSuccess.subTotal.toFixed(2)}
+                {currency} {(finalizedSuccess.combinedExpectedTotal || finalizedSuccess.subTotal).toFixed(2)}
               </span>
             </div>
-            {finalizedSuccess.discountAmount > 0 && (
-              <div className="flex justify-between py-1 border-b border-[#E2E6E3] text-amber-800">
-                <span>Discount Applied</span>
+            <div className="flex justify-between py-1 border-b border-[#E2E6E3]">
+              <span className="text-[#69736E]">Combined Agreed Total</span>
+              <span className="font-mono font-medium text-[#202824]">
+                {currency} {(finalizedSuccess.combinedAgreedTotal || finalizedSuccess.subTotal).toFixed(2)}
+              </span>
+            </div>
+            {finalizedSuccess.invoiceAdjustmentAmount !== undefined && finalizedSuccess.invoiceAdjustmentAmount !== 0 && (
+              <div
+                className={`flex justify-between py-1 border-b border-[#E2E6E3] ${
+                  finalizedSuccess.invoiceAdjustmentAmount < 0 ? 'text-amber-800' : 'text-blue-800'
+                }`}
+              >
+                <span>Overall Invoice Adjustment</span>
                 <span className="font-mono font-medium">
-                  - {currency} {finalizedSuccess.discountAmount.toFixed(2)}
+                  {finalizedSuccess.invoiceAdjustmentAmount < 0 ? '-' : '+'}{currency}{' '}
+                  {Math.abs(finalizedSuccess.invoiceAdjustmentAmount || 0).toFixed(2)}
                 </span>
               </div>
             )}
             <div className="flex justify-between py-1.5 font-bold text-sm text-[#123B32] border-t border-[#E2E6E3]">
-              <span>Total Paid</span>
+              <span>Final Paid Amount</span>
               <span className="font-mono tabular-nums">
                 {currency} {finalizedSuccess.totalAmount.toFixed(2)}
               </span>
@@ -522,6 +677,7 @@ export default function PosTerminalPage() {
               onClick={() => {
                 setFinalizedSuccess(null);
                 setScannedItem(null);
+                setPosStep('CART');
               }}
             >
               Start New Sale
@@ -564,6 +720,7 @@ export default function PosTerminalPage() {
                     onClick={() => {
                       setSelectedCustomer(null);
                       setCurrentInvoice(null);
+                      setPosStep('CART');
                     }}
                   >
                     Change
@@ -621,7 +778,7 @@ export default function PosTerminalPage() {
                     type="text"
                     value={scanQuery}
                     onChange={(e) => setScanQuery(e.target.value)}
-                    placeholder="Scan or enter jewellery tag or barcode"
+                    placeholder="Scan barcode or enter tag number (e.g. JAF-22K-001)"
                     disabled={!activeShift}
                     className="w-full pl-9 pr-3.5 py-2 text-xs font-mono rounded-lg border border-[#E2E6E3] focus:outline-none focus:ring-1 focus:ring-[#123B32] focus:border-[#123B32] text-[#202824] placeholder-gray-400 disabled:bg-gray-100 disabled:cursor-not-allowed"
                   />
@@ -638,81 +795,160 @@ export default function PosTerminalPage() {
                 </Button>
               </form>
 
-              {/* Scanned Item Detail & Price Negotiation Card */}
+              {/* Scanned Item Detail & Price Negotiation Card (Section 3, 4, 5) */}
               {scannedItem && (
-                <div className="mt-4 p-4 rounded-xl bg-[#F8F7F4] border border-[#B89A60]/40 shadow-xs space-y-3">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <span className="text-[10px] font-mono font-bold text-[#B89A60] uppercase tracking-wider">
-                        {scannedItem.tagNumber} • {scannedItem.purityName} {scannedItem.materialName}
-                      </span>
-                      <h4 className="text-sm font-bold text-[#123B32]">{scannedItem.itemName}</h4>
-                      <p className="text-xs text-[#69736E] mt-0.5">
-                        Weight: Gross <strong className="text-[#202824]">{scannedItem.grossWeight.toFixed(4)}g</strong> | Net{' '}
-                        <strong className="text-[#202824]">{scannedItem.netWeight.toFixed(4)}g</strong>
-                      </p>
+                <div className="mt-4 p-4 rounded-xl bg-[#F8F7F4] border border-[#B89A60]/50 shadow-sm space-y-3.5">
+                  <div className="flex gap-3.5 items-start">
+                    {/* Item Photograph / Thumbnail */}
+                    <div className="w-16 h-16 rounded-lg bg-white border border-[#E2E6E3] flex-shrink-0 flex items-center justify-center overflow-hidden">
+                      {scannedItem.photographUrl ? (
+                        <img
+                          src={scannedItem.photographUrl}
+                          alt={scannedItem.itemName}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <Gem className="w-7 h-7 text-[#B89A60]" />
+                      )}
                     </div>
-                    <Badge variant={scannedItem.isPartOfComposition ? 'forest' : 'neutral'} size="sm">
-                      {scannedItem.isPartOfComposition ? 'Composite Set' : 'Individual Piece'}
-                    </Badge>
+
+                    <div className="flex-1 min-w-0">
+                      <div className="flex justify-between items-start gap-2">
+                        <div>
+                          <span className="text-[10px] font-mono font-bold text-[#B89A60] uppercase tracking-wider">
+                            {scannedItem.tagNumber} {scannedItem.barcode ? `• ${scannedItem.barcode}` : ''}
+                          </span>
+                          <h4 className="text-sm font-bold text-[#123B32] truncate">{scannedItem.itemName}</h4>
+                        </div>
+                        <Badge variant="gold" size="sm">
+                          {getPricingModeLabel(scannedItem.rateSource)}
+                        </Badge>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[#69736E] mt-1">
+                        <span>
+                          Purity: <strong className="text-[#202824]">{scannedItem.purityName} ({scannedItem.karatValue}K)</strong>
+                        </span>
+                        <span>•</span>
+                        <span>
+                          Gross: <strong className="text-[#202824]">{scannedItem.grossWeight.toFixed(4)}g</strong>
+                        </span>
+                        <span>•</span>
+                        <span>
+                          Stone: <strong className="text-[#202824]">{scannedItem.stoneWeight.toFixed(4)}g</strong>
+                        </span>
+                        <span>•</span>
+                        <span>
+                          Net Gold: <strong className="text-[#123B32] font-semibold">{scannedItem.netWeight.toFixed(4)}g</strong>
+                        </span>
+                        <span>•</span>
+                        <span>
+                          Pieces: <strong className="text-[#202824]">{scannedItem.pieceCount}</strong>
+                        </span>
+                      </div>
+                    </div>
                   </div>
 
-                  {/* Reference Breakdown */}
-                  <div className="p-3 bg-white rounded-lg border border-[#E2E6E3] text-xs grid grid-cols-3 gap-2">
+                  {/* Reference Calculation Breakdown */}
+                  <div className="p-3 bg-white rounded-lg border border-[#E2E6E3] text-xs grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                     <div>
-                      <span className="text-[10px] text-[#69736E] block">Gold Value</span>
-                      <span className="font-mono font-medium text-[#202824]">
-                        {currency} {scannedItem.referenceMaterialValue.toFixed(2)}
+                      <span className="text-[10px] text-[#69736E] uppercase tracking-wider block">Rate per Gram</span>
+                      <span className="font-mono font-semibold text-[#202824]">
+                        {currency} {scannedItem.activeRatePerGram.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
                       </span>
                     </div>
                     <div>
-                      <span className="text-[10px] text-[#69736E] block">Making Charge</span>
+                      <span className="text-[10px] text-[#69736E] uppercase tracking-wider block">Gold Material</span>
                       <span className="font-mono font-medium text-[#202824]">
-                        {currency} {scannedItem.referenceMakingCharge.toFixed(2)}
+                        {currency} {(scannedItem.goldMaterialValue || 0).toLocaleString('en-LK', { minimumFractionDigits: 2 })}
                       </span>
                     </div>
                     <div>
-                      <span className="text-[10px] text-[#69736E] block">Ref Total</span>
-                      <span className="font-mono font-bold text-[#123B32]">
-                        {currency} {scannedItem.referencePrice.toFixed(2)}
+                      <span className="text-[10px] text-[#69736E] uppercase tracking-wider block">Making Charge</span>
+                      <span className="font-mono font-medium text-[#202824]">
+                        {currency} {(scannedItem.totalMakingCharge || 0).toLocaleString('en-LK', { minimumFractionDigits: 2 })}
+                        <span className="text-[9px] text-[#69736E] block font-sans">
+                          ({scannedItem.makingChargeMethodName})
+                        </span>
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-[#123B32] font-bold uppercase tracking-wider block">Expected Price</span>
+                      <span className="font-mono font-extrabold text-[#123B32]">
+                        {currency} {scannedExpected.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
                       </span>
                     </div>
                   </div>
 
-                  {/* Price Negotiation & Add to Cart */}
-                  <div className="flex items-center gap-3 pt-1">
-                    <div className="w-48">
-                      <Input
-                        label="Negotiated Price"
-                        unit={currency}
-                        type="number"
-                        step="0.01"
-                        placeholder="Enter agreed selling price"
-                        value={negotiatedPriceInput}
-                        onChange={(e) => setNegotiatedPriceInput(e.target.value)}
-                      />
-                    </div>
-                    <div className="pt-5">
+                  {/* Price Negotiation Interface (Section 5) */}
+                  <div className="p-3 rounded-lg bg-[#FAF9F5] border border-[#B89A60]/30 space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-[#123B32] uppercase tracking-wider">
+                        Price Negotiation
+                      </span>
                       <Button
-                        variant="primary"
-                        size="md"
-                        onClick={handleAddToCart}
-                        leftIcon={<Plus className="w-4 h-4" />}
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => setNegotiatedPriceInput(scannedExpected.toFixed(2))}
                       >
-                        Add to Invoice
+                        Use Expected Price
                       </Button>
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                      <div className="flex-1">
+                        <label className="text-[11px] font-semibold text-[#202824] block mb-1">
+                          Agreed Selling Price ({currency})
+                        </label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          placeholder="Enter the agreed selling price"
+                          value={negotiatedPriceInput}
+                          onChange={(e) => setNegotiatedPriceInput(e.target.value)}
+                          className="w-full py-1.5 px-3 text-xs font-mono font-bold text-[#123B32] rounded-lg border border-[#E2E6E3] focus:outline-none focus:ring-1 focus:ring-[#123B32] focus:border-[#123B32]"
+                        />
+                      </div>
+
+                      {/* Variance Indicator */}
+                      <div className="sm:w-56 text-xs flex flex-col justify-center">
+                        <span className="text-[10px] text-[#69736E] uppercase tracking-wider">Variance</span>
+                        {Math.abs(scannedVariance) < 0.01 ? (
+                          <span className="text-xs font-semibold text-emerald-700">Exact Expected Price</span>
+                        ) : scannedVariance > 0 ? (
+                          <span className="text-xs font-bold text-emerald-700 font-mono">
+                            +{currency} {scannedVariance.toLocaleString('en-LK', { minimumFractionDigits: 2 })} (Above Expected)
+                          </span>
+                        ) : (
+                          <span className="text-xs font-bold text-amber-700 font-mono">
+                            -{currency} {Math.abs(scannedVariance).toLocaleString('en-LK', { minimumFractionDigits: 2 })} (Below Expected)
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="pt-2 sm:pt-4">
+                        <Button
+                          variant="primary"
+                          size="md"
+                          onClick={handleAddToCart}
+                          leftIcon={<Plus className="w-4 h-4" />}
+                        >
+                          Confirm Item & Add to Cart
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 </div>
               )}
             </div>
 
-            {/* Cart Items Table */}
+            {/* Cart Items Table (Section 7) */}
             <div className="bg-white rounded-xl border border-[#E2E6E3] shadow-xs overflow-hidden">
               <div className="p-4 border-b border-[#E2E6E3] bg-[#F8F7F4]/60 flex items-center justify-between">
                 <div>
                   <h3 className="text-xs font-bold text-[#123B32] uppercase tracking-wider">
-                    Invoice Items ({currentInvoice?.lines.length || 0})
+                    Confirmed Cart Items ({currentInvoice?.lines.length || 0})
                   </h3>
                   {currentInvoice && (
                     <p className="text-[11px] font-mono text-[#69736E] mt-0.5">
@@ -720,95 +956,204 @@ export default function PosTerminalPage() {
                     </p>
                   )}
                 </div>
+                {currentInvoice && currentInvoice.lines.length > 0 && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleRefreshReferenceRates}
+                    isLoading={isRefreshingRates}
+                    leftIcon={<RefreshCw className="w-3.5 h-3.5 text-[#123B32]" />}
+                  >
+                    Refresh Rates
+                  </Button>
+                )}
               </div>
 
               {!currentInvoice || currentInvoice.lines.length === 0 ? (
                 <div className="p-8 text-center text-xs text-[#69736E]">
-                  Cart is currently empty. Scan a barcode above to add jewellery items.
+                  Cart is currently empty. Scan a jewellery barcode or enter a tag number above.
                 </div>
               ) : (
-                <table className="w-full text-xs text-left">
-                  <thead>
-                    <tr className="border-b border-[#E2E6E3] bg-[#F8F7F4] text-[#69736E] uppercase tracking-wider font-semibold">
-                      <th className="py-2.5 px-3.5">Item</th>
-                      <th className="py-2.5 px-3.5">Weight</th>
-                      <th className="py-2.5 px-3.5 text-right">Ref Price</th>
-                      <th className="py-2.5 px-3.5 text-right">Negotiated</th>
-                      <th className="py-2.5 px-3.5 text-center">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[#E2E6E3]">
-                    {currentInvoice.lines.map((l) => (
-                      <tr key={l.id} className="hover:bg-[#F8F7F4]/60 transition-colors">
-                        <td className="py-3 px-3.5">
-                          <p className="font-bold text-[#123B32]">{l.itemName}</p>
-                          <p className="font-mono text-[10px] text-[#69736E]">{l.tagNumber}</p>
-                        </td>
-                        <td className="py-3 px-3.5 font-mono text-[#202824]">
-                          {l.grossWeight.toFixed(3)}g
-                        </td>
-                        <td className="py-3 px-3.5 text-right font-mono text-[#69736E] tabular-nums">
-                          {currency} {l.referencePrice.toFixed(2)}
-                        </td>
-                        <td className="py-3 px-3.5 text-right font-mono font-bold text-[#123B32] tabular-nums">
-                          {currency} {l.unitPrice.toFixed(2)}
-                        </td>
-                        <td className="py-3 px-3.5 text-center">
-                          <div className="flex items-center justify-center gap-1">
-                            <button
-                              onClick={() => {
-                                setEditingLineId(l.id);
-                                setEditPriceValue(l.unitPrice.toFixed(2));
-                              }}
-                              className="p-1 rounded text-[#69736E] hover:text-[#123B32] hover:bg-gray-100"
-                              title="Edit Negotiated Price"
-                            >
-                              <Edit2 className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              onClick={() => handleRemoveLine(l.id)}
-                              className="p-1 rounded text-rose-600 hover:bg-rose-50"
-                              title="Remove Line"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        </td>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs text-left">
+                    <thead>
+                      <tr className="border-b border-[#E2E6E3] bg-[#F8F7F4] text-[#69736E] uppercase tracking-wider font-semibold">
+                        <th className="py-2.5 px-3">Item Details</th>
+                        <th className="py-2.5 px-3">Net Wt</th>
+                        <th className="py-2.5 px-3">Captured Rate</th>
+                        <th className="py-2.5 px-3 text-right">Expected</th>
+                        <th className="py-2.5 px-3 text-right">Agreed</th>
+                        <th className="py-2.5 px-3 text-right">Difference</th>
+                        <th className="py-2.5 px-3 text-center">Actions</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody className="divide-y divide-[#E2E6E3]">
+                      {currentInvoice.lines.map((l) => {
+                        const diff = l.unitPrice - l.referencePrice;
+                        return (
+                          <tr key={l.id} className="hover:bg-[#F8F7F4]/60 transition-colors">
+                            <td className="py-3 px-3">
+                              <p className="font-bold text-[#123B32]">{l.itemName}</p>
+                              <p className="font-mono text-[10px] text-[#69736E]">
+                                {l.tagNumber} • {l.materialName || 'Gold'} {l.karatValue ? `${l.karatValue}K` : ''}
+                              </p>
+                            </td>
+                            <td className="py-3 px-3 font-mono text-[#202824]">
+                              {l.netWeight.toFixed(4)}g
+                            </td>
+                            <td className="py-3 px-3">
+                              <span className="font-mono font-medium text-[#202824]">
+                                {currency} {l.referenceRatePerGram.toFixed(2)}/g
+                              </span>
+                              {l.rateSource && (
+                                <span className="block text-[9px] text-[#69736E] uppercase font-semibold">
+                                  {getPricingModeLabel(l.rateSource)}
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-3 px-3 text-right font-mono text-[#69736E] tabular-nums">
+                              {currency} {l.referencePrice.toFixed(2)}
+                            </td>
+                            <td className="py-3 px-3 text-right font-mono font-bold text-[#123B32] tabular-nums">
+                              {currency} {l.unitPrice.toFixed(2)}
+                            </td>
+                            <td className="py-3 px-3 text-right font-mono tabular-nums">
+                              {Math.abs(diff) < 0.01 ? (
+                                <span className="text-gray-400">0.00</span>
+                              ) : diff > 0 ? (
+                                <span className="text-emerald-700 font-semibold">
+                                  +{diff.toFixed(2)}
+                                </span>
+                              ) : (
+                                <span className="text-amber-700 font-semibold">
+                                  {diff.toFixed(2)}
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-3 px-3 text-center">
+                              <div className="flex items-center justify-center gap-1">
+                                <button
+                                  onClick={() => {
+                                    setEditingLineId(l.id);
+                                    setEditPriceValue(l.unitPrice.toFixed(2));
+                                  }}
+                                  className="p-1 rounded text-[#69736E] hover:text-[#123B32] hover:bg-gray-100"
+                                  title="Edit Agreed Price"
+                                >
+                                  <Edit2 className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  onClick={() => handleRemoveLine(l.id)}
+                                  className="p-1 rounded text-rose-600 hover:bg-rose-50"
+                                  title="Remove Item"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               )}
             </div>
           </div>
 
-          {/* Right Column: Checkout & Split Tender Panel (5 cols) */}
+          {/* Right Column: Combined Pricing, Overall Invoice Negotiation, and Settlement (5 cols) */}
           <div className="lg:col-span-5 space-y-5">
+            {/* Invoice Pricing Negotiation & Totals Card (Section 8, 9, 10, 12) */}
             <div className="bg-white rounded-xl border border-[#E2E6E3] p-5 shadow-xs space-y-4">
-              <h3 className="text-xs font-bold text-[#123B32] uppercase tracking-wider pb-3 border-b border-[#E2E6E3]">
-                Payment Allocation & Checkout
-              </h3>
+              <div className="flex items-center justify-between pb-3 border-b border-[#E2E6E3]">
+                <h3 className="text-xs font-bold text-[#123B32] uppercase tracking-wider">
+                  Combined Invoice Negotiation
+                </h3>
+                {posStep === 'PAYMENT' && (
+                  <Badge variant="success" size="sm">
+                    Pricing Confirmed
+                  </Badge>
+                )}
+              </div>
 
-              {/* Summary Totals */}
-              <div className="space-y-2 text-xs">
+              {/* Combined Item Totals Breakdown */}
+              <div className="space-y-2.5 text-xs">
                 <div className="flex justify-between text-[#69736E]">
-                  <span>Items Subtotal</span>
-                  <span className="font-mono font-semibold text-[#202824] tabular-nums">
-                    {currency} {linesTotal.toFixed(2)}
+                  <span>Combined Expected Total</span>
+                  <span className="font-mono font-medium text-[#202824] tabular-nums">
+                    {currency} {combinedExpected.toFixed(2)}
                   </span>
                 </div>
 
-                <div className="flex justify-between items-center text-[#69736E]">
-                  <span>Overall Discount</span>
-                  <div className="w-28">
+                <div className="flex justify-between text-[#69736E]">
+                  <span>Combined Agreed Item Total</span>
+                  <span className="font-mono font-bold text-[#123B32] tabular-nums">
+                    {currency} {combinedAgreed.toFixed(2)}
+                  </span>
+                </div>
+
+                <div className="flex justify-between text-[#69736E] pb-2 border-b border-[#E2E6E3]">
+                  <span>Item-Level Price Difference</span>
+                  <span
+                    className={`font-mono font-semibold tabular-nums ${
+                      itemLevelDifference > 0
+                        ? 'text-emerald-700'
+                        : itemLevelDifference < 0
+                        ? 'text-amber-700'
+                        : 'text-gray-500'
+                    }`}
+                  >
+                    {itemLevelDifference > 0 ? '+' : ''}
+                    {currency} {itemLevelDifference.toFixed(2)}
+                  </span>
+                </div>
+
+                {/* Overall Invoice Negotiation Input (Section 9) */}
+                <div className="pt-1 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-[#123B32]">
+                      Final Negotiated Invoice Price
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setFinalInvoicePriceInput(combinedAgreed.toFixed(2))}
+                      className="text-[11px] font-semibold text-[#B89A60] hover:text-[#9A7D46] underline"
+                    >
+                      Accept Combined Item Total
+                    </button>
+                  </div>
+
+                  <div className="relative">
                     <input
                       type="number"
                       step="0.01"
-                      placeholder="e.g. 0.00"
-                      value={discountAmount || ''}
-                      onChange={(e) => setDiscountAmount(parseFloat(e.target.value) || 0)}
-                      className="w-full text-right py-1 px-2 text-xs rounded border border-[#E2E6E3] font-mono focus:outline-none focus:border-[#123B32]"
+                      placeholder="Enter the final agreed invoice amount"
+                      value={finalInvoicePriceInput}
+                      onChange={(e) => {
+                        setFinalInvoicePriceInput(e.target.value);
+                        setPosStep('CART'); // Re-negotiation requires re-confirmation
+                      }}
+                      className="w-full py-2 px-3 text-sm font-mono font-bold text-[#123B32] rounded-lg border border-[#E2E6E3] focus:outline-none focus:ring-1 focus:ring-[#123B32] focus:border-[#123B32]"
                     />
+                  </div>
+
+                  {/* Additional Invoice-Level Adjustment Display */}
+                  <div className="flex justify-between items-center text-xs pt-1">
+                    <span className="text-[#69736E]">Additional Invoice Adjustment</span>
+                    <span
+                      className={`font-mono font-bold tabular-nums ${
+                        additionalInvoiceAdjustment < 0
+                          ? 'text-amber-700'
+                          : additionalInvoiceAdjustment > 0
+                          ? 'text-blue-700'
+                          : 'text-gray-500'
+                      }`}
+                    >
+                      {additionalInvoiceAdjustment > 0 ? '+' : ''}
+                      {currency} {additionalInvoiceAdjustment.toFixed(2)}
+                      {additionalInvoiceAdjustment < 0 && ' (Discount)'}
+                      {additionalInvoiceAdjustment > 0 && ' (Surcharge)'}
+                    </span>
                   </div>
                 </div>
 
@@ -816,229 +1161,274 @@ export default function PosTerminalPage() {
                 <div className="mt-3 p-4 rounded-xl bg-[#0B2822] text-white flex justify-between items-center shadow-xs">
                   <div>
                     <span className="text-[10px] font-bold text-[#B89A60] uppercase tracking-widest block">
-                      Total Payable
+                      Confirmed Payable
                     </span>
-                    <span className="text-xs text-gray-300">Net Amount Due</span>
+                    <span className="text-xs text-gray-300">
+                      {posStep === 'PAYMENT' ? 'Ready for Settlement' : 'Pending Confirmation'}
+                    </span>
                   </div>
                   <span className="text-2xl font-bold font-mono text-[#B89A60] tabular-nums">
-                    {currency} {netPayable.toFixed(2)}
+                    {currency} {currentFinalNegotiated.toFixed(2)}
                   </span>
                 </div>
+
+                {/* Confirm Pricing & Proceed to Payment Button */}
+                {posStep === 'CART' && (
+                  <div className="pt-2">
+                    <Button
+                      variant="primary"
+                      size="lg"
+                      className="w-full"
+                      disabled={!currentInvoice || currentInvoice.lines.length === 0 || isConfirmingPricing}
+                      isLoading={isConfirmingPricing}
+                      onClick={handleConfirmPricingAndProceed}
+                      rightIcon={<ArrowRight className="w-4 h-4" />}
+                    >
+                      Confirm Total & Proceed to Payment
+                    </Button>
+                  </div>
+                )}
               </div>
 
-              {/* Tender Allocation Inputs */}
-              <div className="pt-2 border-t border-[#E2E6E3] space-y-3">
-                <span className="text-xs font-bold text-[#202824] uppercase tracking-wider block">
-                  Payment Methods (Split Tender)
-                </span>
-
-                {/* 1. Cash Tender */}
-                <div className="p-3 rounded-lg border border-[#E2E6E3] bg-[#F8F7F4]/50 space-y-2">
+              {/* Payment Settlement Workflow (Section 13) */}
+              {posStep === 'PAYMENT' && (
+                <div className="pt-3 border-t border-[#E2E6E3] space-y-4">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-[#123B32] flex items-center gap-1.5">
-                      <Banknote className="w-4 h-4 text-emerald-700" />
-                      <span>Physical Cash</span>
+                    <span className="text-xs font-bold text-[#202824] uppercase tracking-wider block">
+                      Payment Settlement (Split Tender)
                     </span>
-                    <div className="w-32">
-                      <input
-                        type="number"
-                        step="0.01"
-                        placeholder="Amount to pay"
-                        value={cashRow?.amount || ''}
-                        onChange={(e) => {
-                          const val = parseFloat(e.target.value) || 0;
-                          const updated = [...payments];
-                          const idx = updated.findIndex((p) => p.method === 1);
-                          if (idx >= 0) {
-                            updated[idx].amount = val;
-                            if (!updated[idx].cashTendered || updated[idx].cashTendered < val) {
-                              updated[idx].cashTendered = val;
-                            }
-                          }
-                          setPayments(updated);
-                        }}
-                        className="w-full text-right py-1 px-2 text-xs font-mono rounded border border-[#E2E6E3] focus:outline-none focus:border-[#123B32]"
-                      />
-                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setPosStep('CART')}
+                      className="text-xs text-[#69736E] hover:text-[#123B32] flex items-center gap-1"
+                    >
+                      <ArrowLeft className="w-3.5 h-3.5" />
+                      <span>Back to Pricing</span>
+                    </button>
                   </div>
 
-                  {(cashRow?.amount || 0) > 0 && (
-                    <div className="flex items-center justify-between pt-2 border-t border-[#E2E6E3]/60 text-xs">
-                      <span className="text-[#69736E]">Cash Received from Customer:</span>
-                      <div className="w-32">
+                  {/* 1. Cash Tender */}
+                  <div className="p-3 rounded-lg border border-[#E2E6E3] bg-[#F8F7F4]/50 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-[#123B32] flex items-center gap-1.5">
+                        <Banknote className="w-4 h-4 text-emerald-700" />
+                        <span>Physical Cash</span>
+                      </span>
+                      <div className="w-36">
                         <input
                           type="number"
                           step="0.01"
-                          placeholder="e.g. 50000.00"
-                          value={cashRow?.cashTendered || ''}
+                          placeholder="Amount"
+                          value={cashRow?.amount || ''}
                           onChange={(e) => {
                             const val = parseFloat(e.target.value) || 0;
                             const updated = [...payments];
                             const idx = updated.findIndex((p) => p.method === 1);
                             if (idx >= 0) {
-                              updated[idx].cashTendered = val;
+                              updated[idx].amount = val;
+                              if (!updated[idx].cashTendered || updated[idx].cashTendered < val) {
+                                updated[idx].cashTendered = val;
+                              }
                             }
                             setPayments(updated);
                           }}
-                          className="w-full text-right py-1 px-2 text-xs font-mono rounded border border-[#E2E6E3] text-[#123B32] font-semibold focus:outline-none focus:border-[#123B32]"
+                          className="w-full text-right py-1 px-2 text-xs font-mono rounded border border-[#E2E6E3] focus:outline-none focus:border-[#123B32]"
                         />
                       </div>
                     </div>
-                  )}
 
-                  {changeDue > 0 && (
-                    <div className="p-2 rounded bg-emerald-50 border border-emerald-200 text-xs flex justify-between font-bold text-emerald-800">
-                      <span>Change to Return:</span>
-                      <span className="font-mono tabular-nums">
-                        {currency} {changeDue.toFixed(2)}
+                    {(cashRow?.amount || 0) > 0 && (
+                      <div className="flex items-center justify-between pt-2 border-t border-[#E2E6E3]/60 text-xs">
+                        <span className="text-[#69736E]">Cash Received from Customer:</span>
+                        <div className="w-36">
+                          <input
+                            type="number"
+                            step="0.01"
+                            placeholder="Tendered"
+                            value={cashRow?.cashTendered || ''}
+                            onChange={(e) => {
+                              const val = parseFloat(e.target.value) || 0;
+                              const updated = [...payments];
+                              const idx = updated.findIndex((p) => p.method === 1);
+                              if (idx >= 0) {
+                                updated[idx].cashTendered = val;
+                              }
+                              setPayments(updated);
+                            }}
+                            className="w-full text-right py-1 px-2 text-xs font-mono rounded border border-[#E2E6E3] text-[#123B32] font-semibold focus:outline-none focus:border-[#123B32]"
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {changeDue > 0 && (
+                      <div className="p-2 rounded bg-emerald-50 border border-emerald-200 text-xs flex justify-between font-bold text-emerald-800">
+                        <span>Change to Return:</span>
+                        <span className="font-mono tabular-nums">
+                          {currency} {changeDue.toFixed(2)}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 2. Card Payment */}
+                  <div className="p-3 rounded-lg border border-[#E2E6E3] bg-[#F8F7F4]/50 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-[#123B32] flex items-center gap-1.5">
+                        <CreditCard className="w-4 h-4 text-blue-700" />
+                        <span>Card Payment</span>
                       </span>
+                      <div className="w-36">
+                        <input
+                          type="number"
+                          step="0.01"
+                          placeholder="Amount"
+                          value={payments.find((p) => p.method === 2)?.amount || ''}
+                          onChange={(e) => {
+                            const val = parseFloat(e.target.value) || 0;
+                            const updated = [...payments];
+                            const idx = updated.findIndex((p) => p.method === 2);
+                            if (idx >= 0) {
+                              updated[idx].amount = val;
+                            } else if (val > 0) {
+                              updated.push({ method: 2, amount: val });
+                            }
+                            setPayments(updated);
+                          }}
+                          className="w-full text-right py-1 px-2 text-xs font-mono rounded border border-[#E2E6E3] focus:outline-none focus:border-[#123B32]"
+                        />
+                      </div>
                     </div>
-                  )}
-                </div>
 
-                {/* 2. Card Payment */}
-                <div className="p-3 rounded-lg border border-[#E2E6E3] bg-[#F8F7F4]/50 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-[#123B32] flex items-center gap-1.5">
-                      <CreditCard className="w-4 h-4 text-blue-700" />
-                      <span>Card Payment</span>
-                    </span>
-                    <div className="w-32">
-                      <input
-                        type="number"
-                        step="0.01"
-                        placeholder="Amount to pay"
-                        value={payments.find((p) => p.method === 2)?.amount || ''}
-                        onChange={(e) => {
-                          const val = parseFloat(e.target.value) || 0;
-                          const updated = [...payments];
-                          const idx = updated.findIndex((p) => p.method === 2);
-                          if (idx >= 0) {
-                            updated[idx].amount = val;
-                          } else if (val > 0) {
-                            updated.push({ method: 2, amount: val });
-                          }
-                          setPayments(updated);
-                        }}
-                        className="w-full text-right py-1 px-2 text-xs font-mono rounded border border-[#E2E6E3] focus:outline-none focus:border-[#123B32]"
-                      />
-                    </div>
+                    {(payments.find((p) => p.method === 2)?.amount || 0) > 0 && (
+                      <div className="grid grid-cols-2 gap-2 pt-2 border-t border-[#E2E6E3]/60">
+                        <input
+                          type="text"
+                          maxLength={4}
+                          placeholder="Last 4 digits"
+                          value={payments.find((p) => p.method === 2)?.cardLast4 || ''}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            const updated = [...payments];
+                            const idx = updated.findIndex((p) => p.method === 2);
+                            if (idx >= 0) updated[idx].cardLast4 = val;
+                            setPayments(updated);
+                          }}
+                          className="py-1 px-2 text-xs font-mono rounded border border-[#E2E6E3]"
+                        />
+                        <input
+                          type="text"
+                          placeholder="Approval / Ref #"
+                          value={payments.find((p) => p.method === 2)?.referenceNumber || ''}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            const updated = [...payments];
+                            const idx = updated.findIndex((p) => p.method === 2);
+                            if (idx >= 0) updated[idx].referenceNumber = val;
+                            setPayments(updated);
+                          }}
+                          className="py-1 px-2 text-xs font-mono rounded border border-[#E2E6E3]"
+                        />
+                      </div>
+                    )}
                   </div>
 
-                  {(payments.find((p) => p.method === 2)?.amount || 0) > 0 && (
-                    <div className="grid grid-cols-2 gap-2 pt-2 border-t border-[#E2E6E3]/60">
-                      <input
-                        type="text"
-                        maxLength={4}
-                        placeholder="Last 4 (e.g. 4821)"
-                        value={payments.find((p) => p.method === 2)?.cardLast4 || ''}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          const updated = [...payments];
-                          const idx = updated.findIndex((p) => p.method === 2);
-                          if (idx >= 0) updated[idx].cardLast4 = val;
-                          setPayments(updated);
-                        }}
-                        className="py-1 px-2 text-xs font-mono rounded border border-[#E2E6E3]"
-                      />
-                      <input
-                        type="text"
-                        placeholder="Approval Code"
-                        value={payments.find((p) => p.method === 2)?.referenceNumber || ''}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          const updated = [...payments];
-                          const idx = updated.findIndex((p) => p.method === 2);
-                          if (idx >= 0) updated[idx].referenceNumber = val;
-                          setPayments(updated);
-                        }}
-                        className="py-1 px-2 text-xs font-mono rounded border border-[#E2E6E3]"
-                      />
+                  {/* 3. Bank Transfer */}
+                  <div className="p-3 rounded-lg border border-[#E2E6E3] bg-[#F8F7F4]/50 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-[#123B32] flex items-center gap-1.5">
+                        <Building className="w-4 h-4 text-purple-700" />
+                        <span>Bank Transfer</span>
+                      </span>
+                      <div className="w-36">
+                        <input
+                          type="number"
+                          step="0.01"
+                          placeholder="Amount"
+                          value={payments.find((p) => p.method === 3)?.amount || ''}
+                          onChange={(e) => {
+                            const val = parseFloat(e.target.value) || 0;
+                            const updated = [...payments];
+                            const idx = updated.findIndex((p) => p.method === 3);
+                            if (idx >= 0) {
+                              updated[idx].amount = val;
+                            } else if (val > 0) {
+                              updated.push({ method: 3, amount: val });
+                            }
+                            setPayments(updated);
+                          }}
+                          className="w-full text-right py-1 px-2 text-xs font-mono rounded border border-[#E2E6E3] focus:outline-none focus:border-[#123B32]"
+                        />
+                      </div>
                     </div>
-                  )}
-                </div>
 
-                {/* 3. Bank Transfer */}
-                <div className="p-3 rounded-lg border border-[#E2E6E3] bg-[#F8F7F4]/50 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-[#123B32] flex items-center gap-1.5">
-                      <Building className="w-4 h-4 text-purple-700" />
-                      <span>Bank Transfer</span>
-                    </span>
-                    <div className="w-32">
-                      <input
-                        type="number"
-                        step="0.01"
-                        placeholder="Amount to pay"
-                        value={payments.find((p) => p.method === 3)?.amount || ''}
-                        onChange={(e) => {
-                          const val = parseFloat(e.target.value) || 0;
-                          const updated = [...payments];
-                          const idx = updated.findIndex((p) => p.method === 3);
-                          if (idx >= 0) {
-                            updated[idx].amount = val;
-                          } else if (val > 0) {
-                            updated.push({ method: 3, amount: val });
-                          }
-                          setPayments(updated);
-                        }}
-                        className="w-full text-right py-1 px-2 text-xs font-mono rounded border border-[#E2E6E3] focus:outline-none focus:border-[#123B32]"
-                      />
-                    </div>
+                    {(payments.find((p) => p.method === 3)?.amount || 0) > 0 && (
+                      <div className="grid grid-cols-2 gap-2 pt-2 border-t border-[#E2E6E3]/60">
+                        <input
+                          type="text"
+                          placeholder="Bank Name (e.g. BOC)"
+                          value={payments.find((p) => p.method === 3)?.bankName || ''}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            const updated = [...payments];
+                            const idx = updated.findIndex((p) => p.method === 3);
+                            if (idx >= 0) updated[idx].bankName = val;
+                            setPayments(updated);
+                          }}
+                          className="py-1 px-2 text-xs rounded border border-[#E2E6E3]"
+                        />
+                        <input
+                          type="text"
+                          placeholder="Transfer Ref #"
+                          value={payments.find((p) => p.method === 3)?.referenceNumber || ''}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            const updated = [...payments];
+                            const idx = updated.findIndex((p) => p.method === 3);
+                            if (idx >= 0) updated[idx].referenceNumber = val;
+                            setPayments(updated);
+                          }}
+                          className="py-1 px-2 text-xs font-mono rounded border border-[#E2E6E3]"
+                        />
+                      </div>
+                    )}
                   </div>
 
-                  {(payments.find((p) => p.method === 3)?.amount || 0) > 0 && (
-                    <div className="grid grid-cols-2 gap-2 pt-2 border-t border-[#E2E6E3]/60">
-                      <input
-                        type="text"
-                        placeholder="Bank Name (e.g. BOC)"
-                        value={payments.find((p) => p.method === 3)?.bankName || ''}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          const updated = [...payments];
-                          const idx = updated.findIndex((p) => p.method === 3);
-                          if (idx >= 0) updated[idx].bankName = val;
-                          setPayments(updated);
-                        }}
-                        className="py-1 px-2 text-xs rounded border border-[#E2E6E3]"
-                      />
-                      <input
-                        type="text"
-                        placeholder="Transfer Ref #"
-                        value={payments.find((p) => p.method === 3)?.referenceNumber || ''}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          const updated = [...payments];
-                          const idx = updated.findIndex((p) => p.method === 3);
-                          if (idx >= 0) updated[idx].referenceNumber = val;
-                          setPayments(updated);
-                        }}
-                        className="py-1 px-2 text-xs font-mono rounded border border-[#E2E6E3]"
-                      />
-                    </div>
-                  )}
-                </div>
-              </div>
+                  {/* Payment Allocation Status */}
+                  <div className="p-3 rounded-lg bg-[#F8F7F4] text-xs flex justify-between items-center">
+                    <span className="text-[#69736E]">Allocated Payment:</span>
+                    <span
+                      className={`font-mono font-bold tabular-nums ${
+                        Math.abs(totalPaidAllocation - confirmedPayable) < 0.01
+                          ? 'text-emerald-700'
+                          : 'text-amber-700'
+                      }`}
+                    >
+                      {currency} {totalPaidAllocation.toFixed(2)} / {confirmedPayable.toFixed(2)}
+                    </span>
+                  </div>
 
-              {/* Checkout Action Button */}
-              <div className="pt-3">
-                <Button
-                  variant="primary"
-                  size="lg"
-                  className="w-full"
-                  disabled={
-                    !currentInvoice ||
-                    currentInvoice.lines.length === 0 ||
-                    !activeShift ||
-                    totalPaidAllocation < netPayable ||
-                    isFinalizing
-                  }
-                  isLoading={isFinalizing}
-                  onClick={handleCheckout}
-                >
-                  Confirm & Finalize Invoice
-                </Button>
-              </div>
+                  {/* Finalize Sale Action */}
+                  <div className="pt-2">
+                    <Button
+                      variant="primary"
+                      size="lg"
+                      className="w-full"
+                      disabled={
+                        !currentInvoice ||
+                        currentInvoice.lines.length === 0 ||
+                        !activeShift ||
+                        Math.abs(totalPaidAllocation - confirmedPayable) > 0.01 ||
+                        isFinalizing
+                      }
+                      isLoading={isFinalizing}
+                      onClick={handleCheckout}
+                    >
+                      Finalize Sale & Post Cash
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -1094,11 +1484,11 @@ export default function PosTerminalPage() {
         </form>
       </Modal>
 
-      {/* Edit Line Negotiated Price Modal */}
+      {/* Edit Line Agreed Price Modal */}
       <Modal
         isOpen={editingLineId !== null}
         onClose={() => setEditingLineId(null)}
-        title="Adjust Negotiated Selling Price"
+        title="Adjust Agreed Selling Price"
         description="Modify the agreed selling price for this jewellery piece."
         footer={
           <>
@@ -1113,7 +1503,7 @@ export default function PosTerminalPage() {
       >
         <div className="space-y-3">
           <Input
-            label="Negotiated Selling Price"
+            label="Agreed Selling Price"
             unit={currency}
             type="number"
             step="0.01"
