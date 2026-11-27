@@ -160,10 +160,16 @@ export async function apiRequest<T>(
       } else {
         setAccessToken(null);
         localStorage.removeItem('saranga_user');
+        if (window.location.pathname !== '/login') {
+          window.location.href = '/login';
+        }
       }
     } catch {
       setAccessToken(null);
       localStorage.removeItem('saranga_user');
+      if (window.location.pathname !== '/login') {
+        window.location.href = '/login';
+      }
     }
   }
 
