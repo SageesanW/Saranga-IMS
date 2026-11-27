@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import AppLayout from '@/components/AppLayout';
 import { useAuth } from '@/lib/auth-context';
@@ -23,6 +22,23 @@ import {
   InventoryItem,
 } from '@/lib/api';
 import { BarcodeDisplay } from '@/components/BarcodeDisplay';
+import { PageHeader } from '@/components/ui/PageHeader';
+import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
+import { Select } from '@/components/ui/Select';
+import { Textarea } from '@/components/ui/Textarea';
+import { Badge } from '@/components/ui/Badge';
+import {
+  ArrowLeft,
+  CheckCircle2,
+  AlertTriangle,
+  UploadCloud,
+  X,
+  Plus,
+  Gem,
+  Scale,
+  MapPin,
+} from 'lucide-react';
 
 interface UploadedMediaItem {
   fileName: string;
@@ -34,19 +50,20 @@ interface UploadedMediaItem {
   sortOrder: number;
 }
 
+function generateIdempotencyKey() {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return 'idemp-' + Date.now() + '-' + Math.random().toString(36).substring(2, 9);
+}
+
 export default function NewInventoryItemPage() {
-  const router = useRouter();
   const { user } = useAuth();
   const { activeBranchId } = useBranch();
   const canCreate = !!(user?.isGlobalAdmin || user?.permissions.includes('INVENTORY_CREATE'));
 
-  // Stepper state
-  const [currentStep, setCurrentStep] = useState<number>(1);
-  const totalSteps = 8;
-
   // Master Data Lookups
   const [branches, setBranches] = useState<Branch[]>([]);
-  const activeBranch = branches.find((b) => b.id === (branchId || activeBranchId));
   const [locations, setLocations] = useState<StockLocation[]>([]);
   const [materials, setMaterials] = useState<Material[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -54,59 +71,42 @@ export default function NewInventoryItemPage() {
   const [specifications, setSpecifications] = useState<Specification[]>([]);
 
   // Form Fields
-  // Step 1: Branch & Location
   const [branchId, setBranchId] = useState<string>('');
   const [stockLocationId, setStockLocationId] = useState<string>('');
-
-  // Step 2: Item Information
   const [name, setName] = useState<string>('');
   const [itemCode, setItemCode] = useState<string>('');
   const [description, setDescription] = useState<string>('');
   const [pieceCount, setPieceCount] = useState<string>('1');
-
-  // Step 3: Classification
   const [materialId, setMaterialId] = useState<string>('');
   const [categoryId, setCategoryId] = useState<string>('');
   const [purityId, setPurityId] = useState<string>('');
-
-  // Step 4: Weight
   const [grossWeight, setGrossWeight] = useState<string>('');
-  const [stoneWeight, setStoneWeight] = useState<string>('0.0000');
-
-  // Step 5: Making Charge
+  const [stoneWeight, setStoneWeight] = useState<string>('0');
   const [makingChargeMethod, setMakingChargeMethod] = useState<number>(1); // 1 = PER_GRAM, 2 = PER_ITEM
   const [makingChargeValue, setMakingChargeValue] = useState<string>('0.00');
-
-  // Step 6: Specifications
   const [selectedSpecs, setSelectedSpecs] = useState<
     { specificationId: string; specificationOptionId?: string; customValue?: string }[]
   >([]);
-
-  // Step 7: Media
   const [mediaList, setMediaList] = useState<UploadedMediaItem[]>([]);
   const [isUploadingMedia, setIsUploadingMedia] = useState<boolean>(false);
 
-  // UX Feedback
+  // UX State
   const [isLoadingLookups, setIsLoadingLookups] = useState<boolean>(true);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [createdItem, setCreatedItem] = useState<InventoryItem | null>(null);
+  const [idempotencyKey, setIdempotencyKey] = useState<string>(generateIdempotencyKey);
 
-  // Module 5 Hardening: Idempotency Key
-  const [idempotencyKey, setIdempotencyKey] = useState<string>(() => {
-    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-      return crypto.randomUUID();
-    }
-    return 'idemp-' + Date.now() + '-' + Math.random().toString(36).substring(2, 9);
-  });
+  const activeBranch = branches.find((b) => b.id === (branchId || activeBranchId));
+  const currency = activeBranch?.currencyCode || 'LKR';
 
-  // Live Net Weight Calculation
+  // Live Weight Calculations
   const parsedGross = parseFloat(grossWeight) || 0;
   const parsedStone = parseFloat(stoneWeight) || 0;
-  const netWeightPreview = (Math.max(0, parsedGross - parsedStone)).toFixed(4);
+  const netWeightPreview = Math.max(0, parsedGross - parsedStone).toFixed(4);
   const hasWeightError = parsedStone > parsedGross && parsedGross > 0;
 
-  // Initial Data Load
+  // Load Master Data
   useEffect(() => {
     async function fetchMasters() {
       try {
@@ -125,7 +125,6 @@ export default function NewInventoryItemPage() {
         setPurities(pList);
         setSpecifications(sList);
 
-        // Default Branch
         const initialBranchId = activeBranchId || (bList.length > 0 ? bList[0].id : '');
         setBranchId(initialBranchId);
 
@@ -137,7 +136,7 @@ export default function NewInventoryItemPage() {
           }
         }
       } catch (err: any) {
-        setFormError(err?.message || 'Failed to load master metadata');
+        setFormError(err?.message || 'Failed to load master metadata.');
       } finally {
         setIsLoadingLookups(false);
       }
@@ -148,10 +147,13 @@ export default function NewInventoryItemPage() {
     }
   }, [canCreate, activeBranchId]);
 
-  // Handle Branch Change
   const handleBranchChange = async (newBranchId: string) => {
     setBranchId(newBranchId);
     setStockLocationId('');
+    if (!newBranchId) {
+      setLocations([]);
+      return;
+    }
     try {
       const locList = await stockLocationApi.getStockLocations(newBranchId, true);
       setLocations(locList);
@@ -163,114 +165,6 @@ export default function NewInventoryItemPage() {
     }
   };
 
-  // Step Validation before Next
-  const validateCurrentStep = (): boolean => {
-    setFormError(null);
-
-    switch (currentStep) {
-      case 1:
-        if (!branchId) {
-          setFormError('Please select a branch.');
-          return false;
-        }
-        if (!stockLocationId) {
-          setFormError('Please select an active stock/display location.');
-          return false;
-        }
-        return true;
-
-      case 2:
-        if (!name.trim()) {
-          setFormError('Item Name is required.');
-          return false;
-        }
-        const pc = parseInt(pieceCount, 10);
-        if (isNaN(pc) || pc < 1) {
-          setFormError('Piece Count must be an integer of at least 1.');
-          return false;
-        }
-        return true;
-
-      case 3:
-        if (!materialId) {
-          setFormError('Please select a material.');
-          return false;
-        }
-        if (!categoryId) {
-          setFormError('Please select a category.');
-          return false;
-        }
-        if (!purityId) {
-          setFormError('Please select a purity / karat.');
-          return false;
-        }
-        return true;
-
-      case 4:
-        if (isNaN(parsedGross) || parsedGross <= 0) {
-          setFormError('Gross weight must be a positive number greater than 0.');
-          return false;
-        }
-        if (isNaN(parsedStone) || parsedStone < 0) {
-          setFormError('Stone weight cannot be negative.');
-          return false;
-        }
-        if (parsedStone > parsedGross) {
-          setFormError(`Stone weight (${parsedStone}g) cannot exceed gross weight (${parsedGross}g).`);
-          return false;
-        }
-        return true;
-
-      case 5:
-        const mc = parseFloat(makingChargeValue);
-        if (isNaN(mc) || mc < 0) {
-          setFormError('Making charge value must be a non-negative number.');
-          return false;
-        }
-        return true;
-
-      case 6:
-        // Validate specifications
-        for (const spec of specifications) {
-          const selected = selectedSpecs.find((s) => s.specificationId === spec.id);
-          const type = (spec.inputType || 'PREDEFINED').toUpperCase();
-
-          if (selected) {
-            if (type === 'PREDEFINED' && selected.customValue) {
-              setFormError(`Specification "${spec.name}" uses predefined options only; custom value is disallowed.`);
-              return false;
-            }
-            if (type === 'FREE_TEXT' && !selected.customValue?.trim()) {
-              setFormError(`Specification "${spec.name}" requires a custom text value.`);
-              return false;
-            }
-          }
-        }
-        return true;
-
-      case 7:
-        // Media step is optional; ready to review
-        return true;
-
-      default:
-        return true;
-    }
-  };
-
-  const handleNext = () => {
-    if (validateCurrentStep()) {
-      setCurrentStep((prev) => Math.min(totalSteps, prev + 1));
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    }
-  };
-
-  const handleBack = () => {
-    setFormError(null);
-    setCurrentStep((prev) => Math.max(1, prev - 1));
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  // Media Upload Handler
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
@@ -280,8 +174,7 @@ export default function NewInventoryItemPage() {
 
     try {
       for (let i = 0; i < files.length; i++) {
-        const file = files[i];
-        const res = await inventoryApi.uploadMedia(file);
+        const res = await inventoryApi.uploadMedia(files[i]);
         setMediaList((prev) => [
           ...prev,
           {
@@ -290,13 +183,13 @@ export default function NewInventoryItemPage() {
             contentType: res.contentType,
             fileSize: res.fileSize,
             mediaType: res.mediaType,
-            isPrimary: prev.length === 0, // First item default to primary
+            isPrimary: prev.length === 0,
             sortOrder: prev.length + 1,
           },
         ]);
       }
     } catch (err: any) {
-      setFormError(err?.message || 'File upload failed');
+      setFormError(err?.message || 'File upload failed.');
     } finally {
       setIsUploadingMedia(false);
       e.target.value = '';
@@ -304,18 +197,12 @@ export default function NewInventoryItemPage() {
   };
 
   const handleSetPrimaryMedia = (index: number) => {
-    setMediaList((prev) =>
-      prev.map((item, idx) => ({
-        ...item,
-        isPrimary: idx === index,
-      }))
-    );
+    setMediaList((prev) => prev.map((item, idx) => ({ ...item, isPrimary: idx === index })));
   };
 
   const handleRemoveMedia = (index: number) => {
     setMediaList((prev) => {
       const filtered = prev.filter((_, idx) => idx !== index);
-      // Ensure at least one primary if images remain
       if (filtered.length > 0 && !filtered.some((m) => m.isPrimary)) {
         filtered[0].isPrimary = true;
       }
@@ -323,13 +210,50 @@ export default function NewInventoryItemPage() {
     });
   };
 
-  // Final Form Submission
-  const handleSubmit = async () => {
-    if (!validateCurrentStep()) return;
+  const validateAll = (): boolean => {
+    if (!name.trim()) {
+      setFormError('Item Name is required.');
+      return false;
+    }
+    const pc = parseInt(pieceCount, 10);
+    if (isNaN(pc) || pc < 1) {
+      setFormError('Piece Count must be at least 1.');
+      return false;
+    }
+    if (!materialId || !categoryId || !purityId) {
+      setFormError('Material, Category, and Purity are all required.');
+      return false;
+    }
+    if (isNaN(parsedGross) || parsedGross <= 0) {
+      setFormError('Gross Weight must be greater than 0.');
+      return false;
+    }
+    if (isNaN(parsedStone) || parsedStone < 0) {
+      setFormError('Stone Weight cannot be negative.');
+      return false;
+    }
+    if (parsedStone > parsedGross) {
+      setFormError(`Stone Weight (${parsedStone}g) cannot exceed Gross Weight (${parsedGross}g).`);
+      return false;
+    }
+    const mc = parseFloat(makingChargeValue);
+    if (isNaN(mc) || mc < 0) {
+      setFormError('Making Charge must be 0 or greater.');
+      return false;
+    }
+    if (!branchId || !stockLocationId) {
+      setFormError('Target Branch and Stock Location are required.');
+      return false;
+    }
+    return true;
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setFormError(null);
+    if (!validateAll()) return;
 
     setIsSubmitting(true);
-    setFormError(null);
-
     try {
       const specsPayload = selectedSpecs
         .filter((s) => s.specificationOptionId || s.customValue)
@@ -349,192 +273,155 @@ export default function NewInventoryItemPage() {
         isPrimary: m.isPrimary,
       }));
 
-      const payload = {
-        branchId,
-        stockLocationId,
-        name: name.trim(),
-        itemCode: itemCode.trim() || undefined,
-        materialId,
-        categoryId,
-        purityId,
-        grossWeight: parsedGross,
-        stoneWeight: parsedStone,
-        pieceCount: parseInt(pieceCount, 10) || 1,
-        makingChargeMethod,
-        makingChargeValue: parseFloat(makingChargeValue) || 0.0,
-        description: description.trim() || undefined,
-        isActive: true,
-        specifications: specsPayload.length > 0 ? specsPayload : undefined,
-        media: mediaPayload.length > 0 ? mediaPayload : undefined,
-      };
-
-      const result = await inventoryApi.createInventoryItem(payload, idempotencyKey);
+      const result = await inventoryApi.createInventoryItem(
+        {
+          branchId,
+          stockLocationId,
+          name: name.trim(),
+          itemCode: itemCode.trim() || undefined,
+          materialId,
+          categoryId,
+          purityId,
+          grossWeight: parsedGross,
+          stoneWeight: parsedStone,
+          pieceCount: parseInt(pieceCount, 10) || 1,
+          makingChargeMethod,
+          makingChargeValue: parseFloat(makingChargeValue) || 0.0,
+          description: description.trim() || undefined,
+          isActive: true,
+          specifications: specsPayload.length > 0 ? specsPayload : undefined,
+          media: mediaPayload.length > 0 ? mediaPayload : undefined,
+        },
+        idempotencyKey
+      );
       setCreatedItem(result);
     } catch (err: any) {
-      setFormError(err?.message || 'Failed to create inventory item');
+      setFormError(err?.message || 'Failed to create inventory item.');
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const handleResetForNewItem = () => {
+  const handleReset = () => {
     setCreatedItem(null);
-    setCurrentStep(1);
     setName('');
     setItemCode('');
     setDescription('');
     setPieceCount('1');
     setGrossWeight('');
-    setStoneWeight('0.0000');
+    setStoneWeight('0');
     setMakingChargeMethod(1);
     setMakingChargeValue('0.00');
     setSelectedSpecs([]);
     setMediaList([]);
     setFormError(null);
-    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-      setIdempotencyKey(crypto.randomUUID());
-    } else {
-      setIdempotencyKey('idemp-' + Date.now() + '-' + Math.random().toString(36).substring(2, 9));
-    }
+    setIdempotencyKey(generateIdempotencyKey());
   };
 
-  // Helper Labels for Review
   const selectedBranch = branches.find((b) => b.id === branchId);
   const selectedLocation = locations.find((l) => l.id === stockLocationId);
   const selectedMaterial = materials.find((m) => m.id === materialId);
   const selectedCategory = categories.find((c) => c.id === categoryId);
   const selectedPurity = purities.find((p) => p.id === purityId);
 
-  // Permission Check
   if (!canCreate) {
     return (
       <AppLayout>
-        <div className="max-w-2xl mx-auto my-12 bg-white rounded-xl shadow-md border border-red-200 p-8 text-center">
-          <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
-            <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-            </svg>
-          </div>
-          <h2 className="text-xl font-bold text-gray-900 mb-2">Access Restricted</h2>
-          <p className="text-gray-600 mb-6 text-sm">
-            You do not possess the <code className="font-mono text-red-700 bg-red-50 px-1.5 py-0.5 rounded">INVENTORY_CREATE</code> permission required to create inventory items.
+        <div className="max-w-xl mx-auto mt-10 bg-white border border-rose-200 rounded-xl p-6 text-center shadow-xs">
+          <AlertTriangle className="w-8 h-8 text-rose-600 mx-auto mb-2" />
+          <h2 className="text-base font-bold text-gray-900">Access Denied</h2>
+          <p className="text-xs text-gray-600 mt-1">
+            You need <code className="font-mono text-rose-700">INVENTORY_CREATE</code> permission to add items.
           </p>
-          <Link
-            href="/inventory"
-            className="inline-flex items-center px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-[#0D3826] hover:bg-[#09261a]"
-          >
-            Return to Inventory
-          </Link>
+          <div className="mt-4">
+            <Link href="/inventory">
+              <Button variant="secondary" size="sm">Return to Inventory</Button>
+            </Link>
+          </div>
         </div>
       </AppLayout>
     );
   }
 
-  // Success Screen
   if (createdItem) {
     return (
       <AppLayout>
-        <div className="max-w-3xl mx-auto my-6 bg-white rounded-2xl shadow-xl border border-emerald-100 overflow-hidden">
-          {/* Header */}
-          <div className="bg-gradient-to-r from-[#0D3826] to-[#165a3e] p-8 text-white text-center">
-            <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-3 backdrop-blur-sm">
-              <svg className="w-10 h-10 text-[#D4AF37]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-              </svg>
+        <div className="max-w-3xl mx-auto my-4 bg-white rounded-xl shadow-sm border border-[#E2E6E3] overflow-hidden">
+          <div className="bg-[#123B32] px-6 py-6 text-white flex items-center gap-4">
+            <div className="w-11 h-11 rounded-full bg-white/15 flex items-center justify-center flex-shrink-0">
+              <CheckCircle2 className="w-6 h-6 text-[#B89A60]" />
             </div>
-            <h1 className="text-2xl font-bold tracking-tight">Inventory Item Created Successfully</h1>
-            <p className="text-emerald-100 text-sm mt-1">
-              Physical inventory identity assigned with immutable tag and machine-scannable barcode.
-            </p>
+            <div>
+              <h1 className="text-lg font-bold">Jewellery Item Created</h1>
+              <p className="text-xs text-emerald-100 mt-0.5">
+                Unique tag and barcode assigned to branch inventory.
+              </p>
+            </div>
           </div>
 
-          {/* Details Card */}
-          <div className="p-8 space-y-6">
-            {/* Visual Barcode Display */}
-            <div className="text-center py-4 bg-gray-50 border border-gray-200 rounded-xl">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-gray-500 block mb-2">
-                Official Machine-Scannable Barcode (Code-128)
+          <div className="p-6 space-y-5">
+            <div className="text-center py-4 bg-[#F8F7F4] border border-[#E2E6E3] rounded-xl">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-[#69736E] block mb-2">
+                Scannable Barcode (Code-128)
               </span>
-              <BarcodeDisplay value={createdItem.barcode} width={320} height={85} />
+              <BarcodeDisplay value={createdItem.barcode} width={300} height={75} />
             </div>
 
-            {/* Key Grid */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-              <div className="bg-[#FAF8F5] p-3.5 rounded-xl border border-[#D4AF37]/30">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-gray-500 block">Inventory Tag</span>
-                <span className="font-mono font-bold text-base text-[#0D3826]">{createdItem.tagNumber}</span>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="bg-[#F8F7F4] p-3 rounded-lg border border-[#B89A60]/40">
+                <span className="text-[10px] font-bold uppercase text-[#69736E] block">Tag Number</span>
+                <span className="font-mono font-bold text-sm text-[#123B32]">{createdItem.tagNumber}</span>
               </div>
-              <div className="bg-[#FAF8F5] p-3.5 rounded-xl border border-[#D4AF37]/30">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-gray-500 block">Net Weight</span>
-                <span className="font-bold text-base text-gray-900">{createdItem.netWeight.toFixed(4)} g</span>
+              <div className="bg-[#F8F7F4] p-3 rounded-lg border border-[#B89A60]/40">
+                <span className="text-[10px] font-bold uppercase text-[#69736E] block">Net Weight</span>
+                <span className="font-mono font-bold text-sm text-[#202824]">{createdItem.netWeight.toFixed(4)} g</span>
               </div>
-              <div className="bg-gray-50 p-3.5 rounded-xl border border-gray-200">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-gray-500 block">Operational Status</span>
-                <span className="inline-block mt-0.5 px-2 py-0.5 text-xs font-bold rounded-full bg-emerald-100 text-emerald-800">
-                  {createdItem.statusName}
-                </span>
+              <div className="bg-white p-3 rounded-lg border border-[#E2E6E3]">
+                <span className="text-[10px] font-bold uppercase text-[#69736E] block">Status</span>
+                <Badge variant="success" size="sm" className="mt-0.5">{createdItem.statusName}</Badge>
               </div>
-              <div className="bg-gray-50 p-3.5 rounded-xl border border-gray-200">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-gray-500 block">Visibility Record</span>
-                <span className="inline-block mt-0.5 px-2 py-0.5 text-xs font-bold rounded-full bg-blue-100 text-blue-800">
-                  {createdItem.isActive ? 'ACTIVE' : 'INACTIVE'}
-                </span>
+              <div className="bg-white p-3 rounded-lg border border-[#E2E6E3]">
+                <span className="text-[10px] font-bold uppercase text-[#69736E] block">Location</span>
+                <span className="font-semibold text-xs text-[#202824]">{createdItem.locationName}</span>
               </div>
             </div>
 
-            {/* Classification & Location Summary */}
-            <div className="border border-gray-200 rounded-xl divide-y divide-gray-100 text-sm">
-              <div className="p-3.5 flex justify-between bg-white">
-                <span className="text-gray-500">Item Name</span>
-                <span className="font-semibold text-gray-900">{createdItem.name}</span>
+            <div className="border border-[#E2E6E3] rounded-lg divide-y divide-[#E2E6E3] text-xs">
+              <div className="px-4 py-2.5 flex justify-between">
+                <span className="text-[#69736E]">Item Name</span>
+                <span className="font-semibold text-[#202824]">{createdItem.name}</span>
               </div>
-              <div className="p-3.5 flex justify-between bg-white">
-                <span className="text-gray-500">Branch & Location</span>
-                <span className="font-semibold text-gray-900">
-                  {createdItem.branchName} ({createdItem.branchCode}) &bull; {createdItem.locationName}
+              <div className="px-4 py-2.5 flex justify-between">
+                <span className="text-[#69736E]">Classification</span>
+                <span className="font-semibold text-[#202824]">
+                  {createdItem.materialName} • {createdItem.categoryName} • {createdItem.purityName}
                 </span>
               </div>
-              <div className="p-3.5 flex justify-between bg-white">
-                <span className="text-gray-500">Classification</span>
-                <span className="font-semibold text-gray-900">
-                  {createdItem.materialName} &bull; {createdItem.categoryName} &bull; {createdItem.purityName} ({createdItem.karatValue}K)
+              <div className="px-4 py-2.5 flex justify-between">
+                <span className="text-[#69736E]">Weights</span>
+                <span className="font-mono text-[#202824]">
+                  Gross {createdItem.grossWeight.toFixed(4)}g | Stone {createdItem.stoneWeight.toFixed(4)}g | Net{' '}
+                  <strong>{createdItem.netWeight.toFixed(4)}g</strong>
                 </span>
               </div>
-              <div className="p-3.5 flex justify-between bg-white">
-                <span className="text-gray-500">Weights Breakdown</span>
-                <span className="font-mono text-gray-900">
-                  Gross: {createdItem.grossWeight.toFixed(4)}g | Stone: {createdItem.stoneWeight.toFixed(4)}g | Net: <strong>{createdItem.netWeight.toFixed(4)}g</strong>
-                </span>
-              </div>
-              <div className="p-3.5 flex justify-between bg-white">
-                <span className="text-gray-500">Making Charge</span>
-                <span className="font-semibold text-gray-900">
-                  Rs. {createdItem.makingChargeValue.toLocaleString('en-LK', { minimumFractionDigits: 2 })} ({createdItem.makingChargeMethodName})
+              <div className="px-4 py-2.5 flex justify-between">
+                <span className="text-[#69736E]">Making Charge</span>
+                <span className="font-mono font-semibold text-[#202824]">
+                  {currency} {createdItem.makingChargeValue.toLocaleString('en-LK', { minimumFractionDigits: 2 })} (
+                  {createdItem.makingChargeMethodName})
                 </span>
               </div>
             </div>
 
-            {/* Actions */}
-            <div className="flex flex-col sm:flex-row gap-3 pt-4 border-t border-gray-100">
-              <button
-                type="button"
-                onClick={handleResetForNewItem}
-                className="flex-1 py-3 px-4 rounded-xl font-bold text-white bg-[#0D3826] hover:bg-[#09261a] transition-colors shadow-sm text-center"
-              >
-                + Add Another Item
-              </button>
-              <Link
-                href={`/inventory?search=${encodeURIComponent(createdItem.tagNumber)}`}
-                className="flex-1 py-3 px-4 rounded-xl font-bold text-gray-800 bg-[#FAF8F5] border border-[#D4AF37]/50 hover:bg-[#f3ede1] transition-colors text-center"
-              >
-                View in Inventory List
+            <div className="flex flex-wrap justify-between gap-3 pt-2">
+              <Link href="/inventory">
+                <Button variant="secondary" size="md" leftIcon={<ArrowLeft className="w-4 h-4" />}>
+                  Back to Inventory
+                </Button>
               </Link>
-              <Link
-                href="/inventory"
-                className="py-3 px-4 rounded-xl font-semibold text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition-colors text-center"
-              >
-                Return
-              </Link>
+              <Button variant="primary" size="md" onClick={handleReset} leftIcon={<Plus className="w-4 h-4" />}>
+                Add Another Item
+              </Button>
             </div>
           </div>
         </div>
@@ -544,468 +431,264 @@ export default function NewInventoryItemPage() {
 
   return (
     <AppLayout>
-      <div className="max-w-4xl mx-auto space-y-6 pb-12">
-        {/* Header Breadcrumbs */}
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="flex items-center space-x-2 text-xs text-gray-500 mb-1">
-              <Link href="/inventory" className="hover:text-gray-800">Inventory</Link>
-              <span>/</span>
-              <span className="text-gray-800 font-semibold">Manual Creation</span>
-            </div>
-            <h1 className="text-2xl font-bold text-gray-900">Add Inventory Item</h1>
-            <p className="text-xs text-gray-500">
-              Guided manual entry for physical single jewellery inventory items.
-            </p>
-          </div>
-          <Link
-            href="/inventory"
-            className="text-xs font-semibold text-gray-600 hover:text-gray-900 px-3 py-1.5 border border-gray-300 rounded-lg hover:bg-gray-50"
-          >
-            Cancel
-          </Link>
-        </div>
+      <div className="max-w-6xl mx-auto space-y-5">
+        <PageHeader
+          title="Add Jewellery Item"
+          description="Register a single tagged jewellery piece into branch stock."
+          actions={
+            <Link href="/inventory">
+              <Button variant="secondary" size="sm" leftIcon={<ArrowLeft className="w-3.5 h-3.5" />}>
+                Back to Inventory
+              </Button>
+            </Link>
+          }
+        />
 
-        {/* Stepper Progress Bar */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-          <div className="flex items-center justify-between text-xs font-medium text-gray-500 mb-3">
-            <span>Step {currentStep} of {totalSteps}</span>
-            <span className="font-bold text-[#0D3826]">
-              {currentStep === 1 && 'Branch & Display Location'}
-              {currentStep === 2 && 'Item Information & Identity'}
-              {currentStep === 3 && 'Metal & Category Classification'}
-              {currentStep === 4 && 'Weights & Net Measurement'}
-              {currentStep === 5 && 'Making Charge Configuration'}
-              {currentStep === 6 && 'Attributes & Specifications'}
-              {currentStep === 7 && 'Item Media & Certifications'}
-              {currentStep === 8 && 'Review & Final Confirmation'}
-            </span>
-          </div>
-
-          <div className="grid grid-cols-8 gap-1.5">
-            {[1, 2, 3, 4, 5, 6, 7, 8].map((step) => {
-              const isCompleted = step < currentStep;
-              const isCurrent = step === currentStep;
-              return (
-                <div
-                  key={step}
-                  className={`h-2 rounded-full transition-all ${
-                    isCompleted
-                      ? 'bg-[#0D3826]'
-                      : isCurrent
-                      ? 'bg-[#D4AF37]'
-                      : 'bg-gray-200'
-                  }`}
-                  title={`Step ${step}`}
-                />
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Form Error Alert */}
         {formError && (
-          <div className="p-4 rounded-xl bg-red-50 border border-red-200 flex items-start space-x-3 text-red-800 text-sm">
-            <svg className="w-5 h-5 flex-shrink-0 text-red-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            <div>
-              <span className="font-bold block">Validation Notice</span>
+          <div className="bg-rose-50 border border-rose-200 text-rose-800 px-4 py-3 rounded-xl text-xs flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-rose-600 flex-shrink-0" />
               <span>{formError}</span>
             </div>
+            <button onClick={() => setFormError(null)} className="text-rose-500 hover:text-rose-800">
+              <X className="w-4 h-4" />
+            </button>
           </div>
         )}
 
-        {/* Step Cards Container */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 sm:p-8">
-          {isLoadingLookups ? (
-            <div className="py-12 text-center text-gray-500">
-              <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-[#0D3826] mb-2" />
-              <p className="text-sm">Loading metadata catalogs...</p>
-            </div>
-          ) : (
-            <form onSubmit={(e) => e.preventDefault()} className="space-y-6">
-              {/* STEP 1: Branch & Location */}
-              {currentStep === 1 && (
-                <div className="space-y-5">
-                  <div>
-                    <h2 className="text-lg font-bold text-gray-900">Step 1 — Branch & Location</h2>
-                    <p className="text-xs text-gray-500">
-                      Select the physical branch and the initial stock or display location holding this item.
-                    </p>
+        {isLoadingLookups ? (
+          <div className="bg-white border border-[#E2E6E3] rounded-xl p-12 text-center text-xs text-[#69736E]">
+            Loading materials, categories, purities, and branch locations...
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+            {/* Left Column: Form Sections */}
+            <div className="lg:col-span-8 space-y-5">
+              {/* Section 1: Item & Classification */}
+              <div className="bg-white border border-[#E2E6E3] rounded-xl p-5 shadow-xs space-y-4">
+                <div className="flex items-center gap-2 pb-2.5 border-b border-[#E2E6E3]">
+                  <Gem className="w-4 h-4 text-[#123B32]" />
+                  <h2 className="text-xs font-bold uppercase tracking-wider text-[#123B32]">
+                    1. Item & Classification
+                  </h2>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-12 gap-4">
+                  <div className="sm:col-span-6">
+                    <Input
+                      label="Item Name"
+                      requiredIndicator
+                      required
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      placeholder="e.g. 22K Traditional Gold Bangle"
+                    />
                   </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                    <div>
-                      <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 mb-1.5">
-                        Branch <span className="text-red-500">*</span>
-                      </label>
-                      <select
-                        value={branchId}
-                        onChange={(e) => handleBranchChange(e.target.value)}
-                        className="w-full px-3.5 py-2.5 text-sm border border-gray-300 rounded-xl bg-white focus:ring-2 focus:ring-[#0D3826] focus:border-transparent"
-                      >
-                        {branches.map((b) => (
-                          <option key={b.id} value={b.id}>
-                            {b.name} ({b.code}) — {b.currencyCode}
-                          </option>
-                        ))}
-                      </select>
-                      <span className="text-[11px] text-gray-400 mt-1 block">
-                        Changing branch refreshes branch-specific stock locations.
-                      </span>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 mb-1.5">
-                        Stock / Display Location <span className="text-red-500">*</span>
-                      </label>
-                      <select
-                        value={stockLocationId}
-                        onChange={(e) => setStockLocationId(e.target.value)}
-                        className="w-full px-3.5 py-2.5 text-sm border border-gray-300 rounded-xl bg-white focus:ring-2 focus:ring-[#0D3826] focus:border-transparent"
-                      >
-                        {locations.length === 0 ? (
-                          <option value="">No active locations configured for this branch</option>
-                        ) : (
-                          locations.map((l) => (
-                            <option key={l.id} value={l.id}>
-                              {l.name} ({l.code}) [{l.locationType}]
-                            </option>
-                          ))
-                        )}
-                      </select>
-                      <span className="text-[11px] text-gray-400 mt-1 block">
-                        Items can only belong to physical locations within their assigned branch.
-                      </span>
-                    </div>
+                  <div className="sm:col-span-4">
+                    <Input
+                      label="Item Code"
+                      required={false}
+                      value={itemCode}
+                      onChange={(e) => setItemCode(e.target.value)}
+                      placeholder="e.g. BGL-2026-01"
+                    />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <Input
+                      label="Pieces"
+                      requiredIndicator
+                      required
+                      type="number"
+                      min={1}
+                      value={pieceCount}
+                      onChange={(e) => setPieceCount(e.target.value)}
+                    />
                   </div>
                 </div>
-              )}
 
-              {/* STEP 2: Item Information */}
-              {currentStep === 2 && (
-                <div className="space-y-5">
-                  <div>
-                    <h2 className="text-lg font-bold text-gray-900">Step 2 — Item Information</h2>
-                    <p className="text-xs text-gray-500">
-                      Define the human-readable identity and packaging details for this jewellery item.
-                    </p>
-                  </div>
-
-                  <div className="space-y-4">
-                    <div>
-                      <label className="block text-xs font-bold uppercase tracking-wider text-[#202824] mb-1.5">
-                        Item Name <span className="text-rose-600">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        value={name}
-                        onChange={(e) => setName(e.target.value)}
-                        placeholder="e.g. 22K Floral Gold Necklace"
-                        className="w-full px-3.5 py-2.5 text-sm border border-[#E2E6E3] rounded-xl focus:ring-1 focus:ring-[#123B32] focus:border-[#123B32]"
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-xs font-bold uppercase tracking-wider text-[#202824] mb-1.5">
-                          Internal Item Code / SKU <span className="text-gray-400 font-normal">(Optional)</span>
-                        </label>
-                        <input
-                          type="text"
-                          value={itemCode}
-                          onChange={(e) => setItemCode(e.target.value)}
-                          placeholder="e.g. NKL-22K-001"
-                          className="w-full px-3.5 py-2.5 text-sm border border-[#E2E6E3] rounded-xl focus:ring-1 focus:ring-[#123B32] focus:border-[#123B32]"
-                        />
-                        <span className="text-[11px] text-[#69736E] mt-1 block">
-                          If omitted, defaults to the generated jewellery tag number.
-                        </span>
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-bold uppercase tracking-wider text-[#202824] mb-1.5">
-                          Piece Count <span className="text-rose-600">*</span>
-                        </label>
-                        <input
-                          type="number"
-                          min="1"
-                          step="1"
-                          value={pieceCount}
-                          onChange={(e) => setPieceCount(e.target.value)}
-                          placeholder="e.g. 1"
-                          className="w-full px-3.5 py-2.5 text-sm border border-[#E2E6E3] rounded-xl focus:ring-1 focus:ring-[#123B32] focus:border-[#123B32]"
-                        />
-                        <span className="text-[11px] text-[#69736E] mt-1 block">
-                          Individually tracked jewellery items default to 1 piece.
-                        </span>
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold uppercase tracking-wider text-[#202824] mb-1.5">
-                        Description / Craftsmanship Notes <span className="text-gray-400 font-normal">(Optional)</span>
-                      </label>
-                      <textarea
-                        rows={3}
-                        value={description}
-                        onChange={(e) => setDescription(e.target.value)}
-                        placeholder="Describe the jewellery design or distinguishing features"
-                        className="w-full px-3.5 py-2.5 text-sm border border-[#E2E6E3] rounded-xl focus:ring-1 focus:ring-[#123B32] focus:border-[#123B32]"
-                      />
-                    </div>
-                  </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <Select
+                    label="Material"
+                    requiredIndicator
+                    required
+                    value={materialId}
+                    onChange={(e) => setMaterialId(e.target.value)}
+                    options={[
+                      { value: '', label: 'Select material...' },
+                      ...materials.map((m) => ({ value: m.id, label: `${m.name} (${m.code})` })),
+                    ]}
+                  />
+                  <Select
+                    label="Category"
+                    requiredIndicator
+                    required
+                    value={categoryId}
+                    onChange={(e) => setCategoryId(e.target.value)}
+                    options={[
+                      { value: '', label: 'Select category...' },
+                      ...categories.map((c) => ({ value: c.id, label: `${c.name} (${c.code})` })),
+                    ]}
+                  />
+                  <Select
+                    label="Purity / Karat"
+                    requiredIndicator
+                    required
+                    value={purityId}
+                    onChange={(e) => setPurityId(e.target.value)}
+                    options={[
+                      { value: '', label: 'Select purity...' },
+                      ...purities.map((p) => ({
+                        value: p.id,
+                        label: `${p.name} (${p.purityPercentage}%)`,
+                      })),
+                    ]}
+                  />
                 </div>
-              )}
 
-              {/* STEP 3: Classification */}
-              {currentStep === 3 && (
-                <div className="space-y-5">
-                  <div>
-                    <h2 className="text-lg font-bold text-gray-900">Step 3 — Classification</h2>
-                    <p className="text-xs text-gray-500">
-                      Classify the item by metal material, category, and purity standard.
-                    </p>
+                <Textarea
+                  label="Description"
+                  required={false}
+                  rows={2}
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="Optional design notes, craftsmanship details, or hallmark remarks"
+                />
+              </div>
+
+              {/* Section 2: Weight & Making Charge */}
+              <div className="bg-white border border-[#E2E6E3] rounded-xl p-5 shadow-xs space-y-4">
+                <div className="flex items-center justify-between pb-2.5 border-b border-[#E2E6E3]">
+                  <div className="flex items-center gap-2">
+                    <Scale className="w-4 h-4 text-[#123B32]" />
+                    <h2 className="text-xs font-bold uppercase tracking-wider text-[#123B32]">
+                      2. Weight & Making Charge
+                    </h2>
                   </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
-                    <div>
-                      <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 mb-1.5">
-                        Material <span className="text-red-500">*</span>
-                      </label>
-                      <select
-                        value={materialId}
-                        onChange={(e) => setMaterialId(e.target.value)}
-                        className="w-full px-3.5 py-2.5 text-sm border border-gray-300 rounded-xl bg-white focus:ring-2 focus:ring-[#0D3826] focus:border-transparent"
-                      >
-                        <option value="">Select Material...</option>
-                        {materials.map((m) => (
-                          <option key={m.id} value={m.id}>
-                            {m.name} ({m.code})
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 mb-1.5">
-                        Category <span className="text-red-500">*</span>
-                      </label>
-                      <select
-                        value={categoryId}
-                        onChange={(e) => setCategoryId(e.target.value)}
-                        className="w-full px-3.5 py-2.5 text-sm border border-gray-300 rounded-xl bg-white focus:ring-2 focus:ring-[#0D3826] focus:border-transparent"
-                      >
-                        <option value="">Select Category...</option>
-                        {categories.map((c) => (
-                          <option key={c.id} value={c.id}>
-                            {c.name} ({c.code})
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 mb-1.5">
-                        Purity / Karat <span className="text-red-500">*</span>
-                      </label>
-                      <select
-                        value={purityId}
-                        onChange={(e) => setPurityId(e.target.value)}
-                        className="w-full px-3.5 py-2.5 text-sm border border-gray-300 rounded-xl bg-white focus:ring-2 focus:ring-[#0D3826] focus:border-transparent"
-                      >
-                        <option value="">Select Purity...</option>
-                        {purities.map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {p.name} ({p.karatValue}K - {p.purityPercentage}%)
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
+                  <span className="text-[11px] font-mono font-semibold text-[#123B32] bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-md">
+                    Net Weight: {netWeightPreview} g
+                  </span>
                 </div>
-              )}
 
-              {/* STEP 4: Weight Entry */}
-              {currentStep === 4 && (
-                <div className="space-y-5">
-                  <div>
-                    <h2 className="text-lg font-bold text-gray-900">Step 4 — Weight & Measurement</h2>
-                    <p className="text-xs text-gray-500">
-                      Enter precision weights with four decimal places (0.0001g). Net weight is calculated strictly by backend.
-                    </p>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
-                    <div>
-                      <label className="block text-xs font-bold uppercase tracking-wider text-[#202824] mb-1.5">
-                        Gross Weight (g) <span className="text-rose-600">*</span>
-                      </label>
-                      <div className="relative">
-                        <input
-                          type="number"
-                          step="0.0001"
-                          min="0.0001"
-                          value={grossWeight}
-                          onChange={(e) => setGrossWeight(e.target.value)}
-                          placeholder="e.g. 8.5000"
-                          className="w-full pr-8 pl-3.5 py-2.5 text-base font-semibold border border-[#E2E6E3] rounded-xl focus:ring-1 focus:ring-[#123B32] focus:border-[#123B32]"
-                        />
-                        <span className="absolute right-3 top-3 text-xs font-bold text-[#69736E]">g</span>
-                      </div>
-                      <span className="text-[11px] text-[#69736E] mt-1 block">Total weight of the jewellery including stones.</span>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold uppercase tracking-wider text-[#202824] mb-1.5">
-                        Stone Weight (g) <span className="text-rose-600">*</span>
-                      </label>
-                      <div className="relative">
-                        <input
-                          type="number"
-                          step="0.0001"
-                          min="0.0000"
-                          value={stoneWeight}
-                          onChange={(e) => setStoneWeight(e.target.value)}
-                          placeholder="e.g. 0.2500"
-                          className="w-full pr-8 pl-3.5 py-2.5 text-base font-semibold border border-[#E2E6E3] rounded-xl focus:ring-1 focus:ring-[#123B32] focus:border-[#123B32]"
-                        />
-                        <span className="absolute right-3 top-3 text-xs font-bold text-[#69736E]">g</span>
-                      </div>
-                      <span className="text-[11px] text-[#69736E] mt-1 block">Enter the total stone weight. Leave at zero if not applicable.</span>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold uppercase tracking-wider text-[#202824] mb-1.5">
-                        Net Metal Weight (g)
-                      </label>
-                      <div className={`p-2.5 rounded-xl border flex items-center justify-between ${
-                        hasWeightError ? 'bg-rose-50 border-rose-300 text-rose-700' : 'bg-[#F8F7F4] border-[#B89A60]/40 text-[#123B32]'
-                      }`}>
-                        <span className="text-xs font-bold">Calculated Net:</span>
-                        <span className="font-mono text-lg font-black">{netWeightPreview} g</span>
-                      </div>
-                      <span className="text-[11px] text-[#69736E] mt-1 block">
-                        Calculated automatically from gross weight minus stone weight.
-                      </span>
-                    </div>
-                  </div>
-
-                  {hasWeightError && (
-                    <p className="text-xs text-rose-600 font-semibold">
-                      Stone weight cannot exceed gross weight. Please correct weight entries.
-                    </p>
-                  )}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <Input
+                    label="Gross Weight"
+                    unit="g"
+                    requiredIndicator
+                    required
+                    type="number"
+                    step="0.0001"
+                    min="0.0001"
+                    value={grossWeight}
+                    onChange={(e) => setGrossWeight(e.target.value)}
+                    placeholder="0.0000"
+                  />
+                  <Input
+                    label="Stone Weight"
+                    unit="g"
+                    required={false}
+                    type="number"
+                    step="0.0001"
+                    min="0"
+                    value={stoneWeight}
+                    onChange={(e) => setStoneWeight(e.target.value)}
+                    error={hasWeightError ? 'Cannot exceed Gross Weight' : undefined}
+                    placeholder="0.0000"
+                  />
                 </div>
-              )}
 
-              {/* STEP 5: Making Charge */}
-              {currentStep === 5 && (
-                <div className="space-y-5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
                   <div>
-                    <h2 className="text-lg font-bold text-[#123B32]">Step 5 — Making Charge Configuration</h2>
-                    <p className="text-xs text-[#69736E]">
-                      Configure craftsmanship and making charges in operating currency ({activeBranch?.currencyCode || 'LKR'}).
-                    </p>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                    <div>
-                      <label className="block text-xs font-bold uppercase tracking-wider text-[#202824] mb-1.5">
-                        Calculation Method <span className="text-rose-600">*</span>
-                      </label>
-                      <div className="grid grid-cols-2 gap-3">
-                        <button
-                          type="button"
-                          onClick={() => setMakingChargeMethod(1)}
-                          className={`p-3 rounded-xl border text-left transition-all ${
-                            makingChargeMethod === 1
-                              ? 'border-[#123B32] bg-[#123B32]/5 text-[#123B32] ring-1 ring-[#123B32]'
-                              : 'border-[#E2E6E3] bg-white text-gray-700 hover:bg-[#F8F7F4]'
-                          }`}
-                        >
-                          <span className="block font-bold text-sm">Per Gram</span>
-                          <span className="text-[11px] text-[#69736E]">Applied per net gram</span>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => setMakingChargeMethod(2)}
-                          className={`p-3 rounded-xl border text-left transition-all ${
-                            makingChargeMethod === 2
-                              ? 'border-[#123B32] bg-[#123B32]/5 text-[#123B32] ring-1 ring-[#123B32]'
-                              : 'border-[#E2E6E3] bg-white text-gray-700 hover:bg-[#F8F7F4]'
-                          }`}
-                        >
-                          <span className="block font-bold text-sm">Per Item</span>
-                          <span className="text-[11px] text-[#69736E]">Fixed charge per piece</span>
-                        </button>
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold uppercase tracking-wider text-[#202824] mb-1.5">
-                        Making Charge Value ({activeBranch?.currencyCode || 'LKR'}) <span className="text-rose-600">*</span>
-                      </label>
-                      <div className="relative">
-                        <span className="absolute left-3.5 top-3 text-xs font-bold text-[#69736E]">{activeBranch?.currencyCode || 'LKR'}</span>
-                        <input
-                          type="number"
-                          step="0.01"
-                          min="0.00"
-                          value={makingChargeValue}
-                          onChange={(e) => setMakingChargeValue(e.target.value)}
-                          placeholder="e.g. 2,500.00"
-                          className="w-full pl-12 pr-3.5 py-2.5 text-base font-semibold border border-[#E2E6E3] rounded-xl focus:ring-1 focus:ring-[#123B32] focus:border-[#123B32]"
-                        />
-                      </div>
-                      <span className="text-[11px] text-[#69736E] mt-1 block">
-                        Example: 2,500.00 per gram or 15,000.00 fixed piece charge
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs flex items-center space-x-2">
-                    <svg className="w-4 h-4 text-amber-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    <span>
-                      Gold selling rates and VAT will be calculated during billing/POS based on daily market boards (Module 9). No pricing is estimated here.
+                    <span className="block text-xs font-semibold text-[#202824] uppercase tracking-wider mb-1.5">
+                      Making Charge Method <span className="text-rose-600">*</span>
                     </span>
-                  </div>
-                </div>
-              )}
-
-              {/* STEP 6: Specifications */}
-              {currentStep === 6 && (
-                <div className="space-y-5">
-                  <div>
-                    <h2 className="text-lg font-bold text-gray-900">Step 6 — Attributes & Specifications</h2>
-                    <p className="text-xs text-gray-500">
-                      Configure dynamic attributes based on master settings (PREDEFINED options, FREE_TEXT, or HYBRID).
-                    </p>
-                  </div>
-
-                  {specifications.length === 0 ? (
-                    <div className="p-6 text-center text-gray-400 bg-gray-50 rounded-xl border border-dashed border-gray-200">
-                      No optional specifications configured in master catalogs.
+                    <div className="grid grid-cols-2 gap-2">
+                      {[
+                        { id: 1, label: 'Per Gram', sub: 'Rate × Net g' },
+                        { id: 2, label: 'Per Item', sub: 'Fixed amount' },
+                      ].map((m) => (
+                        <button
+                          key={m.id}
+                          type="button"
+                          onClick={() => setMakingChargeMethod(m.id)}
+                          className={`px-3 py-2 rounded-lg border text-left transition ${
+                            makingChargeMethod === m.id
+                              ? 'border-[#123B32] bg-[#123B32]/5 text-[#123B32] ring-1 ring-[#123B32]'
+                              : 'border-[#E2E6E3] bg-white text-[#202824] hover:bg-[#F8F7F4]'
+                          }`}
+                        >
+                          <span className="block text-xs font-bold">{m.label}</span>
+                          <span className="block text-[10px] text-[#69736E]">{m.sub}</span>
+                        </button>
+                      ))}
                     </div>
-                  ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  </div>
+
+                  <Input
+                    label="Making Charge Value"
+                    unit={currency}
+                    requiredIndicator
+                    required
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={makingChargeValue}
+                    onChange={(e) => setMakingChargeValue(e.target.value)}
+                    placeholder="0.00"
+                  />
+                </div>
+              </div>
+
+              {/* Section 3: Location, Specifications & Media */}
+              <div className="bg-white border border-[#E2E6E3] rounded-xl p-5 shadow-xs space-y-4">
+                <div className="flex items-center gap-2 pb-2.5 border-b border-[#E2E6E3]">
+                  <MapPin className="w-4 h-4 text-[#123B32]" />
+                  <h2 className="text-xs font-bold uppercase tracking-wider text-[#123B32]">
+                    3. Location, Attributes & Media
+                  </h2>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <Select
+                    label="Branch"
+                    requiredIndicator
+                    required
+                    value={branchId}
+                    onChange={(e) => handleBranchChange(e.target.value)}
+                    options={[
+                      { value: '', label: 'Select branch...' },
+                      ...branches.map((b) => ({ value: b.id, label: `${b.name} (${b.code})` })),
+                    ]}
+                  />
+                  <Select
+                    label="Stock Location"
+                    requiredIndicator
+                    required
+                    value={stockLocationId}
+                    onChange={(e) => setStockLocationId(e.target.value)}
+                    options={[
+                      { value: '', label: locations.length ? 'Select location...' : 'No locations in branch' },
+                      ...locations.map((l) => ({
+                        value: l.id,
+                        label: `${l.name} (${l.locationType})`,
+                      })),
+                    ]}
+                  />
+                </div>
+
+                {specifications.length > 0 && (
+                  <div className="pt-2 space-y-2.5">
+                    <span className="block text-xs font-semibold text-[#202824] uppercase tracking-wider">
+                      Specifications (Optional)
+                    </span>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       {specifications.map((spec) => {
                         const currentSelection = selectedSpecs.find((s) => s.specificationId === spec.id);
                         const isFreeText = spec.inputType === 'FREE_TEXT';
                         const isHybrid = spec.inputType === 'HYBRID';
 
                         return (
-                          <div key={spec.id} className="p-4 border rounded-xl bg-gray-50 space-y-2 border-gray-200">
-                            <div className="flex justify-between items-center">
-                              <label className="block font-bold text-xs text-gray-800">{spec.name}</label>
-                              <span className="text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-gray-200 text-gray-700">
-                                {spec.inputType || 'PREDEFINED'}
-                              </span>
-                            </div>
+                          <div key={spec.id} className="p-3 rounded-lg bg-[#F8F7F4] border border-[#E2E6E3] space-y-2">
+                            <span className="block text-xs font-semibold text-[#202824]">{spec.name}</span>
 
                             {!isFreeText && (
                               <select
@@ -1029,7 +712,6 @@ export default function NewInventoryItemPage() {
                                         ...filtered,
                                         {
                                           specificationId: spec.id,
-                                          specificationOptionId: undefined,
                                           customValue: currentSelection.customValue,
                                         },
                                       ];
@@ -1037,12 +719,12 @@ export default function NewInventoryItemPage() {
                                     return filtered;
                                   });
                                 }}
-                                className="w-full px-3 py-2 text-xs border border-gray-300 rounded-lg bg-white"
+                                className="w-full px-2.5 py-1.5 text-xs border border-[#E2E6E3] rounded-md bg-white text-[#202824]"
                               >
-                                <option value="">Select Option (Not Specified)</option>
+                                <option value="">Not specified</option>
                                 {spec.options.map((opt) => (
                                   <option key={opt.id} value={opt.id}>
-                                    {opt.value} ({opt.code})
+                                    {opt.value}
                                   </option>
                                 ))}
                               </select>
@@ -1051,7 +733,7 @@ export default function NewInventoryItemPage() {
                             {(isFreeText || isHybrid) && (
                               <input
                                 type="text"
-                                placeholder={isFreeText ? "Enter custom specification..." : "Optional custom detail..."}
+                                placeholder="Enter value..."
                                 value={currentSelection?.customValue || ''}
                                 onChange={(e) => {
                                   const val = e.target.value;
@@ -1062,7 +744,9 @@ export default function NewInventoryItemPage() {
                                         ...filtered,
                                         {
                                           specificationId: spec.id,
-                                          specificationOptionId: isFreeText ? undefined : currentSelection?.specificationOptionId,
+                                          specificationOptionId: isFreeText
+                                            ? undefined
+                                            : currentSelection?.specificationOptionId,
                                           customValue: val,
                                         },
                                       ];
@@ -1073,289 +757,169 @@ export default function NewInventoryItemPage() {
                                         {
                                           specificationId: spec.id,
                                           specificationOptionId: currentSelection.specificationOptionId,
-                                          customValue: undefined,
                                         },
                                       ];
                                     }
                                     return filtered;
                                   });
                                 }}
-                                className="w-full px-3 py-2 text-xs border border-gray-300 rounded-lg bg-white"
+                                className="w-full px-2.5 py-1.5 text-xs border border-[#E2E6E3] rounded-md bg-white text-[#202824]"
                               />
                             )}
                           </div>
                         );
                       })}
                     </div>
-                  )}
-                </div>
-              )}
-
-              {/* STEP 7: Media Upload */}
-              {currentStep === 7 && (
-                <div className="space-y-5">
-                  <div>
-                    <h2 className="text-lg font-bold text-gray-900">Step 7 — Media & Certificates</h2>
-                    <p className="text-xs text-gray-500">
-                      Upload high-resolution jewellery photographs (JPEG, PNG, WebP up to 5MB) or appraisal certificates (PDF up to 10MB).
-                    </p>
                   </div>
+                )}
 
-                  {/* Upload Box */}
-                  <div className="border-2 border-dashed border-gray-300 rounded-2xl p-6 text-center hover:border-[#0D3826] transition-colors bg-gray-50">
+                {/* Media Upload */}
+                <div className="pt-2 space-y-2">
+                  <span className="block text-xs font-semibold text-[#202824] uppercase tracking-wider">
+                    Photos & Certificates (Optional)
+                  </span>
+                  <label
+                    htmlFor="media-upload-input"
+                    className="flex items-center justify-center gap-2 border border-dashed border-[#D1D7D3] hover:border-[#123B32] rounded-lg px-4 py-3 text-xs text-[#69736E] hover:bg-[#F8F7F4] cursor-pointer transition"
+                  >
+                    <UploadCloud className="w-4 h-4 text-[#123B32]" />
+                    <span>{isUploadingMedia ? 'Uploading...' : 'Click to attach images or PDF certificates'}</span>
                     <input
-                      type="file"
                       id="media-upload-input"
+                      type="file"
                       multiple
                       accept="image/jpeg,image/png,image/webp,application/pdf"
                       onChange={handleFileUpload}
-                      className="hidden"
                       disabled={isUploadingMedia}
+                      className="hidden"
                     />
-                    <label
-                      htmlFor="media-upload-input"
-                      className="cursor-pointer inline-flex flex-col items-center justify-center space-y-2"
-                    >
-                      <div className="w-12 h-12 bg-white rounded-full shadow-sm flex items-center justify-center text-[#0D3826]">
-                        {isUploadingMedia ? (
-                          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-[#0D3826]" />
-                        ) : (
-                          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                          </svg>
-                        )}
-                      </div>
-                      <span className="text-sm font-semibold text-gray-800">
-                        {isUploadingMedia ? 'Uploading media...' : 'Click to select files or drag and drop'}
-                      </span>
-                      <span className="text-xs text-gray-400">
-                        Images (max 5MB) & Documents / Certificates (max 10MB)
-                      </span>
-                    </label>
-                  </div>
+                  </label>
 
-                  {/* Uploaded Media List */}
                   {mediaList.length > 0 && (
-                    <div className="space-y-3 pt-2">
-                      <span className="text-xs font-bold uppercase tracking-wider text-gray-700 block">
-                        Attached Files ({mediaList.length})
-                      </span>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        {mediaList.map((m, idx) => (
-                          <div
-                            key={idx}
-                            className={`p-3.5 rounded-xl border flex items-center justify-between ${
-                              m.isPrimary ? 'border-[#D4AF37] bg-[#FAF8F5]' : 'border-gray-200 bg-white'
-                            }`}
-                          >
-                            <div className="flex items-center space-x-3 overflow-hidden">
-                              <span className="p-2 rounded-lg bg-gray-100 text-gray-600 text-xs font-bold uppercase">
-                                {m.mediaType === 1 ? 'IMG' : 'DOC'}
-                              </span>
-                              <div className="truncate">
-                                <p className="text-xs font-semibold text-gray-900 truncate">{m.fileName}</p>
-                                <p className="text-[10px] text-gray-400">
-                                  {(m.fileSize / 1024).toFixed(1)} KB &bull; {m.contentType}
-                                </p>
-                              </div>
-                            </div>
-
-                            <div className="flex items-center space-x-2 flex-shrink-0">
-                              {m.mediaType === 1 && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleSetPrimaryMedia(idx)}
-                                  className={`px-2 py-1 text-[11px] rounded font-semibold transition-colors ${
-                                    m.isPrimary
-                                      ? 'bg-[#D4AF37] text-white'
-                                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                                  }`}
-                                >
-                                  {m.isPrimary ? 'Primary' : 'Set Primary'}
-                                </button>
-                              )}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                      {mediaList.map((m, idx) => (
+                        <div
+                          key={idx}
+                          className={`px-3 py-2 rounded-lg border text-xs flex items-center justify-between ${
+                            m.isPrimary ? 'border-[#B89A60] bg-[#F8F7F4]' : 'border-[#E2E6E3] bg-white'
+                          }`}
+                        >
+                          <span className="truncate font-medium text-[#202824]">{m.fileName}</span>
+                          <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
+                            {m.mediaType === 1 && (
                               <button
                                 type="button"
-                                onClick={() => handleRemoveMedia(idx)}
-                                className="text-red-500 hover:text-red-700 p-1"
-                                title="Remove file"
+                                onClick={() => handleSetPrimaryMedia(idx)}
+                                className={`px-1.5 py-0.5 text-[10px] rounded font-semibold ${
+                                  m.isPrimary ? 'bg-[#B89A60] text-white' : 'bg-gray-100 text-gray-600'
+                                }`}
                               >
-                                &times;
+                                {m.isPrimary ? 'Primary' : 'Set Primary'}
                               </button>
-                            </div>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveMedia(idx)}
+                              className="text-rose-500 hover:text-rose-700"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
                           </div>
-                        ))}
-                      </div>
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>
-              )}
+              </div>
+            </div>
 
-              {/* STEP 8: Review & Submit */}
-              {currentStep === 8 && (
-                <div className="space-y-6">
-                  <div>
-                    <h2 className="text-lg font-bold text-gray-900">Step 8 — Review & Final Confirmation</h2>
-                    <p className="text-xs text-gray-500">
-                      Verify all physical parameters before saving. Tag and barcode will be automatically generated.
-                    </p>
+            {/* Right Column: Sticky Live Summary & Submit */}
+            <div className="lg:col-span-4 lg:sticky lg:top-20 space-y-4">
+              <div className="bg-white border border-[#E2E6E3] rounded-xl p-5 shadow-xs space-y-4">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-[#123B32] border-b border-[#E2E6E3] pb-2.5">
+                  Item Summary
+                </h3>
+
+                <div className="space-y-2.5 text-xs">
+                  <div className="flex justify-between">
+                    <span className="text-[#69736E]">Item</span>
+                    <span className="font-semibold text-[#202824] text-right truncate max-w-[180px]">
+                      {name.trim() || '—'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-[#69736E]">Classification</span>
+                    <span className="font-medium text-[#202824] text-right">
+                      {[selectedMaterial?.code, selectedCategory?.name, selectedPurity?.code]
+                        .filter(Boolean)
+                        .join(' • ') || '—'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-[#69736E]">Branch / Location</span>
+                    <span className="font-medium text-[#202824] text-right">
+                      {selectedBranch ? `${selectedBranch.code}` : '—'}
+                      {selectedLocation ? ` • ${selectedLocation.name}` : ''}
+                    </span>
                   </div>
 
-                  <div className="border border-gray-200 rounded-2xl divide-y divide-gray-100 overflow-hidden text-sm">
-                    {/* Section 1 */}
-                    <div className="p-4 bg-white flex justify-between items-center">
-                      <div>
-                        <span className="text-[11px] font-bold uppercase tracking-wider text-gray-400 block">Branch & Location</span>
-                        <p className="font-semibold text-gray-900">{selectedBranch?.name} ({selectedBranch?.code})</p>
-                        <p className="text-xs text-gray-600">{selectedLocation?.name} [{selectedLocation?.locationType}]</p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setCurrentStep(1)}
-                        className="text-xs font-semibold text-[#0D3826] hover:underline"
-                      >
-                        Edit
-                      </button>
+                  <div className="border-t border-[#E2E6E3] pt-2.5 space-y-1.5 font-mono">
+                    <div className="flex justify-between">
+                      <span className="text-[#69736E] font-sans">Gross Weight</span>
+                      <span>{parsedGross.toFixed(4)} g</span>
                     </div>
+                    <div className="flex justify-between">
+                      <span className="text-[#69736E] font-sans">Stone Weight</span>
+                      <span>{parsedStone.toFixed(4)} g</span>
+                    </div>
+                    <div className="flex justify-between font-bold text-[#123B32]">
+                      <span className="font-sans">Net Weight</span>
+                      <span>{netWeightPreview} g</span>
+                    </div>
+                  </div>
 
-                    {/* Section 2 */}
-                    <div className="p-4 bg-white flex justify-between items-center">
-                      <div>
-                        <span className="text-[11px] font-bold uppercase tracking-wider text-gray-400 block">Item Identity</span>
-                        <p className="font-semibold text-gray-900">{name}</p>
-                        <p className="text-xs text-gray-600">
-                          SKU: {itemCode || 'Auto Tag'} &bull; Pieces: {pieceCount}
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setCurrentStep(2)}
-                        className="text-xs font-semibold text-[#0D3826] hover:underline"
-                      >
-                        Edit
-                      </button>
-                    </div>
-
-                    {/* Section 3 */}
-                    <div className="p-4 bg-white flex justify-between items-center">
-                      <div>
-                        <span className="text-[11px] font-bold uppercase tracking-wider text-gray-400 block">Classification</span>
-                        <p className="font-semibold text-gray-900">
-                          {selectedMaterial?.name} &bull; {selectedCategory?.name} &bull; {selectedPurity?.name} ({selectedPurity?.karatValue}K)
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setCurrentStep(3)}
-                        className="text-xs font-semibold text-[#0D3826] hover:underline"
-                      >
-                        Edit
-                      </button>
-                    </div>
-
-                    {/* Section 4 */}
-                    <div className="p-4 bg-white flex justify-between items-center">
-                      <div>
-                        <span className="text-[11px] font-bold uppercase tracking-wider text-gray-400 block">Weights</span>
-                        <p className="font-mono text-sm text-gray-900 font-semibold">
-                          Gross: {parsedGross.toFixed(4)}g | Stone: {parsedStone.toFixed(4)}g | Net:{' '}
-                          <span className="text-[#0D3826] font-bold">{netWeightPreview}g</span>
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setCurrentStep(4)}
-                        className="text-xs font-semibold text-[#0D3826] hover:underline"
-                      >
-                        Edit
-                      </button>
-                    </div>
-
-                    {/* Section 5 */}
-                    <div className="p-4 bg-white flex justify-between items-center">
-                      <div>
-                        <span className="text-[11px] font-bold uppercase tracking-wider text-gray-400 block">Making Charge</span>
-                        <p className="font-semibold text-gray-900">
-                          Rs. {parseFloat(makingChargeValue || '0').toLocaleString('en-LK', { minimumFractionDigits: 2 })}{' '}
-                          <span className="text-xs font-normal text-gray-500">
-                            ({makingChargeMethod === 1 ? 'Per Gram' : 'Per Item'})
-                          </span>
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setCurrentStep(5)}
-                        className="text-xs font-semibold text-[#0D3826] hover:underline"
-                      >
-                        Edit
-                      </button>
-                    </div>
-
-                    {/* Section 6 & 7 */}
-                    <div className="p-4 bg-white flex justify-between items-center">
-                      <div>
-                        <span className="text-[11px] font-bold uppercase tracking-wider text-gray-400 block">Specs & Media</span>
-                        <p className="text-xs text-gray-600">
-                          Specifications configured: {selectedSpecs.filter((s) => s.specificationOptionId || s.customValue).length} &bull; Attached media: {mediaList.length} files
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setCurrentStep(6)}
-                        className="text-xs font-semibold text-[#0D3826] hover:underline"
-                      >
-                        Edit
-                      </button>
-                    </div>
+                  <div className="border-t border-[#E2E6E3] pt-2.5 flex justify-between">
+                    <span className="text-[#69736E]">Making Charge</span>
+                    <span className="font-mono font-semibold text-[#202824]">
+                      {currency} {(parseFloat(makingChargeValue) || 0).toLocaleString('en-LK', { minimumFractionDigits: 2 })}{' '}
+                      <span className="text-[10px] text-[#69736E] font-sans">
+                        ({makingChargeMethod === 1 ? '/g' : 'fixed'})
+                      </span>
+                    </span>
                   </div>
                 </div>
-              )}
 
-              {/* Bottom Stepper Navigation */}
-              <div className="flex items-center justify-between pt-6 border-t border-gray-100">
-                <button
-                  type="button"
-                  onClick={handleBack}
-                  disabled={currentStep === 1 || isSubmitting}
-                  className="px-5 py-2.5 rounded-xl border border-gray-300 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  &larr; Back
-                </button>
+                <p className="text-[11px] text-[#69736E] bg-[#F8F7F4] p-2.5 rounded-lg border border-[#E2E6E3]">
+                  Tag number and Code-128 barcode are generated automatically when you save.
+                </p>
 
-                {currentStep < totalSteps ? (
-                  <button
-                    type="button"
-                    onClick={handleNext}
-                    className="px-6 py-2.5 rounded-xl bg-[#0D3826] text-white text-sm font-bold hover:bg-[#09261a] transition-colors shadow-sm"
+                <div className="space-y-2 pt-1">
+                  <Button
+                    type="submit"
+                    variant="primary"
+                    size="lg"
+                    isLoading={isSubmitting}
+                    disabled={hasWeightError}
+                    className="w-full"
+                    leftIcon={<CheckCircle2 className="w-4 h-4" />}
                   >
-                    Continue &rarr;
-                  </button>
-                ) : (
-                  <button
+                    Create Jewellery Item
+                  </Button>
+                  <Button
                     type="button"
-                    onClick={handleSubmit}
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleReset}
                     disabled={isSubmitting}
-                    className="px-7 py-3 rounded-xl bg-[#0D3826] text-[#D4AF37] font-bold text-sm hover:bg-[#09261a] transition-all shadow-md flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full"
                   >
-                    {isSubmitting ? (
-                      <>
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[#D4AF37]" />
-                        <span>Creating Inventory Item...</span>
-                      </>
-                    ) : (
-                      <>
-                        <span>Confirm & Create Item</span>
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                        </svg>
-                      </>
-                    )}
-                  </button>
-                )}
+                    Clear Form
+                  </Button>
+                </div>
               </div>
-            </form>
-          )}
-        </div>
+            </div>
+          </form>
+        )}
       </div>
     </AppLayout>
   );
