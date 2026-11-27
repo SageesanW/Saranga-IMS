@@ -13,6 +13,9 @@ public interface IPosService
     Task<PosInvoiceDto> AddLineToDraftAsync(Guid invoiceId, AddPosInvoiceLineRequest request, CancellationToken cancellationToken = default);
     Task<PosInvoiceDto> UpdateLineInDraftAsync(Guid invoiceId, Guid lineId, UpdatePosInvoiceLineRequest request, CancellationToken cancellationToken = default);
     Task<PosInvoiceDto> RemoveLineFromDraftAsync(Guid invoiceId, Guid lineId, CancellationToken cancellationToken = default);
+    Task<PosInvoiceDto> ConfirmNegotiatedPricingAsync(Guid invoiceId, ConfirmNegotiatedInvoiceTotalRequest request, CancellationToken cancellationToken = default);
+    Task<CheckInvoiceRatesStatusResponse> CheckRatesStatusAsync(Guid invoiceId, CancellationToken cancellationToken = default);
+    Task<RefreshInvoiceReferenceRatesResponse> RefreshReferenceRatesAsync(Guid invoiceId, CancellationToken cancellationToken = default);
     Task<PosInvoiceDto> FinalizeInvoiceAsync(Guid invoiceId, FinalizePosInvoiceRequest request, string? idempotencyKey = null, CancellationToken cancellationToken = default);
     Task<PosInvoiceDto> CancelDraftInvoiceAsync(Guid invoiceId, string reason, CancellationToken cancellationToken = default);
 }

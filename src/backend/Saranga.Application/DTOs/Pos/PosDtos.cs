@@ -28,7 +28,18 @@ public record PosItemLookupResultDto(
     Guid? CompositionId,
     string? CompositionName,
     string? CompositionTagNumber,
-    string? CompositionType
+    string? CompositionType,
+    string? PhotographUrl = null,
+    string RateSource = "",
+    Guid? MetalRateId = null,
+    DateTimeOffset? RateEffectiveFrom = null,
+    DateTimeOffset? QuotedAt = null,
+    int MakingChargeMethod = 1,
+    string MakingChargeMethodName = "PER_GRAM",
+    decimal MakingChargeValue = 0m,
+    decimal GoldMaterialValue = 0m,
+    decimal TotalMakingCharge = 0m,
+    decimal ExpectedSellingPrice = 0m
 );
 
 public record PosInvoiceDto(
@@ -60,7 +71,14 @@ public record PosInvoiceDto(
     DateTimeOffset CreatedAt,
     DateTimeOffset? FinalizedAt,
     List<PosInvoiceLineDto> Lines,
-    List<PosInvoicePaymentDto> Payments
+    List<PosInvoicePaymentDto> Payments,
+    decimal CombinedExpectedTotal = 0m,
+    decimal CombinedAgreedTotal = 0m,
+    decimal ItemLevelPriceDifference = 0m,
+    decimal InvoiceAdjustmentAmount = 0m,
+    decimal FinalNegotiatedInvoicePrice = 0m,
+    bool IsInvoicePriceConfirmed = false,
+    bool HasRateUpdates = false
 );
 
 public record PosInvoiceLineDto(
@@ -86,7 +104,18 @@ public record PosInvoiceLineDto(
     decimal UnitPrice,
     int Quantity,
     decimal LineTotal,
-    string? Notes
+    string? Notes,
+    Guid? MetalRateId = null,
+    string? RateSource = null,
+    DateTimeOffset? RateEffectiveAt = null,
+    DateTimeOffset? QuotedAt = null,
+    int MakingChargeMethod = 1,
+    string MakingChargeMethodName = "PER_GRAM",
+    decimal MakingChargeValue = 0m,
+    decimal ItemPriceDifference = 0m,
+    decimal AllocatedInvoiceAdjustment = 0m,
+    decimal NetLineTotal = 0m,
+    string? PhotographUrl = null
 );
 
 public record PosInvoicePaymentDto(
@@ -123,13 +152,32 @@ public record QuickCreateCustomerAndDraftRequest(
 
 public record AddPosInvoiceLineRequest(
     string ItemBarcodeOrTag,
-    decimal? NegotiatedUnitPrice,
-    string? Notes
+    decimal? NegotiatedUnitPrice = null,
+    decimal? AgreedSellingPrice = null,
+    string? Notes = null
 );
 
 public record UpdatePosInvoiceLineRequest(
-    decimal NegotiatedUnitPrice,
-    string? Notes
+    decimal? NegotiatedUnitPrice = null,
+    decimal? AgreedSellingPrice = null,
+    string? Notes = null
+);
+
+public record ConfirmNegotiatedInvoiceTotalRequest(
+    decimal FinalNegotiatedTotal,
+    string? Notes = null
+);
+
+public record CheckInvoiceRatesStatusResponse(
+    bool HasRateUpdates,
+    List<string> ChangedPurities,
+    string Message
+);
+
+public record RefreshInvoiceReferenceRatesResponse(
+    PosInvoiceDto Invoice,
+    int LinesRefreshedCount,
+    string Message
 );
 
 public record FinalizePosInvoiceRequest(

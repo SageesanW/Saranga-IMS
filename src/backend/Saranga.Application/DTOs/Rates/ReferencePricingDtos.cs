@@ -36,5 +36,7 @@ public record ReferencePriceBreakdownDto(
     decimal VatRatePercentage,
     decimal VatAmount,
     decimal ReferenceTotal,
-    DateTimeOffset CalculatedAt
+    DateTimeOffset CalculatedAt,
+    Guid? MetalRateId = null,
+    DateTimeOffset? RateEffectiveFrom = null
 );

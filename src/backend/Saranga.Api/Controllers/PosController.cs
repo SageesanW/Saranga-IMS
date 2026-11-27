@@ -83,6 +83,30 @@ public class PosController : ControllerBase
         return Ok(result);
     }
 
+    [HttpPost("invoices/{id:guid}/negotiate-total")]
+    [Authorize(Policy = Permissions.PosCreateSale)]
+    public async Task<IActionResult> NegotiateInvoiceTotal(Guid id, [FromBody] ConfirmNegotiatedInvoiceTotalRequest request, CancellationToken cancellationToken)
+    {
+        var result = await _posService.ConfirmNegotiatedPricingAsync(id, request, cancellationToken);
+        return Ok(result);
+    }
+
+    [HttpGet("invoices/{id:guid}/rates-status")]
+    [Authorize(Policy = Permissions.PosView)]
+    public async Task<IActionResult> CheckRatesStatus(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await _posService.CheckRatesStatusAsync(id, cancellationToken);
+        return Ok(result);
+    }
+
+    [HttpPost("invoices/{id:guid}/refresh-rates")]
+    [Authorize(Policy = Permissions.PosCreateSale)]
+    public async Task<IActionResult> RefreshReferenceRates(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await _posService.RefreshReferenceRatesAsync(id, cancellationToken);
+        return Ok(result);
+    }
+
     [HttpPost("invoices/{id:guid}/finalize")]
     [Authorize(Policy = Permissions.PosCreateSale)]
     public async Task<IActionResult> FinalizeInvoice(

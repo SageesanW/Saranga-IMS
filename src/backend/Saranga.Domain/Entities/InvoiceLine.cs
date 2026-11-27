@@ -30,6 +30,16 @@ public class InvoiceLine : BaseEntity
     public decimal ReferenceMakingCharge { get; set; }
     public decimal ReferencePrice { get; set; }
 
+    // Module 13: Rate Snapshot and Pricing Details
+    public Guid? MetalRateId { get; set; }
+    public string? RateSource { get; set; }
+    public DateTimeOffset? RateEffectiveAt { get; set; }
+    public DateTimeOffset? QuotedAt { get; set; }
+    public MakingChargeMethod MakingChargeMethodSnapshot { get; set; } = MakingChargeMethod.PerGram;
+    public decimal MakingChargeValueSnapshot { get; set; }
+    public decimal AllocatedInvoiceAdjustment { get; set; }
+    public decimal NetLineTotal { get; set; }
+
     public decimal UnitPrice { get; set; }
     public int Quantity { get; set; } = 1;
     public decimal LineTotal { get; set; }

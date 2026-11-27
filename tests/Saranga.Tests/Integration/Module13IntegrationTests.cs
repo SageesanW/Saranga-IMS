@@ -892,4 +892,242 @@ public class Module13IntegrationTests : IClassFixture<WebApplicationFactory<Prog
         var errorBody = await fin2Res.Content.ReadAsStringAsync();
         Assert.Contains("VAT calculation treatment", errorBody);
     }
+
+    [Fact]
+    public async Task Pos_11_LiveGoldRateIntegration_AndNegotiatedPricingWorkflow()
+    {
+        var client = _factory.CreateClient();
+        var token = await LoginAsOwnerAsync(client);
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var data = await SetupSeedDataAsync("11_PRICING");
+
+        // 1. Authoritative Gold Rate & Expected Price Calculation
+        // Item 1: 8g Net Weight, Rate = 25,000 => Gold Value = 200,000
+        // Making Charge = PerGram(1500) => 8 * 1500 = 12,000
+        // Expected Selling Price = 212,000.00
+        var lookup1Res = await client.GetAsync($"/api/pos/lookup?shiftId={data.Shift.Id}&query={data.InvItem1.TagNumber}");
+        Assert.Equal(HttpStatusCode.OK, lookup1Res.StatusCode);
+        var lookup1 = await lookup1Res.Content.ReadFromJsonAsync<PosItemLookupResultDto>(JsonOptions);
+        Assert.NotNull(lookup1);
+        Assert.Equal(25000.00m, lookup1.ActiveRatePerGram);
+        Assert.Equal(200000.00m, lookup1.GoldMaterialValue);
+        Assert.Equal(12000.00m, lookup1.TotalMakingCharge);
+        Assert.Equal(212000.00m, lookup1.ExpectedSellingPrice);
+
+        // Item 2: 5g Net Weight, Rate = 25,000 => Gold Value = 125,000
+        // Making Charge = PerItem(10,000) => 1 * 10,000 = 10,000
+        // Expected Selling Price = 135,000.00
+        var lookup2Res = await client.GetAsync($"/api/pos/lookup?shiftId={data.Shift.Id}&query={data.InvItem2.TagNumber}");
+        Assert.Equal(HttpStatusCode.OK, lookup2Res.StatusCode);
+        var lookup2 = await lookup2Res.Content.ReadFromJsonAsync<PosItemLookupResultDto>(JsonOptions);
+        Assert.NotNull(lookup2);
+        Assert.Equal(25000.00m, lookup2.ActiveRatePerGram);
+        Assert.Equal(125000.00m, lookup2.GoldMaterialValue);
+        Assert.Equal(10000.00m, lookup2.TotalMakingCharge);
+        Assert.Equal(135000.00m, lookup2.ExpectedSellingPrice);
+
+        // 2. Reject lookup with descriptive error if active metal rate is unavailable (No silent fallback)
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var rate = await db.MetalRates.FirstAsync(r => r.BranchId == data.Branch.Id);
+            rate.IsActive = false;
+            await db.SaveChangesAsync();
+        }
+        var missingRateRes = await client.GetAsync($"/api/pos/lookup?shiftId={data.Shift.Id}&query={data.InvItem1.TagNumber}");
+        Assert.Equal(HttpStatusCode.BadRequest, missingRateRes.StatusCode);
+        var missingRateError = await missingRateRes.Content.ReadAsStringAsync();
+        Assert.Contains("operational gold rate", missingRateError);
+        Assert.Contains("not configured or unavailable", missingRateError);
+
+        // Restore active metal rate
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var rate = await db.MetalRates.FirstAsync(r => r.BranchId == data.Branch.Id);
+            rate.IsActive = true;
+            await db.SaveChangesAsync();
+        }
+
+        // 3. Create Draft & Add Items with Item-Level Negotiation
+        var draftRes = await client.PostAsJsonAsync("/api/pos/drafts", new CreatePosDraftInvoiceRequest(
+            ShiftId: data.Shift.Id,
+            CustomerId: data.Customer.Id,
+            Notes: "Live Gold Rate & Negotiation Test"
+        ));
+        Assert.Equal(HttpStatusCode.Created, draftRes.StatusCode);
+        var draft = await draftRes.Content.ReadFromJsonAsync<PosInvoiceDto>(JsonOptions);
+        Assert.NotNull(draft);
+
+        // Add Item 1 accepting Expected Price (212,000.00)
+        var addLine1Res = await client.PostAsJsonAsync($"/api/pos/invoices/{draft.Id}/lines", new AddPosInvoiceLineRequest(
+            ItemBarcodeOrTag: data.InvItem1.TagNumber,
+            AgreedSellingPrice: 212000.00m,
+            Notes: "Accepted expected price"
+        ));
+        Assert.Equal(HttpStatusCode.OK, addLine1Res.StatusCode);
+        draft = await addLine1Res.Content.ReadFromJsonAsync<PosInvoiceDto>(JsonOptions);
+        Assert.NotNull(draft);
+        Assert.Single(draft.Lines);
+        Assert.Equal(212000.00m, draft.Lines[0].UnitPrice);
+        Assert.Equal(212000.00m, draft.Lines[0].ReferencePrice);
+        Assert.Equal(0m, draft.Lines[0].ItemPriceDifference);
+        Assert.Equal(25000.00m, draft.Lines[0].ReferenceRatePerGram);
+
+        // Add Item 2 with negotiated price ABOVE expected (Agreed: 140,000 vs Expected: 135,000)
+        var addLine2Res = await client.PostAsJsonAsync($"/api/pos/invoices/{draft.Id}/lines", new AddPosInvoiceLineRequest(
+            ItemBarcodeOrTag: data.InvItem2.TagNumber,
+            AgreedSellingPrice: 140000.00m,
+            Notes: "Negotiated above expected"
+        ));
+        Assert.Equal(HttpStatusCode.OK, addLine2Res.StatusCode);
+        draft = await addLine2Res.Content.ReadFromJsonAsync<PosInvoiceDto>(JsonOptions);
+        Assert.NotNull(draft);
+        Assert.Equal(2, draft.Lines.Count);
+        var line2 = draft.Lines.First(l => l.InventoryItemId == data.InvItem2.Id);
+        Assert.Equal(140000.00m, line2.UnitPrice);
+        Assert.Equal(135000.00m, line2.ReferencePrice);
+        Assert.Equal(5000.00m, line2.ItemPriceDifference);
+
+        // 4. Verify Combined Totals
+        // Combined Expected = 212,000 + 135,000 = 347,000.00
+        // Combined Agreed = 212,000 + 140,000 = 352,000.00
+        // Item-Level Difference = +5,000.00
+        Assert.Equal(347000.00m, draft.CombinedExpectedTotal);
+        Assert.Equal(352000.00m, draft.CombinedAgreedTotal);
+        Assert.Equal(5000.00m, draft.ItemLevelPriceDifference);
+        Assert.False(draft.IsInvoicePriceConfirmed);
+
+        // 5. Overall Invoice Negotiation
+        // Negotiate final invoice total to 350,000.00 (giving customer an additional 2,000 discount)
+        var negRes = await client.PostAsJsonAsync($"/api/pos/invoices/{draft.Id}/negotiate-total", new ConfirmNegotiatedInvoiceTotalRequest(
+            FinalNegotiatedTotal: 350000.00m,
+            Notes: "Agreed on round 350K"
+        ));
+        Assert.Equal(HttpStatusCode.OK, negRes.StatusCode);
+        draft = await negRes.Content.ReadFromJsonAsync<PosInvoiceDto>(JsonOptions);
+        Assert.NotNull(draft);
+        Assert.True(draft.IsInvoicePriceConfirmed);
+        Assert.Equal(350000.00m, draft.TotalAmount);
+        Assert.Equal(-2000.00m, draft.InvoiceAdjustmentAmount);
+        Assert.Equal(2000.00m, draft.DiscountAmount);
+
+        // Verify proportional allocation across lines with exact rounding remainder
+        var totalNetLines = draft.Lines.Sum(l => l.NetLineTotal);
+        Assert.Equal(350000.00m, totalNetLines);
+        var totalAllocatedAdj = draft.Lines.Sum(l => l.AllocatedInvoiceAdjustment);
+        Assert.Equal(-2000.00m, totalAllocatedAdj);
+        // Original agreed line prices must remain intact!
+        Assert.Equal(212000.00m, draft.Lines.First(l => l.InventoryItemId == data.InvItem1.Id).UnitPrice);
+        Assert.Equal(140000.00m, draft.Lines.First(l => l.InventoryItemId == data.InvItem2.Id).UnitPrice);
+
+        // 6. Cart Changes Invalidate Invoice Confirmation
+        // Edit line 2 to 138,000.00
+        var editLineRes = await client.PutAsJsonAsync($"/api/pos/invoices/{draft.Id}/lines/{line2.Id}", new UpdatePosInvoiceLineRequest(
+            AgreedSellingPrice: 138000.00m,
+            Notes: "Readjusted line 2"
+        ));
+        Assert.Equal(HttpStatusCode.OK, editLineRes.StatusCode);
+        draft = await editLineRes.Content.ReadFromJsonAsync<PosInvoiceDto>(JsonOptions);
+        Assert.NotNull(draft);
+        // Confirmation is invalidated!
+        Assert.False(draft.IsInvoicePriceConfirmed);
+        Assert.Equal(0m, draft.InvoiceAdjustmentAmount);
+        Assert.Equal(350000.00m, draft.CombinedAgreedTotal); // 212,000 + 138,000 = 350,000
+
+        // 7. Gold Rate Updates and Quote Protection
+        // Update operational metal rate in database to simulate external price change (e.g. 25,000 -> 26,000)
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var rate = await db.MetalRates.FirstAsync(r => r.BranchId == data.Branch.Id);
+            rate.RatePerGram = 26000.00m;
+            rate.EffectiveFrom = DateTimeOffset.UtcNow.AddMinutes(5);
+            await db.SaveChangesAsync();
+        }
+
+        // Check rates status
+        var statusRes = await client.GetAsync($"/api/pos/invoices/{draft.Id}/rates-status");
+        Assert.Equal(HttpStatusCode.OK, statusRes.StatusCode);
+        var status = await statusRes.Content.ReadFromJsonAsync<CheckInvoiceRatesStatusResponse>(JsonOptions);
+        Assert.NotNull(status);
+        Assert.True(status.HasRateUpdates);
+
+        // Verify existing cart lines still preserve original quoted rate and agreed price!
+        var recheckRes = await client.GetAsync($"/api/pos/invoices/{draft.Id}");
+        draft = await recheckRes.Content.ReadFromJsonAsync<PosInvoiceDto>(JsonOptions);
+        Assert.NotNull(draft);
+        var checkLine1 = draft.Lines.First(l => l.InventoryItemId == data.InvItem1.Id);
+        Assert.Equal(25000.00m, checkLine1.ReferenceRatePerGram);
+        Assert.Equal(212000.00m, checkLine1.UnitPrice);
+
+        // Explicit reference rate refresh
+        var refreshRes = await client.PostAsync($"/api/pos/invoices/{draft.Id}/refresh-rates", null);
+        Assert.Equal(HttpStatusCode.OK, refreshRes.StatusCode);
+        var refreshResult = await refreshRes.Content.ReadFromJsonAsync<RefreshInvoiceReferenceRatesResponse>(JsonOptions);
+        Assert.NotNull(refreshResult);
+        Assert.Equal(2, refreshResult.LinesRefreshedCount);
+
+        // Verify reference rate updated to 26,000 but agreed prices remained unchanged
+        draft = refreshResult.Invoice;
+        var refreshedLine1 = draft.Lines.First(l => l.InventoryItemId == data.InvItem1.Id);
+        Assert.Equal(26000.00m, refreshedLine1.ReferenceRatePerGram);
+        Assert.Equal(208000.00m, refreshedLine1.ReferenceMaterialValue); // 8 * 26,000
+        Assert.Equal(220000.00m, refreshedLine1.ReferencePrice); // 208,000 + 12,000 making charge
+        Assert.Equal(212000.00m, refreshedLine1.UnitPrice); // Preserved agreed selling price!
+
+        // 8. Finalize Invoice Settlement (Split Payment: Cash 200,000 + Card 150,000)
+        // Confirm final negotiated total to 350,000
+        await client.PostAsJsonAsync($"/api/pos/invoices/{draft.Id}/negotiate-total", new ConfirmNegotiatedInvoiceTotalRequest(
+            FinalNegotiatedTotal: 350000.00m,
+            Notes: "Final settlement confirmation"
+        ));
+
+        var finalizeReq = new HttpRequestMessage(HttpMethod.Post, $"/api/pos/invoices/{draft.Id}/finalize")
+        {
+            Content = JsonContent.Create(new FinalizePosInvoiceRequest(
+                Payments: new List<PosPaymentRequest>
+                {
+                    new(Method: PaymentMethod.Cash, Amount: 200000.00m, CashTendered: 200000.00m, ReferenceNumber: null, CardType: null, CardLast4: null, BankName: null, Notes: null),
+                    new(Method: PaymentMethod.Card, Amount: 150000.00m, CashTendered: null, ReferenceNumber: "REF-CARD-991", CardType: "VISA", CardLast4: "4321", BankName: null, Notes: null)
+                },
+                DiscountAmount: null,
+                Notes: "Settled via Split Tender"
+            ))
+        };
+        var idempotencyKey = $"POS-NEG-{Guid.NewGuid():N}";
+        finalizeReq.Headers.Add("Idempotency-Key", idempotencyKey);
+        var finalizeRes = await client.SendAsync(finalizeReq);
+        Assert.Equal(HttpStatusCode.OK, finalizeRes.StatusCode);
+        var finalizedInvoice = await finalizeRes.Content.ReadFromJsonAsync<PosInvoiceDto>(JsonOptions);
+        Assert.NotNull(finalizedInvoice);
+        Assert.Equal((int)InvoiceStatus.Finalized, finalizedInvoice.Status);
+        Assert.Equal(350000.00m, finalizedInvoice.TotalAmount);
+        Assert.Equal(200000.00m, finalizedInvoice.NetCashPaid);
+        Assert.Equal(350000.00m, finalizedInvoice.TotalPaidAmount);
+
+        // 9. Verify Atomic Database Commit
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+            // Items transitioned to Sold
+            var dbItem1 = await db.InventoryItems.FindAsync(data.InvItem1.Id);
+            var dbItem2 = await db.InventoryItems.FindAsync(data.InvItem2.Id);
+            Assert.Equal(InventoryStatus.Sold, dbItem1!.Status);
+            Assert.Equal(InventoryStatus.Sold, dbItem2!.Status);
+
+            // Cash Ledger posted net cash tender
+            var cashEntries = await db.CashLedgerEntries
+                .Where(e => e.BranchId == data.Branch.Id)
+                .ToListAsync();
+            Assert.Contains(cashEntries, e => e.Direction == CashLedgerEntryDirection.In && e.Amount == 200000.00m);
+
+            // Idempotency record stored
+            var idemp = await db.IdempotencyRecords
+                .FirstOrDefaultAsync(r => r.Key == idempotencyKey);
+            Assert.NotNull(idemp);
+        }
+    }
 }
