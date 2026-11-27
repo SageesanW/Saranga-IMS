@@ -6,6 +6,7 @@ import AppLayout from '@/components/AppLayout';
 import { useAuth } from '@/lib/auth-context';
 import { useBranch } from '@/lib/branch-context';
 import { BarcodeDisplay } from '@/components/BarcodeDisplay';
+import { BulkImportModal } from '@/components/inventory/BulkImportModal';
 import { Gem, Layers, UploadCloud, Scan, Plus, Search, Eye, Edit, Trash2, X } from 'lucide-react';
 import {
   InventoryItem,
@@ -81,6 +82,7 @@ export default function InventoryPage() {
 
   // Create / Edit Modal State
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
+  const [isBulkImportModalOpen, setIsBulkImportModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
 
   // Module 6: View Mode & Compositions State
@@ -443,14 +445,15 @@ export default function InventoryPage() {
 
           <div className="flex items-center space-x-2">
             {canBulkImport && (
-              <Link
-                href="/inventory/import"
+              <button
+                type="button"
+                onClick={() => setIsBulkImportModalOpen(true)}
                 className="inline-flex items-center space-x-1.5 px-3 py-2 bg-white text-[#123B32] border border-[#123B32]/30 hover:bg-green-50 text-sm font-semibold rounded-lg shadow-sm transition"
                 title="Bulk import inventory items from Excel or CSV"
               >
                 <UploadCloud className="w-4 h-4 mr-1.5" />
                 <span>Bulk Import</span>
-              </Link>
+              </button>
             )}
 
             <div className="relative">
@@ -519,10 +522,13 @@ export default function InventoryPage() {
                 {canBulkImport && (
                   <>
                     <div className="border-t border-gray-100 my-1" />
-                    <Link
-                      href="/inventory/import"
-                      onClick={() => setIsAddMenuOpen(false)}
-                      className="flex items-start px-4 py-2.5 hover:bg-gray-50 transition"
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsAddMenuOpen(false);
+                        setIsBulkImportModalOpen(true);
+                      }}
+                      className="w-full text-left flex items-start px-4 py-2.5 hover:bg-gray-50 transition"
                     >
                       <UploadCloud className="w-4 h-4 mr-2.5 text-[#123B32]" />
                       <div>
@@ -532,7 +538,7 @@ export default function InventoryPage() {
                         </div>
                         <div className="text-[11px] text-gray-500">Digitize and batch-create multiple items from spreadsheet.</div>
                       </div>
-                    </Link>
+                    </button>
                   </>
                 )}
               </div>
@@ -1698,6 +1704,12 @@ export default function InventoryPage() {
             </div>
           </div>
         )}
+
+        <BulkImportModal
+          isOpen={isBulkImportModalOpen}
+          onClose={() => setIsBulkImportModalOpen(false)}
+          onSuccess={() => loadInventory(1)}
+        />
       </div>
     </AppLayout>
   );

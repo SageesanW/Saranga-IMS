@@ -63,7 +63,7 @@ export const Modal: React.FC<ModalProps> = ({
         className={`relative w-full ${maxWidthStyles[maxWidth]} bg-white rounded-xl shadow-2xl border border-[#E2E6E3] overflow-hidden z-10 my-8`}
       >
         {/* Header */}
-        <div className="px-6 py-4.5 border-b border-[#E2E6E3] bg-[#F8F7F4]/60 flex items-start justify-between">
+        <div className="px-6 pt-6 pb-4 border-b border-[#E2E6E3] bg-[#F8F7F4]/60 flex items-start justify-between">
           <div>
             <h3 className="text-base font-bold text-[#123B32]">{title}</h3>
             {description && (

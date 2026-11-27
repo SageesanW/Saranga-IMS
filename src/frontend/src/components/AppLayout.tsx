@@ -111,7 +111,6 @@ export default function AppLayout({ children }: AppLayoutProps) {
       items: [
         { name: 'Jewellery Items', href: '/inventory', icon: Gem },
         { name: 'Assemblies & Sets', href: '/inventory/compositions/new', icon: Layers },
-        { name: 'Bulk Import', href: '/inventory/import', icon: UploadCloud },
         { name: 'Physical Count', href: '/inventory/count', icon: ClipboardCheck },
         { name: 'Attributes Master', href: '/attributes', icon: Sliders },
       ],
