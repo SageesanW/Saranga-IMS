@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import AppLayout from '@/components/AppLayout';
 import { useAuth } from '@/lib/auth-context';
 import { useBranch } from '@/lib/branch-context';
@@ -11,32 +10,46 @@ import {
   BulkImportValidationResult,
   BulkImportResult,
   Branch,
-  branchApi
+  branchApi,
 } from '@/lib/api';
+import { PageHeader } from '@/components/ui/PageHeader';
+import { Button } from '@/components/ui/Button';
+import { Select } from '@/components/ui/Select';
+import { Badge } from '@/components/ui/Badge';
+import {
+  UploadCloud,
+  FileSpreadsheet,
+  Download,
+  CheckCircle2,
+  AlertTriangle,
+  ArrowLeft,
+  ArrowRight,
+  X,
+} from 'lucide-react';
 
-type Step = 'branch_template' | 'upload' | 'validation' | 'confirm' | 'summary';
+type Step = 'upload' | 'review' | 'complete';
 
 export default function BulkImportPage() {
-  const router = useRouter();
   const { user } = useAuth();
   const { activeBranchId } = useBranch();
 
   const canBulkImport = user?.isGlobalAdmin || user?.permissions.includes('INVENTORY_BULK_IMPORT');
 
-  const [currentStep, setCurrentStep] = useState<Step>('branch_template');
+  const [step, setStep] = useState<Step>('upload');
   const [branches, setBranches] = useState<Branch[]>([]);
   const [selectedBranchId, setSelectedBranchId] = useState<string>('');
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [templateFormat, setTemplateFormat] = useState<'xlsx' | 'csv'>('xlsx');
+  const [isDownloading, setIsDownloading] = useState(false);
 
-  const [isLoading, setIsLoading] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [isValidating, setIsValidating] = useState(false);
+  const [isConfirming, setIsConfirming] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [validationResult, setValidationResult] = useState<BulkImportValidationResult | null>(null);
   const [importResult, setImportResult] = useState<BulkImportResult | null>(null);
   const [activeTab, setActiveTab] = useState<'errors' | 'valid'>('errors');
-
-  // Idempotency key generated per batch confirmation
   const [idempotencyKey, setIdempotencyKey] = useState<string>('');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -61,723 +74,475 @@ export default function BulkImportPage() {
   if (!canBulkImport) {
     return (
       <AppLayout>
-        <div className="p-8 max-w-4xl mx-auto">
-          <div className="bg-red-50 border border-red-200 rounded-xl p-6 text-center">
-            <h2 className="text-lg font-bold text-red-900 mb-2">Access Denied</h2>
-            <p className="text-sm text-red-700">
-              You do not have the required permission (<code>INVENTORY_BULK_IMPORT</code>) to access bulk inventory import.
-            </p>
-            <div className="mt-4">
-              <Link href="/inventory" className="text-sm text-[#123B32] font-semibold underline">
-                Return to Inventory
-              </Link>
-            </div>
+        <div className="max-w-xl mx-auto mt-10 bg-white border border-rose-200 rounded-xl p-6 text-center shadow-xs">
+          <AlertTriangle className="w-8 h-8 text-rose-600 mx-auto mb-2" />
+          <h2 className="text-base font-bold text-gray-900">Access Denied</h2>
+          <p className="text-xs text-gray-600 mt-1">
+            You need the <code className="font-mono text-rose-700">INVENTORY_BULK_IMPORT</code> permission to import inventory.
+          </p>
+          <div className="mt-4">
+            <Link href="/inventory">
+              <Button variant="secondary" size="sm">Return to Inventory</Button>
+            </Link>
           </div>
         </div>
       </AppLayout>
     );
   }
 
-  const selectedBranch = branches.find(b => b.id === selectedBranchId);
-
-  // Step 1: Download templates
-  const handleDownloadTemplate = (format: 'xlsx' | 'csv') => {
-    const url = bulkImportApi.getTemplateDownloadUrl(format);
-    window.open(url, '_blank');
-  };
-
-  // Step 2: Handle File Selection
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      const file = e.target.files[0];
-      const ext = file.name.split('.').pop()?.toLowerCase();
-      if (ext !== 'xlsx' && ext !== 'csv') {
-        setError('Only .xlsx and .csv files are supported.');
-        return;
-      }
-      if (file.size > 5 * 1024 * 1024) {
-        setError('File size exceeds the maximum limit of 5 MB.');
-        return;
-      }
-      setSelectedFile(file);
-      setError(null);
+  const handleDownloadTemplate = async () => {
+    setIsDownloading(true);
+    setError(null);
+    try {
+      await bulkImportApi.downloadTemplate(templateFormat);
+    } catch (err: any) {
+      setError(err.message || 'Failed to download template.');
+    } finally {
+      setIsDownloading(false);
     }
   };
 
-  // Step 2: Submit File for Validation
+  const acceptFile = (file: File) => {
+    const ext = file.name.split('.').pop()?.toLowerCase();
+    if (ext !== 'xlsx' && ext !== 'csv') {
+      setError('Only .xlsx and .csv files are supported.');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setError('File size exceeds the 5 MB limit.');
+      return;
+    }
+    setSelectedFile(file);
+    setError(null);
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      acceptFile(e.target.files[0]);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragging(false);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      acceptFile(e.dataTransfer.files[0]);
+    }
+  };
+
   const handleValidateFile = async () => {
     if (!selectedBranchId) {
-      setError('Please select a branch before uploading.');
+      setError('Please select a target branch.');
       return;
     }
     if (!selectedFile) {
-      setError('Please choose a valid .xlsx or .csv file to upload.');
+      setError('Please choose a .xlsx or .csv file to upload.');
       return;
     }
 
-    setIsLoading(true);
+    setIsValidating(true);
     setError(null);
 
     try {
       const res = await bulkImportApi.validateFile(selectedBranchId, selectedFile);
       setValidationResult(res);
       setActiveTab(res.isAllValid ? 'valid' : 'errors');
-      // Prepare a unique idempotency key for this batch
       setIdempotencyKey(crypto.randomUUID());
-      setCurrentStep('validation');
+      setStep('review');
     } catch (err: any) {
       setError(err.message || 'File validation failed.');
     } finally {
-      setIsLoading(false);
+      setIsValidating(false);
     }
   };
 
-  // Step 5: Confirm and Import
   const handleConfirmImport = async () => {
-    if (!validationResult) return;
-    if (!validationResult.isAllValid) {
-      setError('Cannot import a batch that contains invalid rows. Please fix the errors in your spreadsheet and re-upload.');
-      return;
-    }
+    if (!validationResult || !validationResult.isAllValid) return;
 
-    setIsSubmitting(true);
+    setIsConfirming(true);
     setError(null);
 
     try {
       const res = await bulkImportApi.confirmImport(validationResult.batchId, idempotencyKey);
       setImportResult(res);
-      setCurrentStep('summary');
+      setStep('complete');
     } catch (err: any) {
       setError(err.message || 'Bulk import confirmation failed.');
     } finally {
-      setIsSubmitting(false);
+      setIsConfirming(false);
     }
   };
 
+  const resetFlow = () => {
+    setSelectedFile(null);
+    setValidationResult(null);
+    setImportResult(null);
+    setError(null);
+    setStep('upload');
+  };
+
+  const stepIndex = step === 'upload' ? 1 : step === 'review' ? 2 : 3;
+
   return (
     <AppLayout>
-      <div className="p-6 max-w-6xl mx-auto space-y-6">
-        {/* Breadcrumb & Header */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-gray-200 pb-4">
-          <div>
-            <div className="flex items-center space-x-2 text-xs text-gray-500 mb-1">
-              <Link href="/inventory" className="hover:text-[#123B32] transition">Inventory</Link>
-              <span>/</span>
-              <span className="text-gray-900 font-medium">Bulk Import</span>
-            </div>
-            <h1 className="text-2xl font-serif font-bold text-[#123B32] flex items-center gap-2">
-              <span>Bulk Inventory Import</span>
-              <span className="text-xs bg-[#B89A60]/20 text-[#123B32] font-semibold px-2 py-0.5 rounded-full border border-[#B89A60]/40">
-                Excel & CSV
-              </span>
-            </h1>
-            <p className="text-xs text-gray-600 mt-1">
-              Digitize multiple physical jewellery stock records with all-or-nothing validation and automated tag generation.
-            </p>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <Link
-              href="/inventory"
-              className="text-xs text-gray-600 hover:text-gray-900 bg-white border border-gray-300 rounded-lg px-3 py-2 font-medium transition shadow-sm"
-            >
-              Back to Inventory
+      <div className="max-w-5xl mx-auto space-y-5">
+        <PageHeader
+          title="Bulk Inventory Import"
+          description="Upload an Excel (.xlsx) or CSV (.csv) spreadsheet to validate and create tagged stock in one batch."
+          actions={
+            <Link href="/inventory">
+              <Button variant="secondary" size="sm" leftIcon={<ArrowLeft className="w-3.5 h-3.5" />}>
+                Back to Inventory
+              </Button>
             </Link>
-          </div>
-        </div>
+          }
+        />
 
-        {/* Multi-step Visual Stepper */}
-        <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
-          <div className="flex items-center justify-between max-w-3xl mx-auto">
-            <div className="flex items-center space-x-2">
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${
-                currentStep === 'branch_template' ? 'bg-[#123B32] text-white ring-4 ring-[#123B32]/10' : 'bg-green-100 text-[#123B32]'
-              }`}>
-                1
-              </div>
-              <span className="text-xs font-semibold text-gray-800 hidden sm:inline">Branch & Template</span>
-            </div>
-            <div className="h-0.5 w-12 bg-gray-200 flex-1 mx-2" />
-
-            <div className="flex items-center space-x-2">
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${
-                currentStep === 'upload' ? 'bg-[#123B32] text-white ring-4 ring-[#123B32]/10' :
-                currentStep === 'branch_template' ? 'bg-gray-100 text-gray-500' : 'bg-green-100 text-[#123B32]'
-              }`}>
-                2
-              </div>
-              <span className="text-xs font-semibold text-gray-800 hidden sm:inline">Upload File</span>
-            </div>
-            <div className="h-0.5 w-12 bg-gray-200 flex-1 mx-2" />
-
-            <div className="flex items-center space-x-2">
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${
-                currentStep === 'validation' ? 'bg-[#123B32] text-white ring-4 ring-[#123B32]/10' :
-                (currentStep === 'confirm' || currentStep === 'summary') ? 'bg-green-100 text-[#123B32]' : 'bg-gray-100 text-gray-500'
-              }`}>
-                3
-              </div>
-              <span className="text-xs font-semibold text-gray-800 hidden sm:inline">Validation</span>
-            </div>
-            <div className="h-0.5 w-12 bg-gray-200 flex-1 mx-2" />
-
-            <div className="flex items-center space-x-2">
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${
-                currentStep === 'confirm' ? 'bg-[#123B32] text-white ring-4 ring-[#123B32]/10' :
-                currentStep === 'summary' ? 'bg-green-100 text-[#123B32]' : 'bg-gray-100 text-gray-500'
-              }`}>
-                4
-              </div>
-              <span className="text-xs font-semibold text-gray-800 hidden sm:inline">Confirm</span>
-            </div>
-            <div className="h-0.5 w-12 bg-gray-200 flex-1 mx-2" />
-
-            <div className="flex items-center space-x-2">
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${
-                currentStep === 'summary' ? 'bg-[#123B32] text-white ring-4 ring-[#123B32]/10' : 'bg-gray-100 text-gray-500'
-              }`}>
-                5
-              </div>
-              <span className="text-xs font-semibold text-gray-800 hidden sm:inline">Summary</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Global Error Banner */}
+        {/* Error Alert */}
         {error && (
-          <div className="bg-red-50 border border-red-200 text-red-800 p-4 rounded-xl text-xs flex items-start justify-between shadow-sm">
-            <div className="flex items-start gap-2">
-              
-              <div>
-                <strong className="font-semibold">Import Error: </strong>
-                <span>{error}</span>
-              </div>
+          <div className="bg-rose-50 border border-rose-200 text-rose-800 px-4 py-3 rounded-xl text-xs flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-rose-600 flex-shrink-0" />
+              <span>{error}</span>
             </div>
-            <button onClick={() => setError(null)} className="text-red-500 hover:text-red-800 font-bold ml-4">✕</button>
+            <button onClick={() => setError(null)} className="text-rose-500 hover:text-rose-800 p-0.5">
+              <X className="w-4 h-4" />
+            </button>
           </div>
         )}
 
-        {/* STEP 1: Branch Selection & Template Download */}
-        {currentStep === 'branch_template' && (
-          <div className="space-y-6">
-            <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm space-y-4">
-              <h2 className="text-sm font-bold text-gray-900 uppercase tracking-wider flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-[#123B32]" />
-                Step 1: Select Target Branch
-              </h2>
-              <p className="text-xs text-gray-600">
-                All items in a single import file belong to one target branch. Stock locations specified in the file must belong to this selected branch.
-              </p>
-
-              <div className="max-w-md">
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Target Branch *</label>
-                <select
-                  value={selectedBranchId}
-                  onChange={(e) => setSelectedBranchId(e.target.value)}
-                  className="w-full text-xs border border-gray-300 rounded-lg p-2.5 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-[#123B32] focus:border-transparent outline-none transition"
-                >
-                  <option value="">-- Select Branch --</option>
-                  {branches.map(b => (
-                    <option key={b.id} value={b.id}>
-                      {b.name} ({b.code}) — {b.country}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            {/* Template Download Cards */}
-            <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm space-y-4">
-              <h2 className="text-sm font-bold text-gray-900 uppercase tracking-wider flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-[#B89A60]" />
-                Download Import Templates
-              </h2>
-              <p className="text-xs text-gray-600">
-                Download the standardized Saranga import template. Do not modify header names.
-              </p>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="border border-green-200 bg-green-50/40 rounded-xl p-4 flex flex-col justify-between hover:border-[#123B32] transition">
-                  <div>
-                    <div className="flex items-center space-x-2">
-                      
-                      <h3 className="text-sm font-bold text-[#123B32]">Excel Template (.xlsx)</h3>
-                      <span className="text-[10px] bg-[#123B32] text-white px-1.5 py-0.5 rounded font-semibold">Recommended</span>
-                    </div>
-                    <p className="text-xs text-gray-600 mt-2">
-                      Includes formatted columns, sample jewellery items, and a dedicated Instructions sheet explaining codes and units.
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => handleDownloadTemplate('xlsx')}
-                    className="mt-4 w-full bg-[#123B32] hover:bg-[#124b33] text-white text-xs font-semibold py-2.5 px-4 rounded-lg shadow-sm transition flex items-center justify-center gap-2"
-                  >
-                    <span>⬇</span>
-                    <span>Download Saranga_Inventory_Import_Template.xlsx</span>
-                  </button>
-                </div>
-
-                <div className="border border-gray-200 bg-gray-50/50 rounded-xl p-4 flex flex-col justify-between hover:border-gray-400 transition">
-                  <div>
-                    <div className="flex items-center space-x-2">
-                      
-                      <h3 className="text-sm font-bold text-gray-800">CSV Template (.csv)</h3>
-                      <span className="text-[10px] bg-gray-200 text-gray-700 px-1.5 py-0.5 rounded font-semibold">Standard</span>
-                    </div>
-                    <p className="text-xs text-gray-600 mt-2">
-                      Lightweight plain-text CSV template compatible with legacy spreadsheet software and automated export pipelines.
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => handleDownloadTemplate('csv')}
-                    className="mt-4 w-full bg-white hover:bg-gray-100 text-gray-800 border border-gray-300 text-xs font-semibold py-2.5 px-4 rounded-lg shadow-sm transition flex items-center justify-center gap-2"
-                  >
-                    <span>⬇</span>
-                    <span>Download Saranga_Inventory_Import_Template.csv</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Informative Rules Box */}
-              <div className="bg-amber-50/60 border border-amber-200 rounded-lg p-4 text-xs text-amber-900 space-y-1.5">
-                <div className="font-bold flex items-center gap-1.5">
-                  <span>ℹ️</span> Important Rules for Bulk Import:
-                </div>
-                <ul className="list-disc list-inside space-y-1 text-gray-700 pl-1">
-                  <li><strong>Automated Identifiers:</strong> Do NOT provide Tag Number or Barcode columns. Unique tags (e.g. <code>{selectedBranch ? selectedBranch.code : 'BRANCH'}-CAT-######</code>) and barcodes (<code>SRG...</code>) are assigned atomically upon confirmation.</li>
-                  <li><strong>Case-Insensitive Resolution:</strong> Codes (Material, Category, Purity, Stock Location) are matched case-insensitively and must already exist and be active.</li>
-                  <li><strong>All-or-Nothing Atomicity:</strong> If even one row fails validation, no inventory items will be created. Fix all errors and re-upload.</li>
-                  <li><strong>Making Charge Method:</strong> Use <code>PER_GRAM</code> or <code>PER_ITEM</code> (or <code>FIXED</code>).</li>
-                </ul>
-              </div>
-
-              <div className="flex justify-end pt-2">
-                <button
-                  disabled={!selectedBranchId}
-                  onClick={() => setCurrentStep('upload')}
-                  className={`text-xs font-bold py-2.5 px-6 rounded-lg shadow-sm transition flex items-center gap-2 ${
-                    selectedBranchId
-                      ? 'bg-[#123B32] hover:bg-[#124b33] text-white'
-                      : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                  }`}
-                >
-                  <span>Proceed to File Upload</span>
-                  <span>→</span>
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* STEP 2: File Upload */}
-        {currentStep === 'upload' && (
-          <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm space-y-6">
-            <div className="flex justify-between items-center border-b border-gray-100 pb-3">
-              <div>
-                <h2 className="text-sm font-bold text-gray-900 uppercase tracking-wider flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-full bg-[#123B32]" />
-                  Step 2: Upload Excel or CSV File
-                </h2>
-                <p className="text-xs text-gray-500 mt-0.5">
-                  Target Branch: <strong className="text-gray-900">{selectedBranch?.name} ({selectedBranch?.code})</strong>
-                </p>
-              </div>
-              <button
-                onClick={() => setCurrentStep('branch_template')}
-                className="text-xs text-gray-500 hover:text-gray-800 underline"
-              >
-                Change Branch
-              </button>
-            </div>
-
-            {/* Dropzone Box */}
-            <div
-              onClick={() => fileInputRef.current?.click()}
-              className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition ${
-                selectedFile
-                  ? 'border-[#123B32] bg-green-50/20'
-                  : 'border-gray-300 hover:border-[#123B32] hover:bg-gray-50/50'
-              }`}
-            >
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".xlsx,.csv"
-                onChange={handleFileChange}
-                className="hidden"
+        {/* STEP 1: Upload & Validate */}
+        {step === 'upload' && (
+          <div className="bg-white border border-[#E2E6E3] rounded-xl p-6 shadow-xs space-y-6">
+            {/* Top Row: Branch & Single Template Download */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5 items-end pb-5 border-b border-[#E2E6E3]">
+              <Select
+                label="Target Branch"
+                requiredIndicator
+                value={selectedBranchId}
+                onChange={(e) => setSelectedBranchId(e.target.value)}
+                options={[
+                  { value: '', label: 'Select branch...' },
+                  ...branches.map((b) => ({
+                    value: b.id,
+                    label: `${b.name} (${b.code})`,
+                  })),
+                ]}
               />
 
-              
-              {selectedFile ? (
-                <div>
-                  <p className="text-sm font-bold text-[#123B32]">{selectedFile.name}</p>
-                  <p className="text-xs text-gray-500 mt-1">
-                    Size: {(selectedFile.size / 1024).toFixed(1)} KB • Type: {selectedFile.name.endsWith('.xlsx') ? 'Excel' : 'CSV'}
-                  </p>
-                  <span className="inline-block mt-3 text-xs bg-[#123B32] text-white px-3 py-1 rounded-full font-medium">
-                    Click to replace file
-                  </span>
+              <div className="flex flex-col">
+                <span className="block text-xs font-semibold text-[#202824] uppercase tracking-wider mb-1.5">
+                  Import Template
+                </span>
+                <div className="flex items-center gap-2">
+                  <div className="inline-flex rounded-lg border border-[#E2E6E3] bg-[#F8F7F4] p-0.5">
+                    {(['xlsx', 'csv'] as const).map((fmt) => (
+                      <button
+                        key={fmt}
+                        type="button"
+                        onClick={() => setTemplateFormat(fmt)}
+                        className={`px-2.5 py-1.5 text-xs font-semibold rounded-md uppercase transition ${
+                          templateFormat === fmt
+                            ? 'bg-white text-[#123B32] shadow-xs'
+                            : 'text-[#69736E] hover:text-[#202824]'
+                        }`}
+                      >
+                        .{fmt}
+                      </button>
+                    ))}
+                  </div>
+
+                  <Button
+                    variant="secondary"
+                    size="md"
+                    isLoading={isDownloading}
+                    onClick={handleDownloadTemplate}
+                    leftIcon={<Download className="w-4 h-4" />}
+                    className="flex-1"
+                  >
+                    Download Template (.{templateFormat})
+                  </Button>
                 </div>
-              ) : (
-                <div>
-                  <p className="text-sm font-bold text-gray-800">
-                    Click to choose or drag and drop your spreadsheet
-                  </p>
-                  <p className="text-xs text-gray-500 mt-1">
-                    Supports .xlsx (Excel) and .csv up to 5 MB (Max 1,000 rows per batch)
-                  </p>
-                </div>
-              )}
+              </div>
             </div>
 
-            <div className="flex justify-between items-center pt-2">
-              <button
-                onClick={() => setCurrentStep('branch_template')}
-                className="text-xs font-semibold text-gray-600 hover:text-gray-900 px-4 py-2"
-              >
-                ← Back
-              </button>
-
-              <button
-                disabled={!selectedFile || isLoading}
-                onClick={handleValidateFile}
-                className={`text-xs font-bold py-2.5 px-6 rounded-lg shadow-sm transition flex items-center gap-2 ${
-                  selectedFile && !isLoading
-                    ? 'bg-[#123B32] hover:bg-[#124b33] text-white'
-                    : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+            {/* File Dropzone */}
+            <div>
+              <div
+                onClick={() => fileInputRef.current?.click()}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setIsDragging(true);
+                }}
+                onDragLeave={() => setIsDragging(false)}
+                onDrop={handleDrop}
+                className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors ${
+                  isDragging
+                    ? 'border-[#123B32] bg-[#123B32]/5'
+                    : selectedFile
+                    ? 'border-emerald-500 bg-emerald-50/30'
+                    : 'border-[#D1D7D3] hover:border-[#123B32] hover:bg-[#F8F7F4]'
                 }`}
               >
-                {isLoading ? (
-                  <>
-                    <span className="animate-spin text-sm">⟳</span>
-                    <span>Validating Records...</span>
-                  </>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".xlsx,.csv"
+                  onChange={handleFileChange}
+                  className="hidden"
+                />
+
+                {selectedFile ? (
+                  <div className="space-y-1.5">
+                    <FileSpreadsheet className="w-8 h-8 text-[#123B32] mx-auto" />
+                    <p className="text-sm font-bold text-[#123B32]">{selectedFile.name}</p>
+                    <p className="text-xs text-[#69736E]">
+                      {(selectedFile.size / 1024).toFixed(1)} KB •{' '}
+                      {selectedFile.name.toLowerCase().endsWith('.xlsx') ? 'Excel (.xlsx)' : 'CSV (.csv)'}
+                    </p>
+                    <p className="text-[11px] font-medium text-[#B89A60] pt-1">Click or drop another file to replace</p>
+                  </div>
                 ) : (
-                  <>
-                    <span>Validate Spreadsheet</span>
-                    <span>→</span>
-                  </>
+                  <div className="space-y-1.5">
+                    <UploadCloud className="w-8 h-8 text-[#69736E] mx-auto" />
+                    <p className="text-sm font-semibold text-[#202824]">
+                      Click to upload or drag and drop your spreadsheet
+                    </p>
+                    <p className="text-xs text-[#69736E]">
+                      Supports <span className="font-mono">.xlsx</span> and <span className="font-mono">.csv</span> up to 5 MB
+                    </p>
+                  </div>
                 )}
-              </button>
+              </div>
+
+              <p className="text-[11px] text-[#69736E] mt-2">
+                Tags and barcodes are generated automatically upon confirmation. All rows are validated before any items are created.
+              </p>
+            </div>
+
+            <div className="flex justify-end pt-1">
+              <Button
+                variant="primary"
+                size="md"
+                isLoading={isValidating}
+                disabled={!selectedBranchId || !selectedFile}
+                onClick={handleValidateFile}
+                rightIcon={<ArrowRight className="w-4 h-4" />}
+              >
+                Validate Spreadsheet
+              </Button>
             </div>
           </div>
         )}
 
-        {/* STEP 3 & 4: Validation Results & Preview */}
-        {currentStep === 'validation' && validationResult && (
-          <div className="space-y-6">
-            {/* Status Summary Banner */}
-            <div className={`border rounded-xl p-5 shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 ${
-              validationResult.isAllValid
-                ? 'bg-green-50 border-green-200 text-green-900'
-                : 'bg-red-50 border-red-200 text-red-900'
-            }`}>
+        {/* STEP 2: Review & Confirm */}
+        {step === 'review' && validationResult && (
+          <div className="space-y-4">
+            {/* Status Banner */}
+            <div
+              className={`border rounded-xl p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 ${
+                validationResult.isAllValid
+                  ? 'bg-emerald-50 border-emerald-200 text-emerald-950'
+                  : 'bg-rose-50 border-rose-200 text-rose-950'
+              }`}
+            >
               <div className="flex items-start gap-3">
-                <span className="text-2xl">{validationResult.isAllValid ? '' : ''}</span>
+                {validationResult.isAllValid ? (
+                  <CheckCircle2 className="w-5 h-5 text-emerald-700 mt-0.5 flex-shrink-0" />
+                ) : (
+                  <AlertTriangle className="w-5 h-5 text-rose-700 mt-0.5 flex-shrink-0" />
+                )}
                 <div>
-                  <h3 className="text-base font-bold">
+                  <h3 className="text-sm font-bold">
                     {validationResult.isAllValid
-                      ? 'Validation Succeeded: All Rows Are Valid'
-                      : `Validation Failed: ${validationResult.invalidRows} Row(s) Contain Errors`}
+                      ? `Ready to import ${validationResult.validRows} items into ${validationResult.branchName}`
+                      : `Validation failed: ${validationResult.invalidRows} row(s) need attention`}
                   </h3>
-                  <p className="text-xs mt-0.5 opacity-90">
+                  <p className="text-xs opacity-85 mt-0.5">
                     {validationResult.isAllValid
-                      ? `All ${validationResult.totalRows} jewellery item records passed validation and can be digitized atomically.`
-                      : 'You must fix the errors highlighted below in your spreadsheet and re-upload before confirming import.'}
+                      ? `File: ${validationResult.originalFileName} • All rows passed validation.`
+                      : 'Fix the listed errors in your spreadsheet and upload the file again.'}
                   </p>
                 </div>
               </div>
 
-              {/* Metrics Pills */}
-              <div className="flex items-center space-x-2 text-xs font-semibold">
-                <span className="bg-white/80 border border-gray-200 px-2.5 py-1 rounded-lg text-gray-800">
-                  Total: {validationResult.totalRows}
-                </span>
-                <span className="bg-green-100 border border-green-300 px-2.5 py-1 rounded-lg text-green-800">
-                  Valid: {validationResult.validRows}
-                </span>
-                <span className={`px-2.5 py-1 rounded-lg border ${
-                  validationResult.invalidRows > 0
-                    ? 'bg-red-100 border-red-300 text-red-800 font-bold'
-                    : 'bg-gray-100 border-gray-200 text-gray-500'
-                }`}>
-                  Invalid: {validationResult.invalidRows}
-                </span>
+              <div className="flex items-center gap-2">
+                <Badge variant="neutral">Total: {validationResult.totalRows}</Badge>
+                <Badge variant="success">Valid: {validationResult.validRows}</Badge>
+                {validationResult.invalidRows > 0 && (
+                  <Badge variant="error">Errors: {validationResult.invalidRows}</Badge>
+                )}
               </div>
             </div>
 
-            {/* Tabs & Table Preview Container */}
-            <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
-              <div className="flex border-b border-gray-200 bg-gray-50 px-4 pt-3">
+            {/* Preview / Errors Table */}
+            <div className="bg-white border border-[#E2E6E3] rounded-xl overflow-hidden shadow-xs">
+              <div className="flex border-b border-[#E2E6E3] bg-[#F8F7F4] px-4 pt-2.5 gap-1">
                 {validationResult.invalidRows > 0 && (
                   <button
                     onClick={() => setActiveTab('errors')}
-                    className={`text-xs font-bold px-4 py-2 border-b-2 transition ${
+                    className={`text-xs font-semibold px-3.5 py-2 border-b-2 transition ${
                       activeTab === 'errors'
-                        ? 'border-red-600 text-red-700 bg-white rounded-t-lg'
-                        : 'border-transparent text-gray-500 hover:text-gray-800'
+                        ? 'border-rose-600 text-rose-700 bg-white rounded-t-lg'
+                        : 'border-transparent text-[#69736E] hover:text-[#202824]'
                     }`}
                   >
-                    Errors to Fix ({validationResult.invalidRows})
+                    Errors ({validationResult.invalidRows})
                   </button>
                 )}
-
                 <button
                   onClick={() => setActiveTab('valid')}
-                  className={`text-xs font-bold px-4 py-2 border-b-2 transition ${
+                  className={`text-xs font-semibold px-3.5 py-2 border-b-2 transition ${
                     activeTab === 'valid'
                       ? 'border-[#123B32] text-[#123B32] bg-white rounded-t-lg'
-                      : 'border-transparent text-gray-500 hover:text-gray-800'
+                      : 'border-transparent text-[#69736E] hover:text-[#202824]'
                   }`}
                 >
-                  Valid Rows Preview ({validationResult.validRows})
+                  Valid Rows ({validationResult.validRows})
                 </button>
               </div>
 
-              {/* Tab 1: Errors Table */}
               {activeTab === 'errors' && (
-                <div className="p-4">
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left text-xs border-collapse">
-                      <thead>
-                        <tr className="bg-red-50 text-red-900 border-b border-red-200 font-semibold">
-                          <th className="py-2.5 px-3 w-20">Row #</th>
-                          <th className="py-2.5 px-3 w-36">Field</th>
-                          <th className="py-2.5 px-3">Error Message</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-100">
-                        {validationResult.errors.map((err, idx) => (
-                          <tr key={idx} className="hover:bg-red-50/30 transition">
-                            <td className="py-2.5 px-3 font-mono font-bold text-red-700">Row {err.rowNumber}</td>
-                            <td className="py-2.5 px-3 font-mono text-gray-800">{err.field}</td>
-                            <td className="py-2.5 px-3 text-red-700 font-medium">{err.message}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-
-              {/* Tab 2: Valid Rows Preview Table */}
-              {activeTab === 'valid' && (
                 <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs border-collapse">
+                  <table className="w-full text-left text-xs">
                     <thead>
-                      <tr className="bg-gray-50 text-gray-700 border-b border-gray-200 font-semibold">
-                        <th className="py-2.5 px-3 w-16">Row #</th>
-                        <th className="py-2.5 px-3">Item Name</th>
-                        <th className="py-2.5 px-3">Material</th>
-                        <th className="py-2.5 px-3">Category</th>
-                        <th className="py-2.5 px-3">Purity</th>
-                        <th className="py-2.5 px-3 text-right">Gross (g)</th>
-                        <th className="py-2.5 px-3 text-right">Stone (g)</th>
-                        <th className="py-2.5 px-3 text-right">Net (g)</th>
-                        <th className="py-2.5 px-3">Location</th>
-                        <th className="py-2.5 px-3">Charge</th>
+                      <tr className="bg-rose-50/70 text-rose-900 border-b border-rose-100 font-semibold">
+                        <th className="py-2.5 px-4 w-24">Row</th>
+                        <th className="py-2.5 px-4 w-40">Field</th>
+                        <th className="py-2.5 px-4">Error</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-100">
-                      {validationResult.rows.filter(r => r.isValid).map((row) => (
-                        <tr key={row.rowNumber} className="hover:bg-gray-50/50 transition">
-                          <td className="py-2.5 px-3 font-mono text-gray-500">{row.rowNumber}</td>
-                          <td className="py-2.5 px-3 font-medium text-gray-900">
-                            {row.itemName}
-                            {row.itemCode && <span className="ml-1.5 text-[10px] text-gray-400">({row.itemCode})</span>}
-                          </td>
-                          <td className="py-2.5 px-3 text-gray-700">{row.materialCode}</td>
-                          <td className="py-2.5 px-3 text-gray-700">{row.categoryCode}</td>
-                          <td className="py-2.5 px-3 text-gray-700">{row.purityCode}</td>
-                          <td className="py-2.5 px-3 text-right font-mono">{row.grossWeight.toFixed(4)}</td>
-                          <td className="py-2.5 px-3 text-right font-mono text-gray-500">{row.stoneWeight.toFixed(4)}</td>
-                          <td className="py-2.5 px-3 text-right font-mono font-semibold text-[#123B32]">{row.netWeight.toFixed(4)}</td>
-                          <td className="py-2.5 px-3">
-                            <span className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded text-[11px] font-mono">
-                              {row.stockLocationCode}
-                            </span>
-                          </td>
-                          <td className="py-2.5 px-3 text-gray-600 text-[11px]">
-                            {row.makingChargeMethod}: Rs. {row.makingChargeValue.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
-                          </td>
+                    <tbody className="divide-y divide-[#E2E6E3]">
+                      {validationResult.errors.map((err, idx) => (
+                        <tr key={idx} className="hover:bg-rose-50/30">
+                          <td className="py-2.5 px-4 font-mono font-semibold text-rose-700">#{err.rowNumber}</td>
+                          <td className="py-2.5 px-4 font-mono text-[#202824]">{err.field}</td>
+                          <td className="py-2.5 px-4 text-rose-700">{err.message}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
               )}
-            </div>
 
-            {/* Bottom Actions */}
-            <div className="flex justify-between items-center bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
-              <button
-                onClick={() => {
-                  setSelectedFile(null);
-                  setValidationResult(null);
-                  setCurrentStep('upload');
-                }}
-                className="text-xs font-semibold text-gray-600 hover:text-gray-900 border border-gray-300 rounded-lg px-4 py-2 transition"
-              >
-                ← Upload Different File
-              </button>
-
-              {validationResult.isAllValid ? (
-                <button
-                  onClick={() => setCurrentStep('confirm')}
-                  className="bg-[#123B32] hover:bg-[#124b33] text-white text-xs font-bold py-2.5 px-6 rounded-lg shadow-sm transition flex items-center gap-2"
-                >
-                  <span>Proceed to Confirmation</span>
-                  <span>→</span>
-                </button>
-              ) : (
-                <div className="text-right">
-                  <span className="text-xs text-red-600 font-semibold mr-3">
-                    Fix {validationResult.invalidRows} errors to proceed
-                  </span>
-                  <button
-                    disabled
-                    className="bg-gray-300 text-gray-500 text-xs font-bold py-2.5 px-6 rounded-lg cursor-not-allowed"
-                  >
-                    Cannot Confirm with Errors
-                  </button>
+              {activeTab === 'valid' && (
+                <div className="overflow-x-auto max-h-96">
+                  <table className="w-full text-left text-xs">
+                    <thead className="sticky top-0 bg-[#F8F7F4] text-[#69736E] border-b border-[#E2E6E3] font-semibold">
+                      <tr>
+                        <th className="py-2.5 px-3 w-14">Row</th>
+                        <th className="py-2.5 px-3">Item</th>
+                        <th className="py-2.5 px-3">Material</th>
+                        <th className="py-2.5 px-3">Category</th>
+                        <th className="py-2.5 px-3">Purity</th>
+                        <th className="py-2.5 px-3 text-right">Gross (g)</th>
+                        <th className="py-2.5 px-3 text-right">Net (g)</th>
+                        <th className="py-2.5 px-3">Location</th>
+                        <th className="py-2.5 px-3">Making Charge</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#E2E6E3]">
+                      {validationResult.rows
+                        .filter((r) => r.isValid)
+                        .map((row) => (
+                          <tr key={row.rowNumber} className="hover:bg-[#F8F7F4]/60">
+                            <td className="py-2.5 px-3 font-mono text-[#69736E]">{row.rowNumber}</td>
+                            <td className="py-2.5 px-3 font-medium text-[#202824]">
+                              {row.itemName}
+                              {row.itemCode && <span className="ml-1.5 text-[10px] text-[#69736E]">({row.itemCode})</span>}
+                            </td>
+                            <td className="py-2.5 px-3">{row.materialCode}</td>
+                            <td className="py-2.5 px-3">{row.categoryCode}</td>
+                            <td className="py-2.5 px-3">{row.purityCode}</td>
+                            <td className="py-2.5 px-3 text-right font-mono tabular-nums">{row.grossWeight.toFixed(4)}</td>
+                            <td className="py-2.5 px-3 text-right font-mono font-semibold text-[#123B32] tabular-nums">
+                              {row.netWeight.toFixed(4)}
+                            </td>
+                            <td className="py-2.5 px-3 font-mono text-[11px]">{row.stockLocationCode}</td>
+                            <td className="py-2.5 px-3 text-[11px] text-[#69736E]">
+                              {row.makingChargeMethod}: Rs. {row.makingChargeValue.toLocaleString('en-LK', { minimumFractionDigits: 2 })}
+                            </td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
                 </div>
               )}
             </div>
-          </div>
-        )}
 
-        {/* STEP 5: Confirm Import */}
-        {currentStep === 'confirm' && validationResult && (
-          <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm space-y-6">
-            <h2 className="text-sm font-bold text-gray-900 uppercase tracking-wider flex items-center gap-2 border-b border-gray-100 pb-3">
-              <span className="w-2.5 h-2.5 rounded-full bg-[#123B32]" />
-              Step 4: Confirm Atomic Stock Creation
-            </h2>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="border border-gray-200 rounded-lg p-3 bg-gray-50">
-                <span className="text-xs text-gray-500">Target Branch</span>
-                <p className="text-sm font-bold text-gray-900 mt-1">{validationResult.branchName} ({validationResult.branchCode})</p>
-              </div>
-              <div className="border border-gray-200 rounded-lg p-3 bg-gray-50">
-                <span className="text-xs text-gray-500">Source Spreadsheet</span>
-                <p className="text-sm font-bold text-gray-900 mt-1">{validationResult.originalFileName} ({validationResult.fileType})</p>
-              </div>
-              <div className="border border-gray-200 rounded-lg p-3 bg-gray-50">
-                <span className="text-xs text-gray-500">Items to Digitize</span>
-                <p className="text-sm font-bold text-[#123B32] mt-1">{validationResult.validRows} Physical Jewellery Items</p>
-              </div>
-            </div>
-
-            <div className="bg-amber-50/70 border border-amber-200 rounded-lg p-4 text-xs text-amber-900 space-y-2">
-              <div className="font-bold flex items-center gap-2">
-                 Transactional Safety & Idempotency:
-              </div>
-              <p>
-                Clicking confirm will commit all <strong>{validationResult.validRows}</strong> jewellery items inside a single atomic database transaction.
-                Each piece will be generated a unique sequence tag (<code>{validationResult.branchCode}-CAT-######</code>) and barcode (<code>SRG...</code>).
-              </p>
-              <p className="text-[11px] text-gray-600 font-mono">
-                Idempotency Token: {idempotencyKey}
-              </p>
-            </div>
-
-            <div className="flex justify-between items-center pt-2">
-              <button
-                disabled={isSubmitting}
-                onClick={() => setCurrentStep('validation')}
-                className="text-xs font-semibold text-gray-600 hover:text-gray-900 px-4 py-2"
+            {/* Footer Actions */}
+            <div className="flex justify-between items-center bg-white border border-[#E2E6E3] rounded-xl px-5 py-3.5">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={resetFlow}
+                disabled={isConfirming}
+                leftIcon={<ArrowLeft className="w-3.5 h-3.5" />}
               >
-                ← Back to Validation Preview
-              </button>
+                Upload Different File
+              </Button>
 
-              <button
-                disabled={isSubmitting}
+              <Button
+                variant="primary"
+                size="md"
+                isLoading={isConfirming}
+                disabled={!validationResult.isAllValid}
                 onClick={handleConfirmImport}
-                className={`text-xs font-bold py-3 px-8 rounded-lg shadow-sm transition flex items-center gap-2 ${
-                  !isSubmitting
-                    ? 'bg-[#123B32] hover:bg-[#124b33] text-white ring-2 ring-[#B89A60]/50'
-                    : 'bg-gray-400 text-white cursor-not-allowed'
-                }`}
+                leftIcon={<CheckCircle2 className="w-4 h-4" />}
               >
-                {isSubmitting ? (
-                  <>
-                    <span className="animate-spin text-sm">⟳</span>
-                    <span>Digitizing Inventory Items...</span>
-                  </>
-                ) : (
-                  <>
-                    <span>Confirm & Digitize {validationResult.validRows} Items</span>
-                    ✓
-                  </>
-                )}
-              </button>
+                {validationResult.isAllValid
+                  ? `Confirm & Import ${validationResult.validRows} Items`
+                  : 'Fix Errors to Import'}
+              </Button>
             </div>
           </div>
         )}
 
-        {/* STEP 6: Import Summary */}
-        {currentStep === 'summary' && importResult && (
-          <div className="space-y-6">
-            <div className="bg-green-50 border border-green-200 rounded-xl p-6 text-center space-y-3 shadow-sm">
-              <div className="w-12 h-12 bg-[#123B32] text-white rounded-full flex items-center justify-center text-xl mx-auto shadow-md">
-                ✓
-              </div>
-              <h2 className="text-xl font-serif font-bold text-[#123B32]">
-                Bulk Import Completed Successfully!
+        {/* STEP 3: Complete */}
+        {step === 'complete' && importResult && (
+          <div className="space-y-4">
+            <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-6 text-center space-y-2">
+              <CheckCircle2 className="w-10 h-10 text-[#123B32] mx-auto" />
+              <h2 className="text-lg font-bold text-[#123B32]">
+                Imported {importResult.totalImported} Jewellery Items
               </h2>
-              <p className="text-xs text-gray-700 max-w-lg mx-auto">
-                <strong>{importResult.totalImported}</strong> individual jewellery items were created, tagged, barcoded, and committed to branch stock.
+              <p className="text-xs text-[#202824]">
+                Tags and barcodes have been generated and added to branch stock.
               </p>
-              <div className="flex justify-center items-center gap-3 pt-1">
-                <span className="text-[11px] bg-white border border-gray-200 px-3 py-1 rounded-full text-gray-600 font-mono">
-                  Batch ID: {importResult.batchId}
-                </span>
-                <span className="text-[11px] bg-white border border-gray-200 px-3 py-1 rounded-full text-gray-600">
-                  Confirmed: {new Date(importResult.confirmedAt).toLocaleTimeString()}
-                </span>
-              </div>
             </div>
 
-            {/* Generated Items Table */}
-            <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
-              <div className="p-4 border-b border-gray-100 flex justify-between items-center">
-                <h3 className="text-xs font-bold text-gray-800 uppercase tracking-wider">
-                  Generated Inventory Tags & Barcodes ({importResult.createdItems.length})
+            <div className="bg-white border border-[#E2E6E3] rounded-xl overflow-hidden shadow-xs">
+              <div className="px-4 py-3 border-b border-[#E2E6E3] flex justify-between items-center bg-[#F8F7F4]">
+                <h3 className="text-xs font-bold text-[#123B32] uppercase tracking-wider">
+                  Created Items ({importResult.createdItems.length})
                 </h3>
-                <Link
-                  href="/inventory"
-                  className="text-xs text-[#123B32] hover:underline font-semibold"
-                >
-                  View in Inventory List →
+                <Link href="/inventory" className="text-xs font-semibold text-[#123B32] hover:underline">
+                  View in Inventory →
                 </Link>
               </div>
-
               <div className="max-h-96 overflow-y-auto">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead className="sticky top-0 bg-gray-50 border-b border-gray-200 font-semibold text-gray-700">
+                <table className="w-full text-left text-xs">
+                  <thead className="sticky top-0 bg-[#F8F7F4] border-b border-[#E2E6E3] font-semibold text-[#69736E]">
                     <tr>
-                      <th className="py-2.5 px-3">Item Name</th>
-                      <th className="py-2.5 px-3 font-mono">Generated Tag</th>
-                      <th className="py-2.5 px-3 font-mono">Barcode</th>
-                      <th className="py-2.5 px-3 text-right">Gross (g)</th>
-                      <th className="py-2.5 px-3 text-right">Net (g)</th>
-                      <th className="py-2.5 px-3">Location</th>
+                      <th className="py-2.5 px-4">Item Name</th>
+                      <th className="py-2.5 px-4">Tag Number</th>
+                      <th className="py-2.5 px-4">Barcode</th>
+                      <th className="py-2.5 px-4 text-right">Gross (g)</th>
+                      <th className="py-2.5 px-4 text-right">Net (g)</th>
+                      <th className="py-2.5 px-4">Location</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-100">
+                  <tbody className="divide-y divide-[#E2E6E3]">
                     {importResult.createdItems.map((item) => (
-                      <tr key={item.id} className="hover:bg-gray-50/50 transition">
-                        <td className="py-2.5 px-3 font-medium text-gray-900">{item.itemName}</td>
-                        <td className="py-2.5 px-3 font-mono font-bold text-[#123B32]">{item.tagNumber}</td>
-                        <td className="py-2.5 px-3 font-mono text-gray-600">{item.barcode}</td>
-                        <td className="py-2.5 px-3 text-right font-mono">{item.grossWeight.toFixed(4)}</td>
-                        <td className="py-2.5 px-3 text-right font-mono font-semibold text-[#123B32]">{item.netWeight.toFixed(4)}</td>
-                        <td className="py-2.5 px-3">
-                          <span className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded text-[11px] font-mono">
-                            {item.stockLocationCode}
-                          </span>
+                      <tr key={item.id} className="hover:bg-[#F8F7F4]/60">
+                        <td className="py-2.5 px-4 font-medium text-[#202824]">{item.itemName}</td>
+                        <td className="py-2.5 px-4 font-mono font-bold text-[#123B32]">{item.tagNumber}</td>
+                        <td className="py-2.5 px-4 font-mono text-[#69736E]">{item.barcode}</td>
+                        <td className="py-2.5 px-4 text-right font-mono tabular-nums">{item.grossWeight.toFixed(4)}</td>
+                        <td className="py-2.5 px-4 text-right font-mono font-semibold text-[#123B32] tabular-nums">
+                          {item.netWeight.toFixed(4)}
                         </td>
+                        <td className="py-2.5 px-4 font-mono text-[11px]">{item.stockLocationCode}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -785,25 +550,14 @@ export default function BulkImportPage() {
               </div>
             </div>
 
-            {/* Final Actions */}
-            <div className="flex justify-between items-center pt-2">
-              <button
-                onClick={() => {
-                  setSelectedFile(null);
-                  setValidationResult(null);
-                  setImportResult(null);
-                  setCurrentStep('branch_template');
-                }}
-                className="text-xs font-semibold text-gray-700 hover:text-gray-900 bg-white border border-gray-300 rounded-lg px-4 py-2.5 shadow-sm transition"
-              >
+            <div className="flex justify-between items-center">
+              <Button variant="secondary" size="sm" onClick={resetFlow}>
                 + Import Another Batch
-              </button>
-
-              <Link
-                href="/inventory"
-                className="bg-[#123B32] hover:bg-[#124b33] text-white text-xs font-bold py-2.5 px-6 rounded-lg shadow-sm transition"
-              >
-                Go to Inventory Management
+              </Button>
+              <Link href="/inventory">
+                <Button variant="primary" size="md">
+                  Go to Inventory
+                </Button>
               </Link>
             </div>
           </div>

@@ -806,6 +806,31 @@ export interface InventoryImportBatch {
 export const bulkImportApi = {
   getTemplateDownloadUrl: (format: 'xlsx' | 'csv' = 'xlsx') =>
     `${API_BASE_URL}/inventory/import/template?format=${format}`,
+  downloadTemplate: async (format: 'xlsx' | 'csv' = 'xlsx') => {
+    const token = getAccessToken();
+    const activeBranchId = getActiveBranchId();
+    const headers: Record<string, string> = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    if (activeBranchId) headers['X-Branch-Id'] = activeBranchId;
+
+    const response = await fetch(`${API_BASE_URL}/inventory/import/template?format=${format}`, {
+      credentials: 'include',
+      headers,
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new ApiError(response.status, error.message || 'Failed to download template', error);
+    }
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Saranga_Inventory_Import_Template.${format}`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
+  },
   validateFile: async (branchId: string, file: File) => {
     const formData = new FormData();
     formData.append('file', file);
