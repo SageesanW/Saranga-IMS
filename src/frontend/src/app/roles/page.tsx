@@ -5,6 +5,9 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import AppLayout from '@/components/AppLayout';
 import { Role, Permission, roleApi, permissionApi, ApiError } from '@/lib/api';
 
+const EMPTY_ROLES: Role[] = [];
+const EMPTY_PERMISSIONS: Permission[] = [];
+
 export default function RolesPage() {
   const queryClient = useQueryClient();
 
@@ -22,28 +25,29 @@ export default function RolesPage() {
   });
 
   // Queries
-  const { data: roles = [], isLoading: loadingRoles } = useQuery({
+  const { data: roles = EMPTY_ROLES, isLoading: loadingRoles } = useQuery({
     queryKey: ['roles'],
     queryFn: () => roleApi.getRoles(),
   });
 
-  const { data: permissions = [], isLoading: loadingPermissions } = useQuery({
+  const { data: permissions = EMPTY_PERMISSIONS, isLoading: loadingPermissions } = useQuery({
     queryKey: ['permissions'],
     queryFn: () => permissionApi.getPermissions(),
   });
 
   // Set initial selected role once loaded
   const activeRole = roles.find((r) => r.id === selectedRoleId) || roles[0] || null;
+  const activeRoleId = activeRole?.id ?? null;
 
   React.useEffect(() => {
-    if (activeRole) {
-      // Find permission IDs for active role permissions
-      const pIds = permissions
-        .filter((p) => activeRole.permissions.includes(p.name))
-        .map((p) => p.id);
-      setSelectedPermissionIds(pIds);
-    }
-  }, [activeRole, permissions]);
+    if (!activeRole || permissions.length === 0) return;
+    const pIds = permissions
+      .filter((p) => activeRole.permissions.includes(p.name))
+      .map((p) => p.id);
+    setSelectedPermissionIds((prev) =>
+      prev.length === pIds.length && prev.every((id, i) => id === pIds[i]) ? prev : pIds
+    );
+  }, [activeRoleId, activeRole, permissions]);
 
   // Mutations
   const createRoleMutation = useMutation({
