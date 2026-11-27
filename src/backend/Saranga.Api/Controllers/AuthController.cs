@@ -36,7 +36,7 @@ public class AuthController : ControllerBase
         try
         {
             var (response, rawRefreshToken) = await _authService.LoginAsync(request, cancellationToken);
-            SetRefreshTokenCookie(rawRefreshToken, response.ExpiresAt);
+            SetRefreshTokenCookie(rawRefreshToken, GetRefreshCookieExpiry());
             return Ok(response);
         }
         catch (UnauthorizedAccessException ex)
@@ -62,7 +62,7 @@ public class AuthController : ControllerBase
         try
         {
             var (response, newRawRefreshToken) = await _authService.RefreshTokenAsync(rawRefreshToken, cancellationToken);
-            SetRefreshTokenCookie(newRawRefreshToken, response.ExpiresAt);
+            SetRefreshTokenCookie(newRawRefreshToken, GetRefreshCookieExpiry());
             return Ok(response);
         }
         catch (UnauthorizedAccessException ex)
@@ -120,6 +120,14 @@ public class AuthController : ControllerBase
         }
 
         return Ok(user);
+    }
+
+    private DateTimeOffset GetRefreshCookieExpiry()
+    {
+        var days = int.TryParse(_configuration["Jwt:RefreshTokenExpiryDays"], out var parsed) && parsed > 0
+            ? parsed
+            : 7;
+        return DateTimeOffset.UtcNow.AddDays(days);
     }
 
     private void SetRefreshTokenCookie(string token, DateTimeOffset expiresAt)

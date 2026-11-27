@@ -362,9 +362,17 @@ public class CashLedgerService : ICashLedgerService
         {
             await dbTransaction.RollbackAsync(cancellationToken);
 
-            var committedRecord = await _context.IdempotencyRecords
-                .AsNoTracking()
-                .FirstOrDefaultAsync(r => r.UserId == userId && r.Key == normalizedKey, cancellationToken);
+            IdempotencyRecord? committedRecord = null;
+            for (var retry = 0; retry < 5 && committedRecord == null; retry++)
+            {
+                committedRecord = await _context.IdempotencyRecords
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(r => r.UserId == userId && r.Key == normalizedKey, cancellationToken);
+                if (committedRecord == null)
+                {
+                    await Task.Delay(50, cancellationToken);
+                }
+            }
 
             if (committedRecord != null)
             {
@@ -617,9 +625,17 @@ public class CashLedgerService : ICashLedgerService
         {
             await dbTransaction.RollbackAsync(cancellationToken);
 
-            var committedRecord = await _context.IdempotencyRecords
-                .AsNoTracking()
-                .FirstOrDefaultAsync(r => r.UserId == userId && r.Key == normalizedKey, cancellationToken);
+            IdempotencyRecord? committedRecord = null;
+            for (var retry = 0; retry < 5 && committedRecord == null; retry++)
+            {
+                committedRecord = await _context.IdempotencyRecords
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(r => r.UserId == userId && r.Key == normalizedKey, cancellationToken);
+                if (committedRecord == null)
+                {
+                    await Task.Delay(50, cancellationToken);
+                }
+            }
 
             if (committedRecord != null)
             {
@@ -922,9 +938,17 @@ public class CashLedgerService : ICashLedgerService
         {
             await dbTransaction.RollbackAsync(cancellationToken);
 
-            var committedRecord = await _context.IdempotencyRecords
-                .AsNoTracking()
-                .FirstOrDefaultAsync(r => r.UserId == userId && r.Key == normalizedKey, cancellationToken);
+            IdempotencyRecord? committedRecord = null;
+            for (var retry = 0; retry < 5 && committedRecord == null; retry++)
+            {
+                committedRecord = await _context.IdempotencyRecords
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(r => r.UserId == userId && r.Key == normalizedKey, cancellationToken);
+                if (committedRecord == null)
+                {
+                    await Task.Delay(50, cancellationToken);
+                }
+            }
 
             if (committedRecord != null)
             {
@@ -1234,9 +1258,17 @@ public class CashLedgerService : ICashLedgerService
         {
             await dbTransaction.RollbackAsync(cancellationToken);
 
-            var committedRecord = await _context.IdempotencyRecords
-                .AsNoTracking()
-                .FirstOrDefaultAsync(r => r.UserId == userId && r.Key == normalizedKey, cancellationToken);
+            IdempotencyRecord? committedRecord = null;
+            for (var retry = 0; retry < 5 && committedRecord == null; retry++)
+            {
+                committedRecord = await _context.IdempotencyRecords
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(r => r.UserId == userId && r.Key == normalizedKey, cancellationToken);
+                if (committedRecord == null)
+                {
+                    await Task.Delay(50, cancellationToken);
+                }
+            }
 
             if (committedRecord != null)
             {

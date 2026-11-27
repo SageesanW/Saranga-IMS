@@ -42,3 +42,6 @@ yarn-error.log*
 Thumbs.db
 Library/
 .local/
+
+# TypeScript build cache
+*.tsbuildinfo
