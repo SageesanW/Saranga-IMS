@@ -22,6 +22,7 @@ export interface Branch {
   timeZone: string;
   isActive: boolean;
   createdAt: string;
+  ratePricingMode?: string;
 }
 
 export interface Role {
@@ -1079,6 +1080,33 @@ export interface ExternalRateProviderStatus {
   lastAttemptAt?: string;
   lastErrorMessage?: string;
   totalActiveRatesManaged: number;
+  activePricingMode?: string;
+  providerEffectiveTime?: string | null;
+  cbslReferenceDate?: string | null;
+  attributionText?: string | null;
+  attributionUrl?: string | null;
+  isStale?: boolean;
+}
+
+export interface FeedPurityRate {
+  purityCode: string;
+  karatValue: number;
+  ratePerGram: number;
+  ratePerPawn: number;
+}
+
+export interface MetalRateFeedPreview {
+  isSuccess: boolean;
+  providerName: string;
+  currency: string;
+  updatedAt: string;
+  marketTime?: string | null;
+  cbslDate?: string | null;
+  marketRates: FeedPurityRate[];
+  cbslRates: FeedPurityRate[];
+  attributionText: string;
+  attributionUrl: string;
+  errorMessage?: string | null;
 }
 
 export interface VatConfiguration {
@@ -1167,8 +1195,22 @@ export const metalRateApi = {
       method: 'POST',
       body: JSON.stringify(data),
     }),
-  getProviderStatus: () =>
-    apiRequest<ExternalRateProviderStatus>('/metal-rates/provider-status'),
+  getProviderStatus: (branchId?: string) => {
+    const qs = branchId ? `?branchId=${encodeURIComponent(branchId)}` : '';
+    return apiRequest<ExternalRateProviderStatus>(`/metal-rates/provider-status${qs}`);
+  },
+  getFeedPreview: () =>
+    apiRequest<MetalRateFeedPreview>('/metal-rates/feed-preview'),
+  switchPricingMode: (data: {
+    branchId: string;
+    pricingMode: string;
+    reason?: string;
+    initialManualRates?: { materialId: string; purityId: string; ratePerGram: number }[];
+  }) =>
+    apiRequest<MetalRate[]>('/metal-rates/switch-source', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
 };
 
 export const vatConfigurationApi = {
@@ -1703,6 +1745,17 @@ export interface PosItemLookupResult {
   compositionName?: string;
   compositionTagNumber?: string;
   compositionType?: string;
+  photographUrl?: string;
+  rateSource?: string;
+  metalRateId?: string;
+  rateEffectiveFrom?: string;
+  quotedAt?: string;
+  makingChargeMethod?: number;
+  makingChargeMethodName?: string;
+  makingChargeValue?: number;
+  goldMaterialValue?: number;
+  totalMakingCharge?: number;
+  expectedSellingPrice?: number;
 }
 
 export interface PosInvoiceLine {
@@ -1729,6 +1782,17 @@ export interface PosInvoiceLine {
   quantity: number;
   lineTotal: number;
   notes?: string;
+  metalRateId?: string;
+  rateSource?: string;
+  rateEffectiveAt?: string;
+  quotedAt?: string;
+  makingChargeMethod?: number;
+  makingChargeMethodName?: string;
+  makingChargeValue?: number;
+  itemPriceDifference?: number;
+  allocatedInvoiceAdjustment?: number;
+  netLineTotal?: number;
+  photographUrl?: string;
 }
 
 export interface PosInvoicePayment {
@@ -1777,6 +1841,13 @@ export interface PosInvoice {
   finalizedAt?: string;
   lines: PosInvoiceLine[];
   payments: PosInvoicePayment[];
+  combinedExpectedTotal?: number;
+  combinedAgreedTotal?: number;
+  itemLevelPriceDifference?: number;
+  invoiceAdjustmentAmount?: number;
+  finalNegotiatedInvoicePrice?: number;
+  isInvoicePriceConfirmed?: boolean;
+  hasRateUpdates?: boolean;
 }
 
 export const posApi = {
@@ -1831,13 +1902,13 @@ export const posApi = {
     return apiRequest<PagedResult<PosInvoice>>(`/pos/invoices${qs ? `?${qs}` : ''}`);
   },
 
-  addLine: (invoiceId: string, data: { itemBarcodeOrTag: string; negotiatedUnitPrice?: number; notes?: string }) =>
+  addLine: (invoiceId: string, data: { itemBarcodeOrTag: string; negotiatedUnitPrice?: number; agreedSellingPrice?: number; notes?: string }) =>
     apiRequest<PosInvoice>(`/pos/invoices/${invoiceId}/lines`, {
       method: 'POST',
       body: JSON.stringify(data)
     }),
 
-  updateLine: (invoiceId: string, lineId: string, data: { negotiatedUnitPrice: number; notes?: string }) =>
+  updateLine: (invoiceId: string, lineId: string, data: { negotiatedUnitPrice?: number; agreedSellingPrice?: number; notes?: string }) =>
     apiRequest<PosInvoice>(`/pos/invoices/${invoiceId}/lines/${lineId}`, {
       method: 'PUT',
       body: JSON.stringify(data)
@@ -1846,6 +1917,20 @@ export const posApi = {
   removeLine: (invoiceId: string, lineId: string) =>
     apiRequest<PosInvoice>(`/pos/invoices/${invoiceId}/lines/${lineId}`, {
       method: 'DELETE'
+    }),
+
+  negotiateTotal: (invoiceId: string, data: { finalNegotiatedTotal: number; notes?: string }) =>
+    apiRequest<PosInvoice>(`/pos/invoices/${invoiceId}/negotiate-total`, {
+      method: 'POST',
+      body: JSON.stringify(data)
+    }),
+
+  checkRatesStatus: (invoiceId: string) =>
+    apiRequest<{ hasRateUpdates: boolean; changedPurities: string[]; message: string }>(`/pos/invoices/${invoiceId}/rates-status`),
+
+  refreshRates: (invoiceId: string) =>
+    apiRequest<{ invoice: PosInvoice; linesRefreshedCount: number; message: string }>(`/pos/invoices/${invoiceId}/refresh-rates`, {
+      method: 'POST'
     }),
 
   finalizeInvoice: (invoiceId: string, data: {

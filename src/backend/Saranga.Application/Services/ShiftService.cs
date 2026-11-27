@@ -273,7 +273,7 @@ public class ShiftService : IShiftService
         shift.ClosingVarianceReason = variance != 0m ? effectiveVarianceReason : null;
         shift.ClosingNotes = variance != 0m
             ? (string.IsNullOrWhiteSpace(request.ClosingNotes) ? effectiveVarianceReason : request.ClosingNotes.Trim())
-            : null;
+            : (string.IsNullOrWhiteSpace(request.ClosingNotes) ? null : request.ClosingNotes.Trim());
         shift.Status = ShiftStatus.Closed;
         shift.ClosedAt = now;
         shift.ClosedBy = closerId;

@@ -50,11 +50,12 @@ public static class DependencyInjection
         services.AddScoped<IBulkImportService, BulkImportService>();
         services.AddScoped<IInventoryCountService, InventoryCountService>();
 
-        // Module 9: Rates, VAT & Reference Pricing
-        services.AddHttpClient<IMetalRateProvider, GoldApiRateProvider>();
+        // Module 9: Rates, VAT & Reference Pricing (GoldPriceSriLanka.com Provider)
+        services.AddHttpClient<IMetalRateProvider, GoldPriceSriLankaRateProvider>();
         services.AddScoped<IMetalRateService, MetalRateService>();
         services.AddScoped<IVatConfigurationService, VatConfigurationService>();
         services.AddScoped<IReferencePricingService, ReferencePricingService>();
+        services.AddHostedService<MetalRateBackgroundRefreshService>();
 
         // Module 10: Customer Management
         services.AddSingleton<IPhoneNormalizationService, PhoneNormalizationService>();

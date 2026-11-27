@@ -10,6 +10,7 @@ public class Branch : BaseEntity
     public string CurrencyCode { get; set; } = "LKR";
     public string TimeZone { get; set; } = "Asia/Colombo";
     public bool IsActive { get; set; } = true;
+    public string RatePricingMode { get; set; } = Constants.BranchPricingModes.Manual;
 
     // Navigation properties
     public ICollection<User> DefaultUsers { get; set; } = new List<User>();

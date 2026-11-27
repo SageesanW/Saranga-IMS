@@ -112,4 +112,21 @@ public class GoldApiRateProvider : IMetalRateProvider
             );
         }
     }
+
+    public Task<GoldPriceSriLankaFeed> FetchSriLankaFeedAsync(CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(new GoldPriceSriLankaFeed(
+            IsSuccess: false,
+            ProviderName: ProviderName,
+            Currency: "LKR",
+            UpdatedAt: DateTimeOffset.UtcNow,
+            MarketTime: null,
+            CbslDate: null,
+            MarketGold: null,
+            CbslGold: null,
+            AttributionText: "Legacy GoldApi.dev",
+            AttributionUrl: "https://www.goldapi.dev/",
+            ErrorMessage: "GoldApi.dev does not provide local Sri Lankan Market/CBSL feeds."
+        ));
+    }
 }

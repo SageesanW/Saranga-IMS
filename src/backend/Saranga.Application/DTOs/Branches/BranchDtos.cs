@@ -8,7 +8,8 @@ public record BranchDto(
     string CurrencyCode,
     string TimeZone,
     bool IsActive,
-    DateTimeOffset CreatedAt
+    DateTimeOffset CreatedAt,
+    string RatePricingMode = "MANUAL"
 );
 
 public record CreateBranchRequest(

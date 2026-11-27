@@ -121,7 +121,9 @@ public class ReferencePricingService : IReferencePricingService
             VatRatePercentage: vatConfig.IsEnabled ? vatConfig.RatePercentage : 0.00m,
             VatAmount: vatAmount,
             ReferenceTotal: referenceTotal,
-            CalculatedAt: DateTimeOffset.UtcNow
+            CalculatedAt: DateTimeOffset.UtcNow,
+            MetalRateId: activeRate.Id,
+            RateEffectiveFrom: activeRate.EffectiveFrom
         );
     }
 }

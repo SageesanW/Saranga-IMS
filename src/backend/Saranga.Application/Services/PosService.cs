@@ -7,6 +7,7 @@ using Saranga.Application.Common.Exceptions;
 using Saranga.Application.Common.Interfaces;
 using Saranga.Application.DTOs.Common;
 using Saranga.Application.DTOs.Pos;
+using Saranga.Application.DTOs.Rates;
 using Saranga.Domain.Constants;
 using Saranga.Domain.Entities;
 using Saranga.Domain.Enums;
@@ -77,6 +78,7 @@ public class PosService : IPosService
             .Include(i => i.Category)
             .Include(i => i.Material)
             .Include(i => i.Purity)
+            .Include(i => i.Media)
             .FirstOrDefaultAsync(i =>
                 (i.Barcode == cleanQuery || i.TagNumber.ToLower() == cleanQuery.ToLower() || i.ItemCode.ToLower() == cleanQuery.ToLower()) &&
                 !i.IsDeleted,
@@ -116,15 +118,11 @@ public class PosService : IPosService
             .Include(m => m.Composition)
             .FirstOrDefaultAsync(m => m.InventoryItemId == item.Id && m.IsActive, cancellationToken);
 
-        // 3. Calculate reference price
-        decimal ratePerGram = 0m;
-        decimal refMaterialVal = 0m;
-        decimal refMakingCharge = 0m;
-        decimal refPrice = 0m;
-
+        // 3. Calculate reference price using authoritative active metal rates
+        ReferencePriceBreakdownDto pricing;
         try
         {
-            var pricing = await _pricingService.CalculateReferencePriceAsync(new Application.DTOs.Rates.CalculateReferencePriceRequest(
+            pricing = await _pricingService.CalculateReferencePriceAsync(new Application.DTOs.Rates.CalculateReferencePriceRequest(
                 shift.BranchId,
                 item.MaterialId,
                 item.PurityId,
@@ -134,16 +132,16 @@ public class PosService : IPosService
                 item.MakingChargeValue,
                 shift.CurrencyCode
             ), cancellationToken);
-
-            ratePerGram = pricing.RatePerGramUsed;
-            refMaterialVal = pricing.ReferenceMaterialValue;
-            refMakingCharge = pricing.MakingChargeAmount;
-            refPrice = pricing.ReferenceTotal;
         }
-        catch (Exception ex)
+        catch (NotFoundException)
         {
-            _logger.LogWarning(ex, "Reference price could not be computed for item {TagNumber}. Using 0 as reference price.", item.TagNumber);
+            throw new BusinessRuleException($"Cannot price item '{item.TagNumber}': An active operational gold rate for {item.Material?.Name ?? "Gold"} {item.Purity?.Name ?? ""} in branch '{shift.Branch?.Name}' ({shift.CurrencyCode}) is not configured or unavailable. Please configure Metal Rates Management before selling.");
         }
+
+        var photoUrl = item.Media
+            .OrderByDescending(m => m.IsPrimary)
+            .ThenBy(m => m.SortOrder)
+            .FirstOrDefault()?.StoragePath;
 
         return new PosItemLookupResultDto(
             item.Id,
@@ -162,16 +160,27 @@ public class PosService : IPosService
             item.StoneWeight,
             item.NetWeight,
             item.PieceCount,
-            ratePerGram,
-            refMaterialVal,
-            refMakingCharge,
-            refPrice,
+            pricing.RatePerGramUsed,
+            pricing.ReferenceMaterialValue,
+            pricing.MakingChargeAmount,
+            pricing.ReferenceTotal,
             shift.CurrencyCode,
             membership != null,
             membership?.CompositionId,
             membership?.Composition?.Name,
             membership?.Composition?.TagNumber,
-            membership?.Composition?.Type.ToString()
+            membership?.Composition?.Type.ToString(),
+            PhotographUrl: photoUrl,
+            RateSource: pricing.RateSource,
+            MetalRateId: pricing.MetalRateId,
+            RateEffectiveFrom: pricing.RateEffectiveFrom,
+            QuotedAt: pricing.CalculatedAt,
+            MakingChargeMethod: (int)item.MakingChargeMethod,
+            MakingChargeMethodName: item.MakingChargeMethod == MakingChargeMethod.PerItem ? "PER_ITEM" : "PER_GRAM",
+            MakingChargeValue: item.MakingChargeValue,
+            GoldMaterialValue: pricing.ReferenceMaterialValue,
+            TotalMakingCharge: pricing.MakingChargeAmount,
+            ExpectedSellingPrice: pricing.ReferenceTotal
         );
     }
 
@@ -342,6 +351,8 @@ public class PosService : IPosService
             .Include(i => i.Cashier)
             .Include(i => i.Customer)
             .Include(i => i.Lines)
+                .ThenInclude(l => l.InventoryItem)
+                    .ThenInclude(item => item!.Media)
             .Include(i => i.Payments)
             .FirstOrDefaultAsync(i => i.Id == invoiceId && !i.IsDeleted, cancellationToken)
             ?? throw new NotFoundException("Invoice", invoiceId);
@@ -357,6 +368,8 @@ public class PosService : IPosService
             .Include(i => i.Cashier)
             .Include(i => i.Customer)
             .Include(i => i.Lines)
+                .ThenInclude(l => l.InventoryItem)
+                    .ThenInclude(item => item!.Media)
             .Include(i => i.Payments)
             .Where(i => !i.IsDeleted);
 
@@ -433,11 +446,14 @@ public class PosService : IPosService
             throw new BusinessRuleException($"Item '{lookup.TagNumber}' has already been added to this invoice.");
         }
 
-        var unitPrice = request.NegotiatedUnitPrice ?? lookup.ReferencePrice;
+        var unitPrice = request.AgreedSellingPrice ?? request.NegotiatedUnitPrice ?? lookup.ExpectedSellingPrice;
         if (unitPrice < 0m)
         {
-            throw new BusinessRuleException("Negotiated price cannot be negative.");
+            throw new BusinessRuleException("Agreed selling price cannot be negative.");
         }
+
+        var now = DateTimeOffset.UtcNow;
+        var cashierId = _currentUserService.UserId ?? invoice.CashierId;
 
         var line = new InvoiceLine
         {
@@ -458,15 +474,23 @@ public class PosService : IPosService
             PurityId = lookup.PurityId,
             KaratValueSnapshot = lookup.KaratValue,
             ReferenceRatePerGram = lookup.ActiveRatePerGram,
-            ReferenceMaterialValue = lookup.ReferenceMaterialValue,
-            ReferenceMakingCharge = lookup.ReferenceMakingCharge,
-            ReferencePrice = lookup.ReferencePrice,
+            ReferenceMaterialValue = lookup.GoldMaterialValue,
+            ReferenceMakingCharge = lookup.TotalMakingCharge,
+            ReferencePrice = lookup.ExpectedSellingPrice,
+            MetalRateId = lookup.MetalRateId,
+            RateSource = lookup.RateSource,
+            RateEffectiveAt = lookup.RateEffectiveFrom,
+            QuotedAt = lookup.QuotedAt ?? now,
+            MakingChargeMethodSnapshot = (MakingChargeMethod)lookup.MakingChargeMethod,
+            MakingChargeValueSnapshot = lookup.MakingChargeValue,
             UnitPrice = unitPrice,
             Quantity = 1,
             LineTotal = unitPrice * 1,
+            AllocatedInvoiceAdjustment = 0m,
+            NetLineTotal = unitPrice * 1,
             Notes = request.Notes?.Trim(),
-            CreatedAt = DateTimeOffset.UtcNow,
-            CreatedBy = _currentUserService.UserId
+            CreatedAt = now,
+            CreatedBy = cashierId
         };
 
         _context.InvoiceLines.Add(line);
@@ -474,6 +498,13 @@ public class PosService : IPosService
         {
             invoice.Lines.Add(line);
         }
+
+        // Cart line modification invalidates overall invoice price confirmation
+        invoice.IsInvoicePriceConfirmed = false;
+        invoice.InvoiceAdjustmentAmount = 0m;
+        invoice.UpdatedAt = now;
+        invoice.UpdatedBy = cashierId;
+
         RecalculateTotals(invoice);
 
         await _context.SaveChangesAsync(cancellationToken);
@@ -496,16 +527,33 @@ public class PosService : IPosService
         var line = invoice.Lines.FirstOrDefault(l => l.Id == lineId && !l.IsDeleted)
             ?? throw new NotFoundException("InvoiceLine", lineId);
 
-        if (request.NegotiatedUnitPrice < 0m)
+        var newPrice = request.AgreedSellingPrice ?? request.NegotiatedUnitPrice;
+        if (!newPrice.HasValue)
         {
-            throw new BusinessRuleException("Negotiated price cannot be negative.");
+            throw new BusinessRuleException("Agreed selling price is required.");
         }
 
-        line.UnitPrice = request.NegotiatedUnitPrice;
+        if (newPrice.Value < 0m)
+        {
+            throw new BusinessRuleException("Agreed selling price cannot be negative.");
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var cashierId = _currentUserService.UserId ?? invoice.CashierId;
+
+        line.UnitPrice = newPrice.Value;
         line.LineTotal = line.UnitPrice * line.Quantity;
-        line.Notes = request.Notes?.Trim();
-        line.UpdatedAt = DateTimeOffset.UtcNow;
-        line.UpdatedBy = _currentUserService.UserId;
+        line.AllocatedInvoiceAdjustment = 0m;
+        line.NetLineTotal = line.LineTotal;
+        line.Notes = request.Notes?.Trim() ?? line.Notes;
+        line.UpdatedAt = now;
+        line.UpdatedBy = cashierId;
+
+        // Cart line modification invalidates overall invoice price confirmation
+        invoice.IsInvoicePriceConfirmed = false;
+        invoice.InvoiceAdjustmentAmount = 0m;
+        invoice.UpdatedAt = now;
+        invoice.UpdatedBy = cashierId;
 
         RecalculateTotals(invoice);
 
@@ -530,11 +578,184 @@ public class PosService : IPosService
             ?? throw new NotFoundException("InvoiceLine", lineId);
 
         _context.InvoiceLines.Remove(line);
+        invoice.Lines.Remove(line);
+
+        var now = DateTimeOffset.UtcNow;
+        var cashierId = _currentUserService.UserId ?? invoice.CashierId;
+
+        // Cart line modification invalidates overall invoice price confirmation
+        invoice.IsInvoicePriceConfirmed = false;
+        invoice.InvoiceAdjustmentAmount = 0m;
+        invoice.UpdatedAt = now;
+        invoice.UpdatedBy = cashierId;
+
         RecalculateTotals(invoice);
 
         await _context.SaveChangesAsync(cancellationToken);
 
         return await GetInvoiceByIdAsync(invoice.Id, cancellationToken);
+    }
+
+    public async Task<PosInvoiceDto> ConfirmNegotiatedPricingAsync(Guid invoiceId, ConfirmNegotiatedInvoiceTotalRequest request, CancellationToken cancellationToken = default)
+    {
+        var invoice = await _context.Invoices
+            .Include(i => i.Lines)
+            .FirstOrDefaultAsync(i => i.Id == invoiceId && !i.IsDeleted, cancellationToken)
+            ?? throw new NotFoundException("Invoice", invoiceId);
+
+        if (invoice.Status != InvoiceStatus.Draft)
+        {
+            throw new BusinessRuleException($"Invoice '{invoice.InvoiceNumber}' is {invoice.Status} and pricing can no longer be confirmed.");
+        }
+
+        var activeLines = invoice.Lines.Where(l => !l.IsDeleted).ToList();
+        if (activeLines.Count == 0)
+        {
+            throw new BusinessRuleException("Cannot confirm pricing for an invoice with no items.");
+        }
+
+        if (request.FinalNegotiatedTotal < 0m)
+        {
+            throw new BusinessRuleException("Final negotiated invoice total cannot be negative.");
+        }
+
+        invoice.CombinedExpectedTotal = activeLines.Sum(l => l.ReferencePrice);
+        invoice.CombinedAgreedTotal = activeLines.Sum(l => l.LineTotal);
+        invoice.InvoiceAdjustmentAmount = request.FinalNegotiatedTotal - invoice.CombinedAgreedTotal;
+        invoice.TotalAmount = request.FinalNegotiatedTotal;
+        invoice.IsInvoicePriceConfirmed = true;
+
+        if (request.Notes != null)
+        {
+            invoice.Notes = request.Notes.Trim();
+        }
+
+        // Proportional deterministic allocation across lines with rounding remainder
+        AllocateInvoiceAdjustment(invoice);
+
+        invoice.UpdatedAt = DateTimeOffset.UtcNow;
+        invoice.UpdatedBy = _currentUserService.UserId ?? invoice.CashierId;
+
+        await _context.SaveChangesAsync(cancellationToken);
+
+        return await GetInvoiceByIdAsync(invoice.Id, cancellationToken);
+    }
+
+    public async Task<CheckInvoiceRatesStatusResponse> CheckRatesStatusAsync(Guid invoiceId, CancellationToken cancellationToken = default)
+    {
+        var invoice = await _context.Invoices
+            .Include(i => i.Lines)
+            .AsNoTracking()
+            .FirstOrDefaultAsync(i => i.Id == invoiceId && !i.IsDeleted, cancellationToken)
+            ?? throw new NotFoundException("Invoice", invoiceId);
+
+        var changedPurities = new List<string>();
+
+        foreach (var line in invoice.Lines.Where(l => !l.IsDeleted && l.InventoryItemId.HasValue && l.MaterialId.HasValue && l.PurityId.HasValue))
+        {
+            try
+            {
+                var activeRate = await _metalRateService.GetActiveRateAsync(
+                    invoice.BranchId, line.MaterialId!.Value, line.PurityId!.Value, invoice.CurrencyCode, cancellationToken);
+
+                if (activeRate != null)
+                {
+                    var isDifferentRate = activeRate.RatePerGram != line.ReferenceRatePerGram;
+                    var isNewerEffective = line.RateEffectiveAt.HasValue && activeRate.EffectiveFrom > line.RateEffectiveAt.Value;
+
+                    if (isDifferentRate || isNewerEffective)
+                    {
+                        var purityDesc = $"{line.MaterialNameSnapshot ?? "Gold"} {line.KaratValueSnapshot?.ToString("0.##") ?? ""}K";
+                        if (!changedPurities.Contains(purityDesc))
+                        {
+                            changedPurities.Add(purityDesc);
+                        }
+                    }
+                }
+            }
+            catch
+            {
+                // Ignore missing rate lookup during non-blocking check
+            }
+        }
+
+        var hasUpdates = changedPurities.Count > 0;
+        var message = hasUpdates
+            ? "Gold rates have been updated. Existing item quotations remain unchanged."
+            : "All quoted item rates are up to date.";
+
+        return new CheckInvoiceRatesStatusResponse(hasUpdates, changedPurities, message);
+    }
+
+    public async Task<RefreshInvoiceReferenceRatesResponse> RefreshReferenceRatesAsync(Guid invoiceId, CancellationToken cancellationToken = default)
+    {
+        var invoice = await _context.Invoices
+            .Include(i => i.Lines)
+            .FirstOrDefaultAsync(i => i.Id == invoiceId && !i.IsDeleted, cancellationToken)
+            ?? throw new NotFoundException("Invoice", invoiceId);
+
+        if (invoice.Status != InvoiceStatus.Draft)
+        {
+            throw new BusinessRuleException($"Invoice '{invoice.InvoiceNumber}' is {invoice.Status} and reference rates cannot be refreshed.");
+        }
+
+        int refreshedCount = 0;
+        var now = DateTimeOffset.UtcNow;
+
+        foreach (var line in invoice.Lines.Where(l => !l.IsDeleted && l.InventoryItemId.HasValue && l.MaterialId.HasValue && l.PurityId.HasValue))
+        {
+            try
+            {
+                var pricing = await _pricingService.CalculateReferencePriceAsync(new Application.DTOs.Rates.CalculateReferencePriceRequest(
+                    invoice.BranchId,
+                    line.MaterialId!.Value,
+                    line.PurityId!.Value,
+                    line.NetWeight,
+                    line.PieceCount,
+                    (int)line.MakingChargeMethodSnapshot,
+                    line.MakingChargeValueSnapshot,
+                    invoice.CurrencyCode
+                ), cancellationToken);
+
+                line.ReferenceRatePerGram = pricing.RatePerGramUsed;
+                line.ReferenceMaterialValue = pricing.ReferenceMaterialValue;
+                line.ReferenceMakingCharge = pricing.MakingChargeAmount;
+                line.ReferencePrice = pricing.ReferenceTotal;
+                line.RateSource = pricing.RateSource;
+                line.MetalRateId = pricing.MetalRateId;
+                line.RateEffectiveAt = pricing.RateEffectiveFrom;
+                line.QuotedAt = now;
+                line.UpdatedAt = now;
+                line.UpdatedBy = _currentUserService.UserId ?? invoice.CashierId;
+
+                // CRITICAL RULE: Preserve agreed UnitPrice and LineTotal!
+                refreshedCount++;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to refresh reference rate for line {LineId}", line.Id);
+            }
+        }
+
+        invoice.CombinedExpectedTotal = invoice.Lines.Where(l => !l.IsDeleted).Sum(l => l.ReferencePrice);
+        invoice.CombinedAgreedTotal = invoice.Lines.Where(l => !l.IsDeleted).Sum(l => l.LineTotal);
+
+        if (invoice.IsInvoicePriceConfirmed)
+        {
+            AllocateInvoiceAdjustment(invoice);
+        }
+
+        invoice.UpdatedAt = now;
+        invoice.UpdatedBy = _currentUserService.UserId ?? invoice.CashierId;
+
+        await _context.SaveChangesAsync(cancellationToken);
+
+        var updatedDto = await GetInvoiceByIdAsync(invoice.Id, cancellationToken);
+        return new RefreshInvoiceReferenceRatesResponse(
+            updatedDto,
+            refreshedCount,
+            $"Successfully refreshed reference rates for {refreshedCount} item(s). Agreed prices remain unchanged."
+        );
     }
 
     public async Task<PosInvoiceDto> FinalizeInvoiceAsync(Guid invoiceId, FinalizePosInvoiceRequest request, string? idempotencyKey = null, CancellationToken cancellationToken = default)
@@ -615,13 +836,27 @@ public class PosService : IPosService
             throw new BusinessRuleException("Cannot finalize sale: The associated cashier shift is closed.");
         }
 
-        // Apply discount if provided
-        if (request.DiscountAmount.HasValue)
+        // Ensure pricing confirmation and adjustment allocation
+        if (!invoice.IsInvoicePriceConfirmed)
         {
-            if (request.DiscountAmount.Value < 0m)
+            var activeLines = invoice.Lines.Where(l => !l.IsDeleted).ToList();
+            invoice.CombinedExpectedTotal = activeLines.Sum(l => l.ReferencePrice);
+            invoice.CombinedAgreedTotal = activeLines.Sum(l => l.LineTotal);
+            if (request.DiscountAmount.HasValue && request.DiscountAmount.Value > 0m)
             {
-                throw new BusinessRuleException("Discount amount cannot be negative.");
+                invoice.InvoiceAdjustmentAmount = -request.DiscountAmount.Value;
+                invoice.TotalAmount = invoice.CombinedAgreedTotal - request.DiscountAmount.Value;
             }
+            else
+            {
+                invoice.InvoiceAdjustmentAmount = 0m;
+                invoice.TotalAmount = invoice.CombinedAgreedTotal;
+            }
+            invoice.IsInvoicePriceConfirmed = true;
+            AllocateInvoiceAdjustment(invoice);
+        }
+        else if (request.DiscountAmount.HasValue && request.DiscountAmount.Value > 0m)
+        {
             invoice.DiscountAmount = request.DiscountAmount.Value;
         }
 
@@ -640,7 +875,6 @@ public class PosService : IPosService
 
         invoice.VatRate = 0m;
         invoice.VatAmount = 0m;
-        RecalculateTotals(invoice);
 
         // 4. Validate Payments
         if (request.Payments == null || request.Payments.Count == 0)
@@ -915,21 +1149,96 @@ public class PosService : IPosService
         return await GetInvoiceByIdAsync(invoice.Id, cancellationToken);
     }
 
-    private static void RecalculateTotals(Invoice invoice)
+    private static void AllocateInvoiceAdjustment(Invoice invoice)
     {
-        invoice.SubTotal = invoice.Lines.Where(l => !l.IsDeleted).Sum(l => l.LineTotal);
-        var afterDiscount = invoice.SubTotal - invoice.DiscountAmount;
-        if (afterDiscount < 0m)
+        var lines = invoice.Lines.Where(l => !l.IsDeleted).OrderBy(l => l.Id).ToList();
+        if (lines.Count == 0) return;
+
+        var adjustment = invoice.InvoiceAdjustmentAmount;
+        if (adjustment == 0m)
         {
-            afterDiscount = 0m;
+            foreach (var line in lines)
+            {
+                line.AllocatedInvoiceAdjustment = 0m;
+                line.NetLineTotal = line.LineTotal;
+            }
+            invoice.DiscountAmount = 0m;
+            return;
         }
 
-        invoice.TotalAmount = afterDiscount + invoice.VatAmount;
+        if (adjustment < 0m)
+        {
+            invoice.DiscountAmount = Math.Abs(adjustment);
+        }
+        else
+        {
+            invoice.DiscountAmount = 0m;
+        }
+
+        var combinedAgreed = invoice.CombinedAgreedTotal;
+        decimal allocatedSum = 0m;
+
+        for (int i = 0; i < lines.Count; i++)
+        {
+            var line = lines[i];
+            decimal lineAdj;
+
+            if (i == lines.Count - 1)
+            {
+                // Last line receives exact remainder to guarantee zero rounding divergence
+                lineAdj = adjustment - allocatedSum;
+            }
+            else
+            {
+                if (combinedAgreed > 0m)
+                {
+                    lineAdj = Math.Round(adjustment * (line.LineTotal / combinedAgreed), 2);
+                }
+                else
+                {
+                    lineAdj = Math.Round(adjustment / lines.Count, 2);
+                }
+                allocatedSum += lineAdj;
+            }
+
+            line.AllocatedInvoiceAdjustment = lineAdj;
+            line.NetLineTotal = line.LineTotal + lineAdj;
+        }
+    }
+
+    private static void RecalculateTotals(Invoice invoice)
+    {
+        var activeLines = invoice.Lines.Where(l => !l.IsDeleted).ToList();
+        invoice.CombinedExpectedTotal = activeLines.Sum(l => l.ReferencePrice);
+        invoice.CombinedAgreedTotal = activeLines.Sum(l => l.LineTotal);
+        invoice.SubTotal = invoice.CombinedAgreedTotal;
+
+        if (invoice.IsInvoicePriceConfirmed)
+        {
+            invoice.TotalAmount = invoice.CombinedAgreedTotal + invoice.InvoiceAdjustmentAmount;
+            AllocateInvoiceAdjustment(invoice);
+        }
+        else
+        {
+            invoice.InvoiceAdjustmentAmount = 0m;
+            invoice.DiscountAmount = 0m;
+            invoice.TotalAmount = invoice.CombinedAgreedTotal;
+            foreach (var line in activeLines)
+            {
+                line.AllocatedInvoiceAdjustment = 0m;
+                line.NetLineTotal = line.LineTotal;
+            }
+        }
     }
 
     private static PosInvoiceDto MapToInvoiceDto(Invoice i)
     {
-        var lineDtos = i.Lines.Where(l => !l.IsDeleted).Select(l => new PosInvoiceLineDto(
+        var activeLines = i.Lines.Where(l => !l.IsDeleted).ToList();
+        var combinedExpected = i.CombinedExpectedTotal > 0m ? i.CombinedExpectedTotal : activeLines.Sum(l => l.ReferencePrice);
+        var combinedAgreed = i.CombinedAgreedTotal > 0m ? i.CombinedAgreedTotal : activeLines.Sum(l => l.LineTotal);
+        var itemDiff = combinedAgreed - combinedExpected;
+
+        var lineDtos = activeLines.Select(l => new PosInvoiceLineDto(
             l.Id,
             (int)l.LineType,
             l.LineType.ToString(),
@@ -952,7 +1261,18 @@ public class PosService : IPosService
             l.UnitPrice,
             l.Quantity,
             l.LineTotal,
-            l.Notes
+            l.Notes,
+            l.MetalRateId,
+            l.RateSource,
+            l.RateEffectiveAt,
+            l.QuotedAt,
+            (int)l.MakingChargeMethodSnapshot,
+            l.MakingChargeMethodSnapshot.ToString(),
+            l.MakingChargeValueSnapshot,
+            l.UnitPrice - l.ReferencePrice,
+            l.AllocatedInvoiceAdjustment,
+            l.NetLineTotal,
+            l.InventoryItem?.Media?.OrderByDescending(m => m.IsPrimary).ThenBy(m => m.SortOrder).FirstOrDefault()?.StoragePath
         )).ToList();
 
         var paymentDtos = i.Payments.Where(p => !p.IsDeleted).Select(p => new PosInvoicePaymentDto(
@@ -1000,7 +1320,13 @@ public class PosService : IPosService
             i.CreatedAt,
             i.FinalizedAt,
             lineDtos,
-            paymentDtos
+            paymentDtos,
+            combinedExpected,
+            combinedAgreed,
+            itemDiff,
+            i.InvoiceAdjustmentAmount,
+            i.TotalAmount,
+            i.IsInvoicePriceConfirmed
         );
     }
 }

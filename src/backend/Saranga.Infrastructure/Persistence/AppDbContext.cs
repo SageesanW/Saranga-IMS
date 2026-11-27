@@ -140,6 +140,10 @@ public class AppDbContext : DbContext, IAppDbContext
             entity.Property(b => b.CurrencyCode).HasMaxLength(10).IsRequired();
             entity.Property(b => b.TimeZone).HasMaxLength(100).IsRequired();
             entity.Property(b => b.IsActive).HasDefaultValue(true);
+            entity.Property(b => b.RatePricingMode)
+                  .HasMaxLength(30)
+                  .HasDefaultValue(Domain.Constants.BranchPricingModes.Manual)
+                  .IsRequired();
         });
 
         // Role Configuration
@@ -1058,6 +1062,11 @@ public class AppDbContext : DbContext, IAppDbContext
             entity.Property(i => i.TotalCashChange).HasPrecision(18, 2);
             entity.Property(i => i.NetCashPaid).HasPrecision(18, 2);
 
+            entity.Property(i => i.CombinedExpectedTotal).HasPrecision(18, 2).HasDefaultValue(0m);
+            entity.Property(i => i.CombinedAgreedTotal).HasPrecision(18, 2).HasDefaultValue(0m);
+            entity.Property(i => i.InvoiceAdjustmentAmount).HasPrecision(18, 2).HasDefaultValue(0m);
+            entity.Property(i => i.IsInvoicePriceConfirmed).HasDefaultValue(false);
+
             entity.Property(i => i.Status).HasConversion<int>().IsRequired();
             entity.Property(i => i.IdempotencyKey).HasMaxLength(100);
 
@@ -1120,6 +1129,12 @@ public class AppDbContext : DbContext, IAppDbContext
             entity.Property(l => l.ReferencePrice).HasPrecision(18, 2);
             entity.Property(l => l.UnitPrice).HasPrecision(18, 2);
             entity.Property(l => l.LineTotal).HasPrecision(18, 2);
+
+            entity.Property(l => l.RateSource).HasMaxLength(50);
+            entity.Property(l => l.MakingChargeMethodSnapshot).HasConversion<int>().HasDefaultValue(MakingChargeMethod.PerGram);
+            entity.Property(l => l.MakingChargeValueSnapshot).HasPrecision(18, 2).HasDefaultValue(0m);
+            entity.Property(l => l.AllocatedInvoiceAdjustment).HasPrecision(18, 2).HasDefaultValue(0m);
+            entity.Property(l => l.NetLineTotal).HasPrecision(18, 2).HasDefaultValue(0m);
 
             entity.HasOne(l => l.InventoryItem)
                   .WithMany()

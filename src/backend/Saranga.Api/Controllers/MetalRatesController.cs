@@ -97,9 +97,32 @@ public class MetalRatesController : ControllerBase
     [HttpGet("provider-status")]
     [RequirePermission(Permissions.RateView)]
     [ProducesResponseType(typeof(ExternalRateProviderStatusDto), StatusCodes.Status200OK)]
-    public async Task<ActionResult<ExternalRateProviderStatusDto>> GetProviderStatus(CancellationToken cancellationToken)
+    public async Task<ActionResult<ExternalRateProviderStatusDto>> GetProviderStatus(
+        [FromQuery] Guid? branchId,
+        CancellationToken cancellationToken)
     {
-        var result = await _metalRateService.GetProviderStatusAsync(cancellationToken);
+        var result = await _metalRateService.GetProviderStatusAsync(branchId, cancellationToken);
+        return Ok(result);
+    }
+
+    [HttpGet("feed-preview")]
+    [RequirePermission(Permissions.RateView)]
+    [ProducesResponseType(typeof(MetalRateFeedPreviewDto), StatusCodes.Status200OK)]
+    public async Task<ActionResult<MetalRateFeedPreviewDto>> GetFeedPreview(CancellationToken cancellationToken)
+    {
+        var result = await _metalRateService.GetFeedPreviewAsync(cancellationToken);
+        return Ok(result);
+    }
+
+    [HttpPost("switch-source")]
+    [RequirePermission(Permissions.RateManage)]
+    [ProducesResponseType(typeof(List<MetalRateDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<List<MetalRateDto>>> SwitchPricingMode(
+        [FromBody] SwitchPricingModeRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _metalRateService.SwitchPricingModeAsync(request, cancellationToken);
         return Ok(result);
     }
 }
