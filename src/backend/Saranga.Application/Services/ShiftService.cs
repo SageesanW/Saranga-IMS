@@ -249,12 +249,15 @@ public class ShiftService : IShiftService
 
         // Rule: Closing variance equals actual physical cash minus expected cash
         var variance = request.ActualClosingBalance - expectedClosing;
+        var effectiveVarianceReason = !string.IsNullOrWhiteSpace(request.ClosingVarianceReason)
+            ? request.ClosingVarianceReason.Trim()
+            : request.ClosingNotes?.Trim();
 
-        // Rule: Any non-zero closing variance requires a mandatory reason
-        if (variance != 0m && string.IsNullOrWhiteSpace(request.ClosingVarianceReason))
+        // Rule: Any non-zero closing variance requires mandatory closing notes / variance reason
+        if (variance != 0m && string.IsNullOrWhiteSpace(effectiveVarianceReason))
         {
             var varianceType = variance < 0 ? "Shortage" : "Surplus";
-            throw new BusinessRuleException($"A closing cash variance of Rs. {Math.Abs(variance):N2} ({varianceType}) requires a mandatory explanation reason.");
+            throw new BusinessRuleException($"A closing cash variance of Rs. {Math.Abs(variance):N2} ({varianceType}) requires mandatory closing notes.");
         }
 
         var oldState = new
@@ -267,8 +270,10 @@ public class ShiftService : IShiftService
         shift.ActualClosingBalance = request.ActualClosingBalance;
         shift.ExpectedClosingBalance = expectedClosing;
         shift.ClosingVariance = variance;
-        shift.ClosingVarianceReason = variance != 0m ? request.ClosingVarianceReason?.Trim() : null;
-        shift.ClosingNotes = string.IsNullOrWhiteSpace(request.ClosingNotes) ? null : request.ClosingNotes.Trim();
+        shift.ClosingVarianceReason = variance != 0m ? effectiveVarianceReason : null;
+        shift.ClosingNotes = variance != 0m
+            ? (string.IsNullOrWhiteSpace(request.ClosingNotes) ? effectiveVarianceReason : request.ClosingNotes.Trim())
+            : null;
         shift.Status = ShiftStatus.Closed;
         shift.ClosedAt = now;
         shift.ClosedBy = closerId;

@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import Link from 'next/link';
 import AppLayout from '@/components/AppLayout';
 import { useAuth } from '@/lib/auth-context';
 import { useBranch } from '@/lib/branch-context';
@@ -112,15 +111,23 @@ export default function PosTerminalPage() {
       setIsLoadingShift(true);
       setErrorMsg(null);
       try {
+        // ShiftStatus: 0 = Open, 1 = Closed
+        const myOpenShift = await shiftsApi.getActiveCashierShift().catch(() => null);
+        if (myOpenShift && myOpenShift.id && myOpenShift.status === 0 && myOpenShift.branchId === activeBranch.id) {
+          setActiveShift(myOpenShift);
+          return;
+        }
+
         const shiftsRes = await shiftsApi.getShifts({
           branchId: activeBranch.id,
-          status: 1,
+          status: 0,
         });
-        const shifts = shiftsRes.items || [];
-        const myShift = shifts.find((s) => s.cashierId === user?.id && s.status === 1) || shifts[0] || null;
+        const openShifts = (shiftsRes.items || []).filter((s) => s.status === 0);
+        const myShift = openShifts.find((s) => s.cashierId === user?.id) || null;
         setActiveShift(myShift);
       } catch (err: any) {
         console.error('Failed to load active shift:', err);
+        setActiveShift(null);
       } finally {
         setIsLoadingShift(false);
       }
@@ -397,11 +404,11 @@ export default function PosTerminalPage() {
         actions={
           activeShift && (
             <div className="flex items-center gap-2">
-              <Link href="/shifts">
+              <a href="/shifts">
                 <Button variant="secondary" size="sm" leftIcon={<Wallet className="w-4 h-4" />}>
                   Shift Details
                 </Button>
-              </Link>
+              </a>
             </div>
           )
         }
@@ -419,11 +426,11 @@ export default function PosTerminalPage() {
               </p>
             </div>
           </div>
-          <Link href="/shifts">
+          <a href="/shifts">
             <Button variant="primary" size="sm">
               Open Shift Now &rarr;
             </Button>
-          </Link>
+          </a>
         </div>
       )}
 

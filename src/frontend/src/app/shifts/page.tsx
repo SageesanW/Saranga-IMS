@@ -47,13 +47,11 @@ export default function ShiftsPage() {
   const [loadingDefaults, setLoadingDefaults] = useState<boolean>(false);
   const [openingFloat, setOpeningFloat] = useState<string>('');
   const [openingDifferenceReason, setOpeningDifferenceReason] = useState<string>('');
-  const [openingNotes, setOpeningNotes] = useState<string>('');
   const [openSubmitting, setOpenSubmitting] = useState<boolean>(false);
   const [openError, setOpenError] = useState<string | null>(null);
 
   // Close Shift Form State
   const [actualClosingCash, setActualClosingCash] = useState<string>('');
-  const [closingVarianceReason, setClosingVarianceReason] = useState<string>('');
   const [closingNotes, setClosingNotes] = useState<string>('');
   const [overrideReason, setOverrideReason] = useState<string>('');
   const [closeConfirm, setCloseConfirm] = useState<boolean>(false);
@@ -180,7 +178,6 @@ export default function ShiftsPage() {
         cashDrawerId: selectedDrawerId,
         openingBalance: floatNum,
         openingDifferenceReason: diff !== 0 ? openingDifferenceReason.trim() : undefined,
-        openingNotes: openingNotes.trim() || undefined
       });
 
       setAlertMessage({ type: 'success', message: 'Cashier shift opened successfully!' });
@@ -200,7 +197,6 @@ export default function ShiftsPage() {
     setOpeningDefaults(null);
     setOpeningFloat('');
     setOpeningDifferenceReason('');
-    setOpeningNotes('');
     setOpenError(null);
   };
 
@@ -211,7 +207,6 @@ export default function ShiftsPage() {
     cashLedgerApi.getShiftSummary(target.id).then(setClosingShiftSummary).catch(() => {});
     const exp = target.expectedClosingBalance ?? target.openingBalance;
     setActualClosingCash(exp.toFixed(2));
-    setClosingVarianceReason('');
     setClosingNotes('');
     setOverrideReason('');
     setCloseConfirm(false);
@@ -243,10 +238,10 @@ export default function ShiftsPage() {
     }
 
     const expectedCash = target.expectedClosingBalance ?? target.openingBalance;
-    const variance = actualCashNum - expectedCash;
-    if (variance !== 0 && !closingVarianceReason.trim()) {
+    const variance = Math.round((actualCashNum - expectedCash) * 100) / 100;
+    if (variance !== 0 && !closingNotes.trim()) {
       const vType = variance < 0 ? 'Shortage' : 'Surplus';
-      setCloseError(`A mandatory explanation reason is required for the closing cash ${vType} of Rs. ${Math.abs(variance).toFixed(2)}.`);
+      setCloseError(`Closing notes are compulsory for the closing cash ${vType} of Rs. ${Math.abs(variance).toFixed(2)}.`);
       return;
     }
 
@@ -260,8 +255,8 @@ export default function ShiftsPage() {
       setCloseError(null);
       await shiftApi.closeShift(target.id, {
         actualClosingBalance: actualCashNum,
-        closingVarianceReason: variance !== 0 ? closingVarianceReason.trim() : undefined,
-        closingNotes: closingNotes.trim() || undefined,
+        closingVarianceReason: variance !== 0 ? closingNotes.trim() : undefined,
+        closingNotes: variance !== 0 ? closingNotes.trim() : undefined,
         overrideReason: isOverride ? overrideReason.trim() : undefined,
         rowVersion: target.version
       });
@@ -365,13 +360,13 @@ export default function ShiftsPage() {
   // Calculations for open modal
   const openFloatNum = parseFloat(openingFloat) || 0;
   const sysExpectedFloat = openingDefaults?.systemExpectedOpeningBalance ?? 0;
-  const openDiscrepancy = openFloatNum - sysExpectedFloat;
+  const openDiscrepancy = Math.round((openFloatNum - sysExpectedFloat) * 100) / 100;
 
   // Calculations for close modal
   const targetShift = closingShiftTarget || activeShift;
   const closeActualNum = parseFloat(actualClosingCash) || 0;
   const closeExpectedNum = targetShift ? (targetShift.expectedClosingBalance ?? targetShift.openingBalance) : 0;
-  const closeVariance = closeActualNum - closeExpectedNum;
+  const closeVariance = Math.round((closeActualNum - closeExpectedNum) * 100) / 100;
   const isTargetOverride = targetShift ? targetShift.cashierId !== user?.id : false;
 
   return (
@@ -998,18 +993,6 @@ export default function ShiftsPage() {
                 </div>
               )}
 
-              {/* Opening Notes */}
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Opening Notes (Optional)</label>
-                <textarea
-                  rows={2}
-                  value={openingNotes}
-                  onChange={(e) => setOpeningNotes(e.target.value)}
-                  placeholder="Optional remarks regarding physical cash float or coins"
-                  className="w-full text-xs border border-gray-300 rounded-xl p-2.5 text-gray-800 focus:outline-none focus:ring-1 focus:ring-[#123B32]"
-                />
-              </div>
-
               {/* Action Buttons */}
               <div className="pt-2 flex items-center justify-end space-x-3">
                 <button
@@ -1159,13 +1142,13 @@ export default function ShiftsPage() {
                 {closeVariance !== 0 && (
                   <div className="mt-3 pt-2 border-t border-current/20">
                     <label className="block text-[11px] font-bold uppercase tracking-wider mb-1">
-                      Mandatory Reason for Variance <span className="text-rose-600">*</span>
+                      Closing Notes <span className="text-rose-600">*</span>
                     </label>
                     <textarea
                       rows={2}
-                      value={closingVarianceReason}
-                      onChange={(e) => setClosingVarianceReason(e.target.value)}
-                      placeholder="Explain the reason for the cash shortage or surplus"
+                      value={closingNotes}
+                      onChange={(e) => setClosingNotes(e.target.value)}
+                      placeholder="Explain why physical cash counted does not match expected closing cash"
                       className="w-full text-xs border rounded-lg p-2 bg-white text-gray-900 focus:outline-none"
                       required
                     />
@@ -1189,18 +1172,6 @@ export default function ShiftsPage() {
                   />
                 </div>
               )}
-
-              {/* Closing Notes */}
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Closing Notes (Optional)</label>
-                <textarea
-                  rows={2}
-                  value={closingNotes}
-                  onChange={(e) => setClosingNotes(e.target.value)}
-                  placeholder="Optional remarks regarding handover or physical envelope seal"
-                  className="w-full text-xs border border-gray-300 rounded-xl p-2.5 text-gray-800 focus:outline-none focus:ring-1 focus:ring-[#123B32]"
-                />
-              </div>
 
               {/* Confirmation Checkbox */}
               <div className="flex items-start space-x-2 pt-1">
