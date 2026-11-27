@@ -11,6 +11,7 @@ import {
   MetalRate,
   ExternalRateProviderStatus,
   ReferencePriceBreakdown,
+  MetalRateFeedPreview,
   Branch,
   Material,
   Purity,
@@ -32,6 +33,18 @@ export default function RatesManagementPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+
+  // Source Switching Modal
+  const [isSwitchModalOpen, setIsSwitchModalOpen] = useState(false);
+  const [targetSwitchMode, setTargetSwitchMode] = useState<'MARKET_API' | 'CBSL_API' | 'MANUAL' | null>(null);
+  const [feedPreview, setFeedPreview] = useState<MetalRateFeedPreview | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [switchReason, setSwitchReason] = useState('');
+  const [switchSubmitting, setSwitchSubmitting] = useState(false);
+
+  // Manual Rate Setup during Switch to Manual (if missing historical rates)
+  const [missingPuritiesToConfigure, setMissingPuritiesToConfigure] = useState<Purity[]>([]);
+  const [initialManualInputs, setInitialManualInputs] = useState<Record<string, string>>({});
 
   // Modals
   const [isManualModalOpen, setIsManualModalOpen] = useState(false);
@@ -76,6 +89,10 @@ export default function RatesManagementPage() {
 
   const currencyCode = currentBranch?.currencyCode || 'LKR';
 
+  const activeMode = useMemo(() => {
+    return providerStatus?.activePricingMode || currentBranch?.ratePricingMode || 'MANUAL';
+  }, [providerStatus?.activePricingMode, currentBranch?.ratePricingMode]);
+
   // Load initial branch and master data
   useEffect(() => {
     async function loadMasters() {
@@ -112,7 +129,7 @@ export default function RatesManagementPage() {
     try {
       const [ratesRes, statusRes] = await Promise.all([
         metalRateApi.getActiveRates(branchId),
-        metalRateApi.getProviderStatus(),
+        metalRateApi.getProviderStatus(branchId),
       ]);
       setRates(ratesRes);
       setProviderStatus(statusRes);
@@ -131,16 +148,106 @@ export default function RatesManagementPage() {
     try {
       const updatedRates = await metalRateApi.refreshExternalRates({ branchId: activeBranchId });
       setRates(updatedRates);
-      const updatedStatus = await metalRateApi.getProviderStatus();
+      const updatedStatus = await metalRateApi.getProviderStatus(activeBranchId);
       setProviderStatus(updatedStatus);
       setSuccessMsg('Rates updated successfully from external provider.');
     } catch (err: any) {
       setError(err.message || 'External refresh encountered an issue. Existing store rates retained.');
-      // Refresh provider status anyway to show error telemetry
-      const updatedStatus = await metalRateApi.getProviderStatus();
+      const updatedStatus = await metalRateApi.getProviderStatus(activeBranchId);
       setProviderStatus(updatedStatus);
     } finally {
       setRefreshing(false);
+    }
+  }
+
+  // Handle clicking one of the 3 Source Buttons
+  async function handleInitiateSwitch(targetMode: 'MARKET_API' | 'CBSL_API' | 'MANUAL') {
+    if (targetMode === activeMode) return;
+    if (!activeBranchId) return;
+
+    setTargetSwitchMode(targetMode);
+    setSwitchReason('');
+    setMissingPuritiesToConfigure([]);
+    setInitialManualInputs({});
+    setIsSwitchModalOpen(true);
+
+    if (targetMode === 'MARKET_API' || targetMode === 'CBSL_API') {
+      setPreviewLoading(true);
+      try {
+        const preview = await metalRateApi.getFeedPreview();
+        setFeedPreview(preview);
+      } catch (err: any) {
+        setError(err.message || 'Failed to fetch live rate preview.');
+      } finally {
+        setPreviewLoading(false);
+      }
+    } else {
+      setFeedPreview(null);
+    }
+  }
+
+  // Confirm and Execute Source Switch
+  async function handleConfirmSwitch() {
+    if (!activeBranchId || !targetSwitchMode) return;
+
+    setSwitchSubmitting(true);
+    setError(null);
+    setSuccessMsg(null);
+
+    try {
+      let initialManualPayload: { materialId: string; purityId: string; ratePerGram: number }[] | undefined = undefined;
+
+      if (targetSwitchMode === 'MANUAL' && missingPuritiesToConfigure.length > 0) {
+        const goldMat = materials.find((m) => m.code.includes('GOLD') || m.name.toLowerCase().includes('gold')) || materials[0];
+        initialManualPayload = missingPuritiesToConfigure.map((p) => ({
+          materialId: goldMat?.id || '',
+          purityId: p.id,
+          ratePerGram: parseFloat(initialManualInputs[p.id] || '0'),
+        }));
+
+        const invalid = initialManualPayload.find((x) => isNaN(x.ratePerGram) || x.ratePerGram <= 0);
+        if (invalid) {
+          setError('Please provide a valid positive rate per gram for all required purities.');
+          setSwitchSubmitting(false);
+          return;
+        }
+      }
+
+      const updatedRates = await metalRateApi.switchPricingMode({
+        branchId: activeBranchId,
+        pricingMode: targetSwitchMode,
+        reason: switchReason.trim() || undefined,
+        initialManualRates: initialManualPayload,
+      });
+
+      setRates(updatedRates);
+      const updatedStatus = await metalRateApi.getProviderStatus(activeBranchId);
+      setProviderStatus(updatedStatus);
+
+      // Update current branch in list
+      setBranches((prev) =>
+        prev.map((b) => (b.id === activeBranchId ? { ...b, ratePricingMode: targetSwitchMode } : b))
+      );
+
+      setIsSwitchModalOpen(false);
+      setSuccessMsg(
+        `Successfully switched operational pricing mode to ${
+          targetSwitchMode === 'MARKET_API' ? 'Market Rate API' : targetSwitchMode === 'CBSL_API' ? 'CBSL Rate API' : 'Manual Rate'
+        }.`
+      );
+    } catch (err: any) {
+      const msg = err.message || 'Failed to switch pricing mode.';
+      // Check if server indicated missing previous manual rates
+      if (targetSwitchMode === 'MANUAL' && msg.includes('No previous manual rates found')) {
+        // Collect missing purities so user can configure them in modal
+        const goldPurities = purities.filter((p) => p.isActive);
+        setMissingPuritiesToConfigure(goldPurities);
+        setError('No previous manual rate exists. Please enter manual rates below to activate Manual mode.');
+      } else {
+        setError(msg);
+      }
+    } finally {
+      setSwitchSubmitting(false);
     }
   }
 
@@ -251,16 +358,23 @@ export default function RatesManagementPage() {
       );
     }
     switch (source) {
+      case 'MARKET_API':
       case 'EXTERNAL_API':
         return (
           <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-emerald-100 text-emerald-800 border border-emerald-300">
-            Live External
+            Market Rate API
+          </span>
+        );
+      case 'CBSL_API':
+        return (
+          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-purple-100 text-purple-800 border border-purple-300">
+            CBSL Rate API
           </span>
         );
       case 'MANUAL':
         return (
           <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-blue-100 text-blue-800 border border-blue-300">
-            Manual Entry
+            Manual Rate
           </span>
         );
       default:
@@ -279,7 +393,6 @@ export default function RatesManagementPage() {
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <div className="flex items-center space-x-3">
-              
               <h1 className="text-2xl font-black text-[#123B32] tracking-tight">Metal Rates Management</h1>
             </div>
             <p className="text-sm text-gray-500 mt-1">
@@ -331,6 +444,91 @@ export default function RatesManagementPage() {
           </div>
         </div>
 
+        {/* Three Rate Source Selector Buttons Card */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+            <div>
+              <div className="text-xs uppercase font-bold tracking-wider text-gray-500">Authoritative Pricing Source Mode</div>
+              <div className="flex flex-wrap items-center gap-2 mt-1">
+                <h2 className="text-xl font-black text-[#123B32]">
+                  {activeMode === 'MARKET_API' && 'Market Rate API'}
+                  {activeMode === 'CBSL_API' && 'CBSL Rate API'}
+                  {activeMode === 'MANUAL' && 'Manual Rate Mode'}
+                </h2>
+                <span
+                  className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                    activeMode === 'MARKET_API'
+                      ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                      : activeMode === 'CBSL_API'
+                      ? 'bg-purple-100 text-purple-800 border border-purple-300'
+                      : 'bg-blue-100 text-blue-800 border border-blue-300'
+                  }`}
+                >
+                  Active Operational Mode
+                </span>
+                {providerStatus?.isStale && activeMode !== 'MANUAL' && (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-amber-100 text-amber-900 border border-amber-300">
+                    Stale Rates (&gt;15 min)
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                {activeMode === 'MARKET_API' && 'Live international spot rates converted to LKR. Auto-refreshed every 15 minutes.'}
+                {activeMode === 'CBSL_API' && 'Daily official Central Bank of Sri Lanka reference rates. Auto-refreshed every 15 minutes.'}
+                {activeMode === 'MANUAL' && 'Operational rates are manually governed by store administrators. External refreshes will not alter store rates.'}
+              </p>
+            </div>
+
+            {/* Three Source Buttons */}
+            <div className="flex flex-wrap items-center gap-2 p-1.5 bg-gray-100 rounded-xl border border-gray-200">
+              <button
+                onClick={() => handleInitiateSwitch('MARKET_API')}
+                disabled={!canManageRates || switchSubmitting}
+                className={`px-4 py-2.5 rounded-lg text-xs font-bold transition flex items-center space-x-2 ${
+                  activeMode === 'MARKET_API'
+                    ? 'bg-[#123B32] text-white shadow-md'
+                    : 'text-gray-700 hover:text-gray-900 hover:bg-white/80'
+                }`}
+              >
+                <span>Market Rate API</span>
+                {activeMode === 'MARKET_API' && (
+                  <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+                )}
+              </button>
+
+              <button
+                onClick={() => handleInitiateSwitch('CBSL_API')}
+                disabled={!canManageRates || switchSubmitting}
+                className={`px-4 py-2.5 rounded-lg text-xs font-bold transition flex items-center space-x-2 ${
+                  activeMode === 'CBSL_API'
+                    ? 'bg-purple-900 text-white shadow-md'
+                    : 'text-gray-700 hover:text-gray-900 hover:bg-white/80'
+                }`}
+              >
+                <span>CBSL Rate API</span>
+                {activeMode === 'CBSL_API' && (
+                  <span className="w-2 h-2 rounded-full bg-purple-300"></span>
+                )}
+              </button>
+
+              <button
+                onClick={() => handleInitiateSwitch('MANUAL')}
+                disabled={!canManageRates || switchSubmitting}
+                className={`px-4 py-2.5 rounded-lg text-xs font-bold transition flex items-center space-x-2 ${
+                  activeMode === 'MANUAL'
+                    ? 'bg-[#B89A60] text-gray-950 shadow-md font-extrabold'
+                    : 'text-gray-700 hover:text-gray-900 hover:bg-white/80'
+                }`}
+              >
+                <span>Manual Rate</span>
+                {activeMode === 'MANUAL' && (
+                  <span className="w-2 h-2 rounded-full bg-[#123B32]"></span>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+
         {/* Alerts */}
         {error && (
           <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-md flex justify-between items-center">
@@ -348,31 +546,44 @@ export default function RatesManagementPage() {
         {/* External Provider Status Bar */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
           <div className="flex items-center space-x-3">
-            
             <div>
-              <div className="text-xs uppercase font-bold tracking-wider text-gray-500">External Provider Feed</div>
+              <div className="text-xs uppercase font-bold tracking-wider text-gray-500">Live Provider Status</div>
               <div className="flex items-center space-x-2 mt-0.5">
-                <span className="text-sm font-bold text-gray-900">{providerStatus?.providerName || 'GoldApi'}</span>
+                <span className="text-sm font-bold text-gray-900">{providerStatus?.providerName || 'GoldPriceSriLanka.com'}</span>
                 {providerStatus?.isAvailable ? (
                   <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-emerald-100 text-emerald-800">
-                    Feed Operational
+                    Operational (LKR Feed)
                   </span>
                 ) : (
                   <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-amber-100 text-amber-800">
-                    Manual Mode / Degraded
+                    Degraded / Fallback
                   </span>
                 )}
               </div>
             </div>
           </div>
 
-          <div className="flex items-center space-x-6 text-xs text-gray-600">
+          <div className="flex flex-wrap items-center gap-6 text-xs text-gray-600">
+            {providerStatus?.providerEffectiveTime && (
+              <div>
+                <span className="text-gray-400">Market Timestamp: </span>
+                <span className="font-semibold text-gray-800">
+                  {new Date(providerStatus.providerEffectiveTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </span>
+              </div>
+            )}
+            {providerStatus?.cbslReferenceDate && (
+              <div>
+                <span className="text-gray-400">CBSL Date: </span>
+                <span className="font-semibold text-gray-800">{providerStatus.cbslReferenceDate}</span>
+              </div>
+            )}
             <div>
               <span className="text-gray-400">Last Refresh: </span>
               <span className="font-semibold text-gray-800">
                 {providerStatus?.lastSuccessfulRefreshAt
                   ? new Date(providerStatus.lastSuccessfulRefreshAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                  : 'Manual Feed Only'}
+                  : 'Manual Mode'}
               </span>
             </div>
             <div>
@@ -384,20 +595,19 @@ export default function RatesManagementPage() {
           </div>
         </div>
 
-        {/* Active Rates Grid */}
+        {/* Active Rates Table */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
           <div className="px-6 py-4 border-b border-gray-200 bg-gray-50 flex items-center justify-between">
-            <h2 className="text-base font-bold text-gray-900">Current Active Rates for {currentBranch?.name || 'Branch'}</h2>
-            <span className="text-xs text-gray-500">1 g rate in {currencyCode}</span>
+            <h2 className="text-base font-bold text-gray-900">Current Operational Rates for {currentBranch?.name || 'Branch'}</h2>
+            <span className="text-xs text-gray-500">Values in {currencyCode} (per gram &amp; per sovereign)</span>
           </div>
 
           {loading ? (
             <div className="p-12 text-center text-gray-500">Loading active rates...</div>
           ) : rates.length === 0 ? (
             <div className="p-12 text-center">
-              
               <p className="text-sm font-semibold text-gray-700">No active metal rates configured for this branch.</p>
-              <p className="text-xs text-gray-500 mt-1">Use &ldquo;+ Add Manual Rate&rdquo; or &ldquo;Refresh External API&rdquo; to establish current rates.</p>
+              <p className="text-xs text-gray-500 mt-1">Use the source buttons above or &ldquo;+ Add Manual Rate&rdquo; to establish current rates.</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -406,8 +616,8 @@ export default function RatesManagementPage() {
                   <tr>
                     <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Material</th>
                     <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Purity</th>
-                    <th className="px-6 py-3 text-right text-xs font-bold text-gray-500 uppercase tracking-wider">Active Rate / gram</th>
-                    <th className="px-6 py-3 text-right text-xs font-bold text-gray-500 uppercase tracking-wider">Reference (24K)</th>
+                    <th className="px-6 py-3 text-right text-xs font-bold text-gray-500 uppercase tracking-wider">Operational Rate</th>
+                    <th className="px-6 py-3 text-right text-xs font-bold text-gray-500 uppercase tracking-wider">24K Reference</th>
                     <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Source</th>
                     <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Effective From</th>
                     {canManageRates && (
@@ -433,8 +643,12 @@ export default function RatesManagementPage() {
                       <td className="px-6 py-4 whitespace-nowrap text-right">
                         <div className="text-lg font-black text-[#123B32]">
                           {currencyCode} {rate.ratePerGram.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
+                          <span className="text-xs text-gray-400 font-normal ml-1">/g</span>
                         </div>
-                        <div className="text-[10px] text-gray-400">per 1.0000 gram</div>
+                        <div className="text-xs font-semibold text-[#B89A60] mt-0.5">
+                          {currencyCode} {(rate.ratePerGram * 8).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          <span className="text-[10px] text-gray-400 font-normal ml-1">/ sovereign (8g)</span>
+                        </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-xs text-gray-600">
                         {rate.externalReferenceRate ? (
@@ -476,6 +690,188 @@ export default function RatesManagementPage() {
             </div>
           )}
         </div>
+
+        {/* Provider Attribution Banner */}
+        <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 flex flex-col sm:flex-row items-center justify-between text-xs text-gray-500 gap-3">
+          <div className="flex items-center space-x-2">
+            <span>Gold prices by</span>
+            <a
+              href="https://goldpricesrilanka.com/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-bold text-[#123B32] hover:text-[#1B6543] underline transition"
+            >
+              GoldPriceSriLanka.com
+            </a>
+            <span className="text-gray-400">•</span>
+            <span>Sri Lanka Market &amp; CBSL Reference Data</span>
+          </div>
+          <div className="text-gray-400">
+            Automatic 15-minute background refresh active for Market &amp; CBSL API modes.
+          </div>
+        </div>
+
+        {/* Modal: Switch Source Confirmation */}
+        {isSwitchModalOpen && targetSwitchMode && (
+          <div className="fixed inset-0 z-50 overflow-y-auto bg-black/50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-xl max-w-lg w-full p-6 shadow-2xl border border-gray-200">
+              <div className="flex justify-between items-center pb-3 border-b">
+                <div>
+                  <h3 className="text-lg font-bold text-[#123B32]">
+                    Switch Pricing Mode to{' '}
+                    {targetSwitchMode === 'MARKET_API' ? 'Market Rate API' : targetSwitchMode === 'CBSL_API' ? 'CBSL Rate API' : 'Manual Rate'}
+                  </h3>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    Branch: <strong>{currentBranch?.name}</strong> ({currentBranch?.code})
+                  </p>
+                </div>
+                <button onClick={() => setIsSwitchModalOpen(false)} className="text-gray-400 hover:text-gray-600 font-bold">
+                  ✕
+                </button>
+              </div>
+
+              <div className="py-4 space-y-4">
+                {targetSwitchMode === 'MARKET_API' && (
+                  <div className="space-y-3">
+                    <p className="text-xs text-gray-600">
+                      Activating <strong>Market Rate API</strong> mode will synchronize operational gold rates with live international market gold spot prices converted to LKR. Rates will automatically update every 15 minutes.
+                    </p>
+
+                    {previewLoading ? (
+                      <div className="p-6 text-center text-xs text-gray-500 bg-gray-50 rounded-lg border">
+                        Fetching live rates from GoldPriceSriLanka.com...
+                      </div>
+                    ) : feedPreview && feedPreview.isSuccess ? (
+                      <div className="bg-emerald-50/60 border border-emerald-200 rounded-lg p-3 space-y-2">
+                        <div className="flex justify-between text-xs font-bold text-emerald-950">
+                          <span>Live Market Rates to be Applied:</span>
+                          <span className="text-[11px] text-gray-500 font-normal">
+                            {feedPreview.marketTime ? new Date(feedPreview.marketTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 text-xs">
+                          {feedPreview.marketRates.map((r) => (
+                            <div key={r.purityCode} className="bg-white p-2 rounded border border-emerald-100 flex justify-between items-center">
+                              <span className="font-bold text-gray-800">{r.purityCode}:</span>
+                              <div className="text-right">
+                                <div className="font-extrabold text-[#123B32]">Rs. {r.ratePerGram.toLocaleString()} /g</div>
+                                <div className="text-[10px] text-gray-500">Rs. {r.ratePerPawn.toLocaleString()} /pawn</div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="p-3 text-xs text-red-600 bg-red-50 rounded border border-red-200">
+                        {feedPreview?.errorMessage || 'Unable to connect to live provider at this time.'}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {targetSwitchMode === 'CBSL_API' && (
+                  <div className="space-y-3">
+                    <p className="text-xs text-gray-600">
+                      Activating <strong>CBSL Rate API</strong> mode will synchronize operational gold rates with the official daily Central Bank of Sri Lanka gold reference rates. Note: CBSL rates represent daily reference valuations.
+                    </p>
+
+                    {previewLoading ? (
+                      <div className="p-6 text-center text-xs text-gray-500 bg-gray-50 rounded-lg border">
+                        Fetching CBSL reference rates from GoldPriceSriLanka.com...
+                      </div>
+                    ) : feedPreview && feedPreview.isSuccess ? (
+                      <div className="bg-purple-50/60 border border-purple-200 rounded-lg p-3 space-y-2">
+                        <div className="flex justify-between text-xs font-bold text-purple-950">
+                          <span>CBSL Reference Rates to be Applied:</span>
+                          <span className="text-[11px] text-gray-500 font-normal">
+                            Date: {feedPreview.cbslDate || 'Today'}
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 text-xs">
+                          {feedPreview.cbslRates.map((r) => (
+                            <div key={r.purityCode} className="bg-white p-2 rounded border border-purple-100 flex justify-between items-center">
+                              <span className="font-bold text-gray-800">{r.purityCode}:</span>
+                              <div className="text-right">
+                                <div className="font-extrabold text-purple-900">Rs. {r.ratePerGram.toLocaleString()} /g</div>
+                                <div className="text-[10px] text-gray-500">Rs. {r.ratePerPawn.toLocaleString()} /pawn</div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="p-3 text-xs text-red-600 bg-red-50 rounded border border-red-200">
+                        {feedPreview?.errorMessage || 'Unable to connect to live provider at this time.'}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {targetSwitchMode === 'MANUAL' && (
+                  <div className="space-y-3">
+                    <p className="text-xs text-gray-600">
+                      Activating <strong>Manual Rate Mode</strong> stops automatic external updates. The system will restore your previously configured manual rates where available.
+                    </p>
+
+                    {missingPuritiesToConfigure.length > 0 && (
+                      <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-2">
+                        <div className="text-xs font-bold text-amber-900">Configure Required Manual Rates:</div>
+                        <div className="space-y-2 text-xs">
+                          {missingPuritiesToConfigure.map((p) => (
+                            <div key={p.id} className="flex items-center justify-between gap-2">
+                              <span className="font-semibold text-gray-700">{p.name} ({p.karatValue}K):</span>
+                              <input
+                                type="number"
+                                step="0.0001"
+                                placeholder="Rate / gram (Rs.)"
+                                value={initialManualInputs[p.id] || ''}
+                                onChange={(e) =>
+                                  setInitialManualInputs({ ...initialManualInputs, [p.id]: e.target.value })
+                                }
+                                className="border border-gray-300 rounded px-2 py-1 text-xs w-36 text-right font-bold"
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-xs font-bold uppercase text-gray-600 mb-1">
+                    Audit Note / Rationale (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={switchReason}
+                    onChange={(e) => setSwitchReason(e.target.value)}
+                    placeholder="e.g. Switched to Market Rate API for morning trading"
+                    className="w-full border border-gray-300 rounded-md p-2 text-xs focus:ring-[#123B32] focus:border-[#123B32]"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end space-x-3 pt-3 border-t">
+                <button
+                  type="button"
+                  onClick={() => setIsSwitchModalOpen(false)}
+                  className="px-4 py-2 border border-gray-300 rounded-md text-xs font-semibold text-gray-700 hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmSwitch}
+                  disabled={switchSubmitting || (targetSwitchMode !== 'MANUAL' && (!feedPreview || !feedPreview.isSuccess))}
+                  className="px-4 py-2 bg-[#123B32] text-white rounded-md text-xs font-bold hover:bg-[#1B6543] disabled:opacity-50"
+                >
+                  {switchSubmitting ? 'Activating Mode...' : 'Confirm & Activate Mode'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Modal: Add Manual Rate */}
         {isManualModalOpen && (
@@ -521,7 +917,7 @@ export default function RatesManagementPage() {
                     min="0.0001"
                     value={manualRate}
                     onChange={(e) => setManualRate(e.target.value)}
-                    placeholder="e.g. 25,000.00"
+                    placeholder="e.g. 35,000.00"
                     className="w-full border border-gray-300 rounded-md p-2 text-sm font-semibold focus:ring-[#123B32] focus:border-[#123B32]"
                     required
                   />
@@ -564,7 +960,6 @@ export default function RatesManagementPage() {
           <div className="fixed inset-0 z-50 overflow-y-auto bg-black/50 flex items-center justify-center p-4">
             <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-2xl border border-gray-200">
               <div className="flex items-center space-x-2 text-amber-700 mb-2">
-                <span className="text-xl"></span>
                 <h3 className="text-lg font-bold">Admin Rate Override</h3>
               </div>
               <p className="text-xs text-gray-600 mb-4">
@@ -637,7 +1032,7 @@ export default function RatesManagementPage() {
               <div className="flex justify-between items-center pb-4 border-b">
                 <div>
                   <h3 className="text-lg font-bold text-[#123B32]">Historical Metal Rates</h3>
-                  <p className="text-xs text-gray-500">Unbroken audit timeline of market, manual, and overridden rates.</p>
+                  <p className="text-xs text-gray-500">Unbroken audit timeline of market, CBSL, manual, and overridden rates.</p>
                 </div>
                 <button
                   onClick={() => setIsHistoryModalOpen(false)}
@@ -658,6 +1053,7 @@ export default function RatesManagementPage() {
                       <tr>
                         <th className="px-4 py-2 text-left font-bold text-gray-500">Purity</th>
                         <th className="px-4 py-2 text-right font-bold text-gray-500">Rate / gram</th>
+                        <th className="px-4 py-2 text-right font-bold text-gray-500">Rate / sovereign</th>
                         <th className="px-4 py-2 text-left font-bold text-gray-500">Source</th>
                         <th className="px-4 py-2 text-left font-bold text-gray-500">Effective Window</th>
                         <th className="px-4 py-2 text-left font-bold text-gray-500">Notes / Reason</th>
@@ -673,6 +1069,9 @@ export default function RatesManagementPage() {
                           </td>
                           <td className="px-4 py-2 text-right font-bold text-[#123B32]">
                             {h.currencyCode} {h.ratePerGram.toFixed(4)}
+                          </td>
+                          <td className="px-4 py-2 text-right font-semibold text-[#B89A60]">
+                            {h.currencyCode} {(h.ratePerGram * 8).toFixed(2)}
                           </td>
                           <td className="px-4 py-2">{getSourceBadge(h.source, h.isOverride)}</td>
                           <td className="px-4 py-2 text-gray-500">

@@ -53,7 +53,8 @@ public class BranchService : IBranchService
                 b.CurrencyCode,
                 b.TimeZone,
                 b.IsActive,
-                b.CreatedAt
+                b.CreatedAt,
+                b.RatePricingMode
             ))
             .ToListAsync(cancellationToken);
 
@@ -79,7 +80,8 @@ public class BranchService : IBranchService
             branch.CurrencyCode,
             branch.TimeZone,
             branch.IsActive,
-            branch.CreatedAt
+            branch.CreatedAt,
+            branch.RatePricingMode
         );
     }
 
@@ -141,7 +143,8 @@ public class BranchService : IBranchService
             branch.CurrencyCode,
             branch.TimeZone,
             branch.IsActive,
-            branch.CreatedAt
+            branch.CreatedAt,
+            branch.RatePricingMode
         );
     }
 
@@ -204,7 +207,8 @@ public class BranchService : IBranchService
             branch.CurrencyCode,
             branch.TimeZone,
             branch.IsActive,
-            branch.CreatedAt
+            branch.CreatedAt,
+            branch.RatePricingMode
         );
     }
 
@@ -246,7 +250,8 @@ public class BranchService : IBranchService
             branch.CurrencyCode,
             branch.TimeZone,
             branch.IsActive,
-            branch.CreatedAt
+            branch.CreatedAt,
+            branch.RatePricingMode
         );
     }
 }

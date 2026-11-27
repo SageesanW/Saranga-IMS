@@ -22,6 +22,7 @@ export interface Branch {
   timeZone: string;
   isActive: boolean;
   createdAt: string;
+  ratePricingMode?: string;
 }
 
 export interface Role {
@@ -1073,6 +1074,33 @@ export interface ExternalRateProviderStatus {
   lastAttemptAt?: string;
   lastErrorMessage?: string;
   totalActiveRatesManaged: number;
+  activePricingMode?: string;
+  providerEffectiveTime?: string | null;
+  cbslReferenceDate?: string | null;
+  attributionText?: string | null;
+  attributionUrl?: string | null;
+  isStale?: boolean;
+}
+
+export interface FeedPurityRate {
+  purityCode: string;
+  karatValue: number;
+  ratePerGram: number;
+  ratePerPawn: number;
+}
+
+export interface MetalRateFeedPreview {
+  isSuccess: boolean;
+  providerName: string;
+  currency: string;
+  updatedAt: string;
+  marketTime?: string | null;
+  cbslDate?: string | null;
+  marketRates: FeedPurityRate[];
+  cbslRates: FeedPurityRate[];
+  attributionText: string;
+  attributionUrl: string;
+  errorMessage?: string | null;
 }
 
 export interface VatConfiguration {
@@ -1161,8 +1189,22 @@ export const metalRateApi = {
       method: 'POST',
       body: JSON.stringify(data),
     }),
-  getProviderStatus: () =>
-    apiRequest<ExternalRateProviderStatus>('/metal-rates/provider-status'),
+  getProviderStatus: (branchId?: string) => {
+    const qs = branchId ? `?branchId=${encodeURIComponent(branchId)}` : '';
+    return apiRequest<ExternalRateProviderStatus>(`/metal-rates/provider-status${qs}`);
+  },
+  getFeedPreview: () =>
+    apiRequest<MetalRateFeedPreview>('/metal-rates/feed-preview'),
+  switchPricingMode: (data: {
+    branchId: string;
+    pricingMode: string;
+    reason?: string;
+    initialManualRates?: { materialId: string; purityId: string; ratePerGram: number }[];
+  }) =>
+    apiRequest<MetalRate[]>('/metal-rates/switch-source', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
 };
 
 export const vatConfigurationApi = {

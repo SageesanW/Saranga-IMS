@@ -140,6 +140,10 @@ public class AppDbContext : DbContext, IAppDbContext
             entity.Property(b => b.CurrencyCode).HasMaxLength(10).IsRequired();
             entity.Property(b => b.TimeZone).HasMaxLength(100).IsRequired();
             entity.Property(b => b.IsActive).HasDefaultValue(true);
+            entity.Property(b => b.RatePricingMode)
+                  .HasMaxLength(30)
+                  .HasDefaultValue(Domain.Constants.BranchPricingModes.Manual)
+                  .IsRequired();
         });
 
         // Role Configuration
